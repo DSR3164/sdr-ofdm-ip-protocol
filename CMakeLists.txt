@@ -1,0 +1,151 @@
+cmake_minimum_required(VERSION 3.24)
+project(SOIP LANGUAGES CXX)
+
+include(FetchContent)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(FETCHCONTENT_BASE_DIR ${CMAKE_SOURCE_DIR}/third_party)
+set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+
+# ---------- OpenGL ----------
+find_package(OpenGL REQUIRED)
+
+# ---------- FFTW ----------
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(FFTW3F QUIET fftw3f)
+
+if(NOT FFTW3F_FOUND)
+  message(FATAL_ERROR "FFTW3F not found. Install libfftw3-dev")
+endif()
+
+# ---------- SDL2 ----------
+find_package(SDL2 CONFIG QUIET)
+
+if(NOT SDL2_FOUND)
+  message(STATUS "SDL2 not found, fetching...")
+  fetchcontent_declare(
+    SDL2
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL
+    GIT_TAG release-2.28.5
+  )
+  fetchcontent_makeavailable(SDL2)
+endif()
+
+# ---------- GLEW ----------
+find_package(GLEW QUIET)
+
+if(NOT GLEW_FOUND)
+  message(STATUS "GLEW not found, fetching...")
+  fetchcontent_declare(
+    glew
+    GIT_REPOSITORY https://github.com/nigels-com/glew
+    GIT_TAG glew-2.2.0
+  )
+  fetchcontent_makeavailable(glew)
+endif()
+
+# ---------- SoapySDR ----------
+find_package(SoapySDR CONFIG QUIET)
+
+if(NOT SoapySDR_FOUND)
+  message(STATUS "SoapySDR not found, fetching...")
+  fetchcontent_declare(
+    SoapySDR
+    GIT_REPOSITORY https://github.com/pothosware/SoapySDR
+    GIT_TAG soapy-sdr-0.8.1
+  )
+  fetchcontent_makeavailable(SoapySDR)
+endif()
+
+# ---------- ImGui ----------
+fetchcontent_declare(
+  imgui
+  GIT_REPOSITORY https://github.com/ocornut/imgui
+  GIT_TAG v1.90.1
+)
+
+fetchcontent_makeavailable(imgui)
+
+add_library(imgui STATIC
+  ${imgui_SOURCE_DIR}/imgui.cpp
+  ${imgui_SOURCE_DIR}/imgui_draw.cpp
+  ${imgui_SOURCE_DIR}/imgui_tables.cpp
+  ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+  ${imgui_SOURCE_DIR}/imgui_demo.cpp
+  ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl2.cpp
+  ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
+)
+
+target_include_directories(imgui PUBLIC
+  ${imgui_SOURCE_DIR}
+  ${imgui_SOURCE_DIR}/backends
+)
+
+target_link_libraries(imgui
+  PUBLIC
+  SDL2::SDL2
+  OpenGL::GL
+)
+
+# ---------- ImPlot ----------
+fetchcontent_declare(
+  implot
+  GIT_REPOSITORY https://github.com/epezent/implot
+  GIT_TAG v0.16
+)
+
+fetchcontent_makeavailable(implot)
+
+if(TARGET SoapySDR::SoapySDR)
+    set(SOAPY_TARGET SoapySDR::SoapySDR)
+elseif(TARGET SoapySDR)
+    set(SOAPY_TARGET SoapySDR)
+else()
+    message(FATAL_ERROR "SoapySDR target not found")
+endif()
+
+add_library(implot STATIC
+  ${implot_SOURCE_DIR}/implot.cpp
+  ${implot_SOURCE_DIR}/implot_demo.cpp
+  ${implot_SOURCE_DIR}/implot_items.cpp
+)
+
+target_include_directories(implot PUBLIC
+  ${implot_SOURCE_DIR}
+)
+
+target_link_libraries(implot PUBLIC imgui)
+
+# ---------- Core SDR library ----------
+add_library(soip STATIC
+  ${PROJECT_SOURCE_DIR}/src/gui/gui_layer.cpp
+  ${PROJECT_SOURCE_DIR}/src/ip/ip_layer.cpp
+  ${PROJECT_SOURCE_DIR}/src/phy/phy_layer.cpp
+)
+
+target_include_directories(soip PUBLIC
+  ${PROJECT_SOURCE_DIR}/include
+  ${FFTW3F_INCLUDE_DIRS}
+)
+
+target_link_libraries(soip PUBLIC
+  ${SOAPY_TARGET}
+  ${FFTW3F_LIBRARIES}
+)
+
+# ---------- GUI executable ----------
+add_executable(main
+  src/main.cpp
+)
+
+target_link_libraries(main PRIVATE
+  soip
+  imgui
+  implot
+  GLEW::GLEW
+  SDL2::SDL2
+  OpenGL::GL
+)

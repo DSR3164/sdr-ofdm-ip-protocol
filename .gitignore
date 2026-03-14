@@ -1,0 +1,12 @@
+*
+
+!/**/
+!*.hpp
+!*.cpp
+
+!.gitignore
+!README.md
+!CMakeLists.txt
+
+third_party
+build
