@@ -31,9 +31,9 @@ class DoubleBuffer {
     {
         int wi = write_index.load(std::memory_order_relaxed);
         buff[wi] = buffer;
-        ready.store(true, std::memory_order_release);
         read_index.store(wi, std::memory_order_relaxed);
         write_index.store(wi ^ 1, std::memory_order_relaxed);
+        ready.store(true, std::memory_order_release);
         return 0;
     }
     std::vector<T> &get_write_buffer()
