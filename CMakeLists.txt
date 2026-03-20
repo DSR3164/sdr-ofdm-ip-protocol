@@ -9,17 +9,20 @@ set(FETCHCONTENT_BASE_DIR ${CMAKE_SOURCE_DIR}/third_party)
 set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# ---------- Threads ----------
+find_package(Threads REQUIRED)
 
 # ---------- OpenGL ----------
 find_package(OpenGL REQUIRED)
 
 # ---------- FFTW ----------
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(FFTW3F QUIET fftw3f)
+find_library(FFTW3F_LIB fftw3f REQUIRED)
+find_library(FFTW3F_THREADS_LIB fftw3f_threads REQUIRED)
+find_path(FFTW3F_INCLUDE_DIRS fftw3.h REQUIRED)
 
-if(NOT FFTW3F_FOUND)
-  message(FATAL_ERROR "FFTW3F not found. Install libfftw3-dev")
-endif()
+set(FFTW3F_LIBRARIES ${FFTW3F_THREADS_LIB} ${FFTW3F_LIB})
+message(STATUS "Found FFTW3F: ${FFTW3F_LIB}")
+message(STATUS "Found FFTW3F_THREADS: ${FFTW3F_THREADS_LIB}")
 
 # ---------- SDL2 ----------
 find_package(SDL2 CONFIG QUIET)
@@ -64,7 +67,7 @@ endif()
 fetchcontent_declare(
   imgui
   GIT_REPOSITORY https://github.com/ocornut/imgui
-  GIT_TAG v1.90.1
+  GIT_TAG v1.92.6-docking
 )
 
 fetchcontent_makeavailable(imgui)
@@ -94,7 +97,7 @@ target_link_libraries(imgui
 fetchcontent_declare(
   implot
   GIT_REPOSITORY https://github.com/epezent/implot
-  GIT_TAG v0.16
+  GIT_TAG master
 )
 
 fetchcontent_makeavailable(implot)
@@ -122,6 +125,9 @@ target_link_libraries(implot PUBLIC imgui)
 # ---------- Core SDR library ----------
 add_library(soip STATIC
   ${PROJECT_SOURCE_DIR}/src/gui/gui_layer.cpp
+  ${PROJECT_SOURCE_DIR}/src/gui/phy_dev.cpp
+  ${PROJECT_SOURCE_DIR}/src/gui/ip_dev.cpp
+  ${PROJECT_SOURCE_DIR}/src/gui/app.cpp
   ${PROJECT_SOURCE_DIR}/src/ip/ip_layer.cpp
   ${PROJECT_SOURCE_DIR}/src/phy/phy_layer.cpp
 )
@@ -134,11 +140,21 @@ target_include_directories(soip PUBLIC
 target_link_libraries(soip PUBLIC
   ${SOAPY_TARGET}
   ${FFTW3F_LIBRARIES}
+  imgui
+  implot
+  GLEW::GLEW
+  SDL2::SDL2
+  OpenGL::GL
+  Threads::Threads
 )
 
 # ---------- GUI executable ----------
 add_executable(main
   src/main.cpp
+)
+
+add_executable(gui
+  src/gui.cpp
 )
 
 target_link_libraries(main PRIVATE
@@ -148,4 +164,15 @@ target_link_libraries(main PRIVATE
   GLEW::GLEW
   SDL2::SDL2
   OpenGL::GL
+  Threads::Threads
+)
+
+target_link_libraries(gui PRIVATE
+  soip
+  imgui
+  implot
+  GLEW::GLEW
+  SDL2::SDL2
+  OpenGL::GL
+  Threads::Threads
 )

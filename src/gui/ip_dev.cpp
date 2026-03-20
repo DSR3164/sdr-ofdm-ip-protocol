@@ -1,16 +1,15 @@
-#include "gui/gui_layer.hpp"
+#include "gui/ip_dev.hpp"
 
 #include <vector>
 #include "implot.h"
 
-void gui_dev(App &app) // GUI layer
+void ip_dev(App &app) // IP layer
 {
     std::vector<float> data(1000);
     for (size_t i = 0; i < data.size(); ++i)
         data[i] = rand() % 1000;
 
-    if (ImGui::Begin("Plot 1D"))
-        app.begin_plot_1d("Plot 1D", data.data(), data.size());
+    if (ImGui::Begin("Plot 2D"))
+        app.begin_plot_2d("Plot 2D", "I", "Q", data.data(), data.size());
     ImGui::End();
 }
-

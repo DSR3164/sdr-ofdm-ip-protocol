@@ -2,4 +2,4 @@
 
 #include "app.hpp"
 
-void gui_dev(App &app);
+void phy_dev(App &app);
