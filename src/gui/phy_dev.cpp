@@ -10,6 +10,6 @@ void phy_dev(App &app) // Phy layer
         data[i] = rand() % 1000;
 
     if (ImGui::Begin("Scatter"))
-        app.begin_scatter("Scatter", data.data(), data.size());
+        app.begin_scatter("Scatter", data);
     ImGui::End();
 }
