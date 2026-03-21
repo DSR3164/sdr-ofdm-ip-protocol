@@ -80,32 +80,32 @@ void App::control_wd()
     }
 }
 
-void App::begin_plot_1d(const std::string &label, const float *data, size_t data_size)
+void App::begin_plot_1d(const std::string &label, std::span<const float> data)
 {
     if (ImPlot::BeginPlot(label.c_str(), ImVec2(ImGui::GetContentRegionAvail())))
     {
-        ImPlot::PlotLine(label.c_str(), data, data_size);
+        ImPlot::PlotLine(label.c_str(), data.data(), data.size());
         ImPlot::EndPlot();
     }
 }
 
-void App::begin_plot_2d(const std::string &label, const std::string &label_i, const std::string &label_q, const float *data, size_t data_size)
+void App::begin_plot_2d(const std::string &label, const std::string &label_i, const std::string &label_q, std::span<const float> data)
 {
-    int count = (int)(data_size / 2);
+    int count = data.size() / 2;
     auto get_i = [](int i, void *d) { return ImPlotPoint(i, ((float *)d)[i * 2]); };
     auto get_q = [](int i, void *d) { return ImPlotPoint(i, ((float *)d)[i * 2 + 1]); };
 
     if (ImPlot::BeginPlot(label.c_str(), ImGui::GetContentRegionAvail()))
     {
-        ImPlot::PlotLineG(label_i.c_str(), get_i, (void *)data, count);
-        ImPlot::PlotLineG(label_q.c_str(), get_q, (void *)data, count);
+        ImPlot::PlotLineG(label_i.c_str(), get_i, (void *)data.data(), count);
+        ImPlot::PlotLineG(label_q.c_str(), get_q, (void *)data.data(), count);
         ImPlot::EndPlot();
     }
 }
 
-void App::begin_scatter(const std::string &label, const float *data, size_t data_size)
+void App::begin_scatter(const std::string &label, std::span<const float> data)
 {
-    int count = data_size / 2;
+    int count = data.size() / 2;
     auto get_iq = [](int i, void *d)
         {
             float *f_data = (float *)d;
@@ -116,8 +116,8 @@ void App::begin_scatter(const std::string &label, const float *data, size_t data
     {
         ImPlotSpec spec;
         spec.Marker = ImPlotMarker_Square;
-        spec.MarkerSize = 2.0f;
-        ImPlot::PlotScatterG(label.c_str(), get_iq, (void *)data, count, spec);
+        spec.MarkerSize = 1.0f;
+        ImPlot::PlotScatterG(label.c_str(), get_iq, (void *)data.data(), count, spec);
         ImPlot::EndPlot();
     }
 }

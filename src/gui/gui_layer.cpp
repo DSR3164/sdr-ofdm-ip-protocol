@@ -10,7 +10,7 @@ void gui_dev(App &app) // GUI layer
         data[i] = rand() % 1000;
 
     if (ImGui::Begin("Plot 1D"))
-        app.begin_plot_1d("Plot 1D", data.data(), data.size());
+        app.begin_plot_1d("Plot 1D", data);
     ImGui::End();
 }
 
