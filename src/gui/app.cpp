@@ -4,7 +4,6 @@
 #include "gui/ip_dev.hpp"
 
 #include <GL/glew.h>
-#include "implot.h"
 #include "backends/imgui_impl_opengl3.h"
 #include "backends/imgui_impl_sdl2.h"
 
@@ -35,6 +34,14 @@ App::~App()
     SDL_GL_DeleteContext(gl_context);
     SDL_DestroyWindow(window);
     SDL_Quit();
+}
+
+App::PlotSpec::PlotSpec(int stride_elements, ImPlotMarker marker, float marker_size)
+{
+    spec.Marker = marker;
+    spec.MarkerSize = marker_size;
+    spec.Stride = (int)sizeof(float) * stride_elements;
+    spec.Offset = 0;
 }
 
 void App::start_frame()
@@ -68,11 +75,19 @@ void App::control_wd()
     {
         if (ImGui::BeginMenu("Control Panel"))
         {
+            ImGui::SeparatorText("Video Settings");
+            ImGui::MenuItem("VSYNC", nullptr, &vsync_state);
+                this->set_vsync_state(vsync_state);
+
             ImGui::SeparatorText("Workstation");
 
             ImGui::MenuItem("GUI Dev", nullptr, &gui_run);
             ImGui::MenuItem("PHY Dev", nullptr, &phy_run);
             ImGui::MenuItem("IP Dev", nullptr, &ip_run);
+
+            ImGui::SeparatorText("Debug");
+
+            ImGui::MenuItem("Open debug panel", nullptr, &debug_run);
 
             ImGui::EndMenu();
         }
@@ -80,44 +95,48 @@ void App::control_wd()
     }
 }
 
+void App::begin_debug()
+{
+    ImGuiIO &io = ImGui::GetIO();
+    if (ImGui::Begin("Debug Panel"))
+    {
+        ImGui::SeparatorText("Statistics");
+        ImGui::Text("FPS: %.f (%0.3f ms)", io.Framerate, 1000.0f / io.Framerate);
+    }
+    ImGui::End();
+}
+
 void App::begin_plot_1d(const std::string &label, std::span<const float> data)
 {
+    PlotSpec plot_1d(1);
     if (ImPlot::BeginPlot(label.c_str(), ImVec2(ImGui::GetContentRegionAvail())))
     {
-        ImPlot::PlotLine(label.c_str(), data.data(), data.size());
+        ImPlot::PlotLine(label.c_str(), data.data(), (int)data.size(), 1.0, 0.0, plot_1d.spec);
         ImPlot::EndPlot();
     }
 }
 
 void App::begin_plot_2d(const std::string &label, const std::string &label_i, const std::string &label_q, std::span<const float> data)
 {
+    PlotSpec plot_2d(2);
     int count = data.size() / 2;
-    auto get_i = [](int i, void *d) { return ImPlotPoint(i, ((float *)d)[i * 2]); };
-    auto get_q = [](int i, void *d) { return ImPlotPoint(i, ((float *)d)[i * 2 + 1]); };
 
     if (ImPlot::BeginPlot(label.c_str(), ImGui::GetContentRegionAvail()))
     {
-        ImPlot::PlotLineG(label_i.c_str(), get_i, (void *)data.data(), count);
-        ImPlot::PlotLineG(label_q.c_str(), get_q, (void *)data.data(), count);
+        ImPlot::PlotLine(label_i.c_str(), data.data(), count, 1.0, 0.0, plot_2d.spec);
+        ImPlot::PlotLine(label_q.c_str(), data.data() + 1, count, 1.0, 0.0, plot_2d.spec);
         ImPlot::EndPlot();
     }
 }
 
 void App::begin_scatter(const std::string &label, std::span<const float> data)
 {
+    PlotSpec plot_scatter(2, ImPlotMarker_Asterisk, 1.0f);
     int count = data.size() / 2;
-    auto get_iq = [](int i, void *d)
-        {
-            float *f_data = (float *)d;
-            return ImPlotPoint(f_data[i * 2], f_data[i * 2 + 1]);
-        };
 
     if (ImPlot::BeginPlot(label.c_str(), ImVec2(ImGui::GetContentRegionAvail()), ImPlotFlags_Equal))
     {
-        ImPlotSpec spec;
-        spec.Marker = ImPlotMarker_Square;
-        spec.MarkerSize = 1.0f;
-        ImPlot::PlotScatterG(label.c_str(), get_iq, (void *)data.data(), count, spec);
+        ImPlot::PlotScatter(label.c_str(), data.data(), data.data() + 1, count, plot_scatter.spec);
         ImPlot::EndPlot();
     }
 }
@@ -130,6 +149,9 @@ void run_gui(SharedData &sd)
     {
         app.start_frame();
         app.control_wd();
+
+        if (app.is_debug_run())
+            app.begin_debug();
 
         if (app.is_gui_run())
             gui_dev(app);
