@@ -103,11 +103,11 @@ fetchcontent_declare(
 fetchcontent_makeavailable(implot)
 
 if(TARGET SoapySDR::SoapySDR)
-    set(SOAPY_TARGET SoapySDR::SoapySDR)
+  set(SOAPY_TARGET SoapySDR::SoapySDR)
 elseif(TARGET SoapySDR)
-    set(SOAPY_TARGET SoapySDR)
+  set(SOAPY_TARGET SoapySDR)
 else()
-    message(FATAL_ERROR "SoapySDR target not found")
+  message(FATAL_ERROR "SoapySDR target not found")
 endif()
 
 add_library(implot STATIC
@@ -176,3 +176,16 @@ target_link_libraries(gui PRIVATE
   OpenGL::GL
   Threads::Threads
 )
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  foreach(target main gui)
+    target_compile_options(${target} PRIVATE
+      -fsanitize=address,undefined
+      -fno-omit-frame-pointer
+      -g
+    )
+    target_link_options(${target} PRIVATE
+      -fsanitize=address,undefined
+    )
+  endforeach()
+endif()
