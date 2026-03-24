@@ -46,3 +46,30 @@ int run_sdr(SharedData &data)
         return 0;
     return 0;
 }
+
+int run_gui_bridge(SharedData &data)
+{
+    static IPC server;
+    static bool socket_init = false;
+
+    std::vector<int16_t> temp;
+
+    while (!has_flag(data.sdr.get_flags(), Flags::EXIT))
+    {
+        if (!socket_init)
+        {
+            while (server.create_socket("/tmp/dsp_gui.sock") == -1);
+            while (server.set_socket() == -1);
+            socket_init = true;
+        }
+
+        data.dsp_sockets.read(temp);
+
+        server.create_msg(temp);
+        server.send_frame();
+
+    }
+
+    return 0;
+};
+

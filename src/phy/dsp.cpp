@@ -322,6 +322,8 @@ int run_dsp(SharedData &data)
         else
             continue;
 
+        data.dsp_sockets.write(temp);
+
         std::atomic_signal_fence(std::memory_order_seq_cst);
         start = std::chrono::steady_clock::now();
         std::atomic_signal_fence(std::memory_order_seq_cst);
