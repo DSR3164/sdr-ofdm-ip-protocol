@@ -130,6 +130,7 @@ add_library(soip STATIC
   ${PROJECT_SOURCE_DIR}/src/gui/app.cpp
   ${PROJECT_SOURCE_DIR}/src/ip/ip_layer.cpp
   ${PROJECT_SOURCE_DIR}/src/phy/phy_layer.cpp
+  ${PROJECT_SOURCE_DIR}/src/phy/sdr.cpp
 )
 
 target_include_directories(soip PUBLIC

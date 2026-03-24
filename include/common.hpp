@@ -1,5 +1,6 @@
 #pragma once
 
+#include "phy/sdr.hpp"
 #include <vector>
 #include <cmath>
 #include <atomic>
@@ -209,7 +210,6 @@ class IPC {
         return 0;
     }
 
-    // accept() заменяет fd (серверный fd теряется — это ваше сознательное решение)
     int set_socket()
     {
         int fd = accept(_listen_fd, nullptr, nullptr);
@@ -301,6 +301,8 @@ class IPC {
 
 struct SharedData
 {
+    SDR sdr;
+
     DoubleBuffer<uint8_t> ip_phy;
     DoubleBuffer<uint8_t> phy_ip;
 
@@ -308,6 +310,8 @@ struct SharedData
     DoubleBuffer<int16_t> sdr_dsp_rx;
 
     SharedData()
+        :
+        sdr(SDRConfig{})
     {
     }
 
