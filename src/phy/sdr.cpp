@@ -17,15 +17,16 @@ SDR::SDR(const SDRConfig &config)
 }
 
 /*!
-* \brief Initialize SDR device and configure RX/TX streams.
-*
-* Creates a SoapySDR device using parameters from `config`,
-* sets sample rate, frequency, gain, bandwidth,
-* and activates RX and/or TX streams in CS16 format.
-*
-* \param config Pointer to SDR configuration structure.
-* \return 0 on success, non-zero on failure.
-*/
+ * \brief Initialize SDR device and configure RX/TX streams.
+ *
+ * Creates a SoapySDR device using internally stored arguments (`args`),
+ * applies configuration from `cfg` (sample rate, frequency, gain),
+ * and initializes RX and/or TX streams in CS16 format.
+ *
+ * Streams are activated immediately after creation.
+ *
+ * \return true on success, false if device creation failed.
+ */
 bool SDR::init()
 {
     if (cfg.enable_rx and cfg.enable_tx)
@@ -73,9 +74,18 @@ bool SDR::init()
     }
     std::cout << "\nCreate SDR:" << args["uri"] << "\n";
 
-    return 1;
+    return true;
 }
 
+/*!
+ * \brief Read samples from SDR RX stream.
+ *
+ * Reads interleaved IQ samples (CS16) into the provided buffer.
+ * The buffer must be preallocated with at least `cfg.buffer_size` elements.
+ *
+ * \param[out] recv Buffer for received samples.
+ * \return Number of elements read, or negative value on error.
+ */
 int SDR::readstream(std::vector<int16_t> &recv)
 {
     void *rxbuffs[] = { recv.data() };
@@ -91,6 +101,15 @@ int SDR::readstream(std::vector<int16_t> &recv)
     return ret;
 };
 
+/*!
+ * \brief Write samples to SDR TX stream.
+ *
+ * Sends interleaved IQ samples (CS16) from the provided buffer.
+ * The buffer must contain at least `cfg.buffer_size` elements.
+ *
+ * \param[in] send Buffer with samples to transmit.
+ * \return Number of elements written, or negative value on error.
+ */
 int SDR::writestream(std::vector<int16_t> &send)
 {
     void *txbuffs[] = { send.data() };
@@ -109,16 +128,17 @@ int SDR::writestream(std::vector<int16_t> &send)
 /*!
  * \brief Deinitialize SDR device and release resources.
  *
- * Deactivates and closes RX/TX streams, then destroys
- * the associated SoapySDR device instance.
+ * Deactivates and closes RX/TX streams (if active),
+ * then destroys the underlying SoapySDR device.
  *
- * \param config Pointer to SDR configuration structure.
- * \return 0 on completion.
-*/
+ * Safe to call multiple times.
+ *
+ * \return true if deinitialization was performed, false if device was not initialized.
+ */
 bool SDR::deinit()
 {
-    if (sdr != nullptr)
-        return 0;
+    if (sdr == nullptr)
+        return false;
 
     if (sdr)
     {
@@ -138,16 +158,18 @@ bool SDR::deinit()
         SoapySDR::Device::unmake(sdr);
         sdr = nullptr;
     }
-    return 1;
+    return true;
 }
 
 /*!
- * \brief Reinitialize SDR device.
+ * \brief Reinitialize SDR device if requested.
  *
- * Performs full deinitialization and reinitialization
- * of the SDR backend and clears the REINIT flag.
+ * If the REINIT flag is set, performs full deinitialization
+ * followed by initialization and clears the flag.
  *
-*/
+ * \return true if reinitialization was performed successfully,
+ *         false otherwise.
+ */
 bool SDR::reinit()
 {
     if (!has_flag(flags, Flags::REINIT))
@@ -164,12 +186,12 @@ bool SDR::reinit()
 /*!
  * \brief Add driver-specific arguments to SoapySDR configuration.
  *
- * Inserts runtime parameters such as direct buffer mode,
- * timestamp generation interval, and loopback control.
+ * Modifies internal `args` with parameters required by the driver
+ * (e.g. direct buffer mode, timestamping, loopback).
+ * Also sets stream flags and timeout.
  *
- * \param args SoapySDR keyword arguments structure to modify.
- * \return 0 on success.
-*/
+ * \return Always returns 0.
+ */
 int SDR::add_args()
 {
     args["direct"] = "1";
@@ -181,14 +203,18 @@ int SDR::add_args()
 }
 
 /*!
-* \brief Apply runtime configuration changes to SDR device.
-*
-* Updates frequency, bandwidth, gain, and sample rate
-* according to active flags in `context`.
-* Each applied parameter clears its corresponding flag.
-*
-* \param context SDR configuration structure.
-*/
+ * \brief Apply runtime configuration changes to SDR device.
+ *
+ * Applies pending configuration updates based on internal flags:
+ * - frequency (TX/RX)
+ * - bandwidth (TX/RX)
+ * - gain (TX/RX)
+ * - sample rate
+ *
+ * After applying each parameter, the corresponding flag is cleared.
+ *
+ * Does nothing if device is not initialized.
+ */
 void SDR::apply_runtime()
 {
     if (!sdr)
@@ -222,5 +248,4 @@ void SDR::apply_runtime()
         sdr->setSampleRate(TX, 0, cfg.sample_rate);
         flags &= ~Flags::APPLY_SAMPLE_RATE;
     }
-
 }
