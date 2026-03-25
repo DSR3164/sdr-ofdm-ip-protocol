@@ -2,18 +2,6 @@
 
 #include "common.hpp"
 
-#include <fcntl.h>
-#include <linux/if.h>
-#include <linux/if_tun.h>
-#include <string.h>
-#include <sys/ioctl.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <iostream>
-#include <netinet/ip.h>
-#include <optional>
-#include <atomic>
-
 struct IP
 {
     std::atomic<bool> back_running = true;

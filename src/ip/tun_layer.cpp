@@ -1,5 +1,11 @@
 #include "ip/ip_layer.hpp"
+
 #include <spdlog/spdlog.h>
+#include <fcntl.h>
+#include <linux/if.h>
+#include <linux/if_tun.h>
+#include <sys/ioctl.h>
+#include <arpa/inet.h>
 
 int allocate_tun(char *dev)
 {

@@ -1,5 +1,7 @@
 #include "ip/ip_layer.hpp"
+
 #include <spdlog/spdlog.h>
+#include <linux/if.h>
 
 void run_tun_rx(SharedData &data)
 {
