@@ -1,6 +1,7 @@
 #include "common.hpp"
 #include "phy/phy_layer.hpp"
 #include "phy/dsp.hpp"
+#include "ip/ip_layer.hpp"
 
 #include <thread>
 #include <fftw3.h>
@@ -15,11 +16,18 @@ int main()
 
     std::thread dsp_thread(run_dsp, std::ref(data));
     std::thread sdr_thread(run_sdr, std::ref(data));
+    std::thread tun_rx_thread(run_tun_rx, std::ref(data));
+
     std::thread dsp_gui_bridge_thread(run_gui_bridge, std::ref(data));
+    std::thread ip_gui_bridge_thread(run_ip_gui_bridge, std::ref(data));
 
     dsp_thread.join();
     sdr_thread.join();
     dsp_gui_bridge_thread.join();
+    if (tun_rx_thread.joinable())
+        tun_rx_thread.join();
+    if (ip_gui_bridge_thread.joinable())
+        ip_gui_bridge_thread.join();
 
     return 0;
 }

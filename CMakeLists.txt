@@ -72,6 +72,15 @@ fetchcontent_declare(
 
 fetchcontent_makeavailable(imgui)
 
+# ---------- spdlog ----------
+fetchcontent_declare(
+  spdlog
+  GIT_REPOSITORY https://github.com/gabime/spdlog
+  GIT_TAG  v1.17.0
+)
+
+fetchcontent_makeavailable(spdlog)
+
 add_library(imgui STATIC
   ${imgui_SOURCE_DIR}/imgui.cpp
   ${imgui_SOURCE_DIR}/imgui_draw.cpp
@@ -129,6 +138,8 @@ add_library(soip STATIC
   ${PROJECT_SOURCE_DIR}/src/gui/ip_dev.cpp
   ${PROJECT_SOURCE_DIR}/src/gui/app.cpp
   ${PROJECT_SOURCE_DIR}/src/ip/ip_layer.cpp
+  ${PROJECT_SOURCE_DIR}/src/ip/tun_layer.cpp
+  ${PROJECT_SOURCE_DIR}/src/ip/bit_utils.cpp
   ${PROJECT_SOURCE_DIR}/src/phy/phy_layer.cpp
   ${PROJECT_SOURCE_DIR}/src/phy/sdr.cpp
   ${PROJECT_SOURCE_DIR}/src/phy/dsp.cpp
@@ -144,6 +155,7 @@ target_link_libraries(soip PUBLIC
   ${FFTW3F_LIBRARIES}
   imgui
   implot
+  spdlog::spdlog
   GLEW::GLEW
   SDL2::SDL2
   OpenGL::GL
