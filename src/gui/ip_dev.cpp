@@ -31,16 +31,21 @@ void ip_dev(App &app) // IP layer
 
     if (ImGui::Begin("IP Layer"))
     {
+        ImGui::Text("[Hdr] Magic=0x%04X PLen=%d Seq=%d Flags=%d Reserved=%d",
+            (raw_ptr_bits[0] << 8) | raw_ptr_bits[1],
+            (raw_ptr_bits[2] << 8) | raw_ptr_bits[3],
+            (raw_ptr_bits[4] << 8) | raw_ptr_bits[5],
+            raw_ptr_bits[6], raw_ptr_bits[7]);
         ImGui::Text("[IP] Ver=%d HLen=%d TOS=%02X Len=%d Proto=%d Src=%d.%d.%d.%d Dest=%d.%d.%d.%d",
-                    (raw_ptr_bits[0] >> 4) & 0xF,
-                    (raw_ptr_bits[0] & 0xF) * 4,
-                    raw_ptr_bits[1],
-                    (raw_ptr_bits[2] << 8) | raw_ptr_bits[3],
-                    raw_ptr_bits[9],
-                    raw_ptr_bits[12], raw_ptr_bits[13],
-                    raw_ptr_bits[14], raw_ptr_bits[15],
-                    raw_ptr_bits[16], raw_ptr_bits[17],
-                    raw_ptr_bits[18], raw_ptr_bits[19]);
+            (raw_ptr_bits[8] >> 4) & 0xF,
+            (raw_ptr_bits[8] & 0xF) * 4,
+            raw_ptr_bits[9],
+            (raw_ptr_bits[10] << 8) | raw_ptr_bits[3],
+            raw_ptr_bits[17],
+            raw_ptr_bits[20], raw_ptr_bits[21],
+            raw_ptr_bits[22], raw_ptr_bits[23],
+            raw_ptr_bits[24], raw_ptr_bits[25],
+            raw_ptr_bits[26], raw_ptr_bits[27]);
 
         if (ImPlot::BeginPlot("IP Bits", ImGui::GetContentRegionAvail()))
         {
