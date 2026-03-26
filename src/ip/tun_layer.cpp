@@ -44,43 +44,50 @@ int allocate_tun(char *dev)
 std::optional<std::string> set_interface_ip(const char *dev_name)
 {
     int sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock < 0)
+    if (sock < 0) {
+        spdlog::error("Socket creation failed: {}", strerror(errno));
         return std::nullopt;
+    }
 
     struct ifreq ifr{};
-    struct sockaddr_in *addr = (struct sockaddr_in *)&ifr.ifr_addr;
-
+    memset(&ifr, 0, sizeof(ifr));
     strncpy(ifr.ifr_name, dev_name, IFNAMSIZ - 1);
 
     int id = 0;
-    sscanf(dev_name, "tun%d", &id);
-
+    if (sscanf(dev_name, "tun%d", &id) != 1) {
+        id = 0; 
+    }
     char ip[INET_ADDRSTRLEN];
     snprintf(ip, sizeof(ip), "10.0.0.%d", id + 1);
 
+    struct sockaddr_in *addr = (struct sockaddr_in *)&ifr.ifr_addr;
     addr->sin_family = AF_INET;
     inet_pton(AF_INET, ip, &addr->sin_addr);
 
-    if (ioctl(sock, SIOCSIFADDR, &ifr) < 0)
-    {
-        spdlog::error("Failed to assign IP {} to {}: {}", ip, dev_name, strerror(errno));
+    if (ioctl(sock, SIOCSIFADDR, &ifr) < 0) {
+        spdlog::error("SIOCSIFADDR failed: {}", strerror(errno));
         close(sock);
         return std::nullopt;
     }
+    spdlog::info("IP {} assigned to {}", ip, dev_name);
 
-    spdlog::info("Assigned IP {} to {}", ip, dev_name);
+    struct sockaddr_in *netmask = (struct sockaddr_in *)&ifr.ifr_netmask;
+    netmask->sin_family = AF_INET;
+    inet_pton(AF_INET, "255.255.255.252", &netmask->sin_addr);
 
-    if (ioctl(sock, SIOCGIFFLAGS, &ifr) < 0)
-    {
-        spdlog::error("ioctl(SIOCGIFFLAGS) failed: {}", strerror(errno));
+    if (ioctl(sock, SIOCSIFNETMASK, &ifr) < 0) {
+        spdlog::error("SIOCSIFNETMASK failed: {}", strerror(errno));
     }
-    else
-    {
-        ifr.ifr_flags |= IFF_UP | IFF_RUNNING;
-        if (ioctl(sock, SIOCSIFFLAGS, &ifr) < 0)
-            spdlog::error("ioctl(SIOCSIFFLAGS) failed: {}", strerror(errno));
-        else
-            spdlog::info("Interface {} is now UP and RUNNING", dev_name);
+
+    if (ioctl(sock, SIOCGIFFLAGS, &ifr) < 0) {
+        spdlog::error("SIOCGIFFLAGS failed: {}", strerror(errno));
+    } else {
+        ifr.ifr_flags |= IFF_UP | IFF_RUNNING; 
+        if (ioctl(sock, SIOCSIFFLAGS, &ifr) < 0) {
+            spdlog::error("SIOCSIFFLAGS failed: {}", strerror(errno));
+        } else {
+            spdlog::info("Interface {} is UP", dev_name);
+        }
     }
 
     close(sock);
