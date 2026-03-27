@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <fftw3.h>
 #include <vector>
-#include <iostream>
 
 enum class Flags : uint16_t
 {

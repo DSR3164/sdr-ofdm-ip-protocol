@@ -1,4 +1,5 @@
 #include "common.hpp"
+#include "logger.hpp"
 #include "phy/dsp.hpp"
 
 void split_to_float(const std::complex<float> *__restrict src, float *__restrict dst_re, float *__restrict dst_im, size_t n)
@@ -371,6 +372,6 @@ int run_dsp(SharedData &data)
         std::atomic_signal_fence(std::memory_order_seq_cst);
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     }
-    std::cout << "Closing DSP thread\n";
+    logs::dsp.info("Closing DSP thread");
     return 0;
 }
