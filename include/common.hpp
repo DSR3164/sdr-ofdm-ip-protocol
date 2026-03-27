@@ -21,6 +21,14 @@ enum class MsgType : uint32_t {
     Error
 };
 
+enum class Modulation
+{
+    BPSK,
+    QPSK,
+    QAM16,
+    QAM64,
+};
+
 struct ipc_header
 {
     MsgType type;
@@ -32,6 +40,18 @@ struct ipc_frame
 {
     ipc_header header;
     char payload[];
+};
+
+struct DSP {
+    float cfo = 0.0f;
+    int max_index = 0;
+    float sample_rate = 1.92e6;
+    struct OFDMConfig {
+        Modulation mod = Modulation::QAM16;
+        int n_subcarriers = 128;
+        int pilot_spacing = 6;
+        int n_cp = 32;
+    } ofdm_cfg;
 };
 
 template <typename T>
@@ -302,6 +322,7 @@ class IPC {
 struct SharedData
 {
     SDR sdr;
+    DSP dsp;
 
     DoubleBuffer<uint8_t> ip_phy;
     DoubleBuffer<uint8_t> phy_ip;

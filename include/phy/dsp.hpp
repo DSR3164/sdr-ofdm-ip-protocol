@@ -73,17 +73,5 @@ struct FFTWPlan
     FFTWPlan &operator=(const FFTWPlan &) = delete;
 };
 
-struct DSP {
-    float cfo = 0.0f;
-    int max_index = 0;
-    int mod = 3;
-    float sample_rate = 1.92e6;
-    struct OFDMConfig {
-        int mod = 2;
-        int n_subcarriers = 128;
-        int pilot_spacing = 6;
-        int n_cp = 32;
-    } ofdm_cfg;
-};
 
 int run_dsp(SharedData &data);
