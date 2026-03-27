@@ -28,14 +28,17 @@ int run_sdr(SharedData &data)
 
     while (!has_flag(sdr.get_flags(), Flags::EXIT))
     {
-        auto ret = sdr.readstream(data.sdr_dsp_rx.get_write_buffer());
+        auto ret_rx = sdr.readstream(data.sdr_dsp_rx.get_write_buffer());
+        auto ret_tx = sdr.writestream(data.sdr_dsp_tx.get_write_buffer());
 
-        if (ret > 0)
+        if (ret_rx > 0)
             data.sdr_dsp_rx.swap();
-        else if (ret == SOAPY_SDR_OVERFLOW)
+        else if (ret_rx == SOAPY_SDR_OVERFLOW)
             logs::sdr.error("OVERFLOW");
         else
-            logs::sdr.error("ERR read {}", ret);
+            logs::sdr.warn("ERR read {}", ret_rx);
+        if (ret_tx < 0)
+            logs::sdr.warn("ERR send {}", ret_tx);
 
         if (has_flag(sdr.get_flags(), Flags::REINIT))
             if (!sdr.reinit())
