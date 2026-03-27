@@ -1,5 +1,5 @@
+#include "logger.hpp"
 #include "gui/ip_dev.hpp"
-#include "spdlog/spdlog.h"
 
 #include <vector>
 #include "implot.h"
@@ -18,7 +18,7 @@ void ip_dev(App &app) // IP layer
         if (client.connect_to_socket("/tmp/ip_gui.sock") == 0)
         {
             init = true;
-            spdlog::info("IP device GUI initialized");
+            logs::gui.info("IP device GUI initialized");
         }
         else
             return;

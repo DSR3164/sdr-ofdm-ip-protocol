@@ -1,6 +1,6 @@
+#include "logger.hpp"
 #include "ip/ip_layer.hpp"
 
-#include <spdlog/spdlog.h>
 #include <linux/if.h>
 #include <netinet/in.h>
 
@@ -16,11 +16,11 @@ void run_tun_rx(SharedData &data)
 
     if (ip_addr)
     {
-        spdlog::info("Interface {} started with IP {}", tun_name, *ip_addr);
+        logs::tun.info("Interface {} started with IP {}", tun_name, *ip_addr);
     }
     else
     {
-        spdlog::error("Failed to assign IP to {}", tun_name);
+        logs::tun.error("Failed to assign IP to {}", tun_name);
     }
 
 
@@ -41,7 +41,7 @@ void run_tun_rx(SharedData &data)
         {
             if (errno == EAGAIN || errno == EWOULDBLOCK)
                 continue;
-            spdlog::error("[{}] Read error {}: {}", tun_name, errno, strerror(errno));
+            logs::tun.error("[{}] Read error {}: {}", tun_name, errno, strerror(errno));
             nbytes = 0;
             continue;
         }
@@ -52,7 +52,7 @@ void run_tun_rx(SharedData &data)
             frame.clear();
             frame.reserve(sizeof(FrameHeader) + nbytes);
 
-            spdlog::info("[{}] Read {} bytes", tun_name, static_cast<size_t>(nbytes));
+            logs::tun.info("[{}] Read {} bytes", tun_name, static_cast<size_t>(nbytes));
             ip.nbytes = nbytes;
 
             ip.buffer.assign(buffer, buffer + nbytes);
@@ -98,7 +98,7 @@ void run_tun_tx(SharedData &data, int tun_fd, const char *tun_name)
 
         if (ntohs(hdr.magic) != 0x1F35)
         {
-            spdlog::warn("[{}] Bad magic: {:04x}", tun_name, ntohs(hdr.magic));
+            logs::tun.warn("[{}] Bad magic: {:04x}", tun_name, ntohs(hdr.magic));
             continue;
         }
 
@@ -106,7 +106,7 @@ void run_tun_tx(SharedData &data, int tun_fd, const char *tun_name)
 
         if (sizeof(FrameHeader) + len > frame.size())
         {
-            spdlog::warn("[{}] Frame too short", tun_name);
+            logs::tun.warn("[{}] Frame too short", tun_name);
             continue;
         }
 
@@ -114,21 +114,21 @@ void run_tun_tx(SharedData &data, int tun_fd, const char *tun_name)
 
         ssize_t written = write(tun_fd, payload, len);
         if (written < 0)
-            spdlog::error("[{}] Write error: {}", tun_name, strerror(errno));
+            logs::tun.error("[{}] Write error: {}", tun_name, strerror(errno));
         else
-            spdlog::info("[{}] Injected {} bytes into TUN", tun_name, written);
+            logs::tun.info("[{}] Injected {} bytes into TUN", tun_name, written);
     }
 }
 
 int run_ip_gui_bridge(SharedData &data)
 {
-    spdlog::info("GUI bridge thread initialized");
+    logs::tun.info("GUI bridge thread initialized");
     static IPC server;
     static bool init = false;
 
     while (server.create_socket("/tmp/ip_gui.sock") == -1)
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    spdlog::info("GUI bridge socket created");
+    logs::tun.info("GUI bridge socket created");
 
     std::vector<int16_t> bits;
     std::vector<uint8_t> bytes;
@@ -143,7 +143,7 @@ int run_ip_gui_bridge(SharedData &data)
         {
             while (server.set_socket() == -1)
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            spdlog::info("GUI bridge socket initialized");
+            logs::tun.info("GUI bridge socket initialized");
             init = true;
         }
 
@@ -151,13 +151,13 @@ int run_ip_gui_bridge(SharedData &data)
 
         if (!server.send_frame())
         {
-            spdlog::warn("Client disconnected");
+            logs::tun.warn("Client disconnected");
             init = false;
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 
-    spdlog::info("GUI bridge stopped");
+    logs::tun.info("GUI bridge stopped");
     return 0;
 }
