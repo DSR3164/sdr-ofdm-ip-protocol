@@ -75,6 +75,7 @@ struct SDRConfig {
     bool enable_rx = true;
     float tx_bandwidth = 1e6;
     float rx_bandwidth = 10e6;
+    bool init_on_start = false;
 };
 
 class SDR {

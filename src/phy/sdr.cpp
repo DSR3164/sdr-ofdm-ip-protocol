@@ -26,7 +26,8 @@ SDR::SDR(const SDRConfig &config)
     {
         args = list[0];
         logs::sdr.info("Found SDR: {}", args["uri"]);
-        flags |= Flags::IS_ACTIVE;
+        if (cfg.init_on_start)
+            flags |= Flags::IS_ACTIVE;
     }
 }
 
