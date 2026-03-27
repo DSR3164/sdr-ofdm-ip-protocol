@@ -20,6 +20,9 @@ find_library(FFTW3F_LIB fftw3f REQUIRED)
 find_library(FFTW3F_THREADS_LIB fftw3f_threads REQUIRED)
 find_path(FFTW3F_INCLUDE_DIRS fftw3.h REQUIRED)
 
+# ---------- OpenMP ----------
+find_package(OpenMP REQUIRED)
+
 set(FFTW3F_LIBRARIES ${FFTW3F_THREADS_LIB} ${FFTW3F_LIB})
 message(STATUS "Found FFTW3F: ${FFTW3F_LIB}")
 message(STATUS "Found FFTW3F_THREADS: ${FFTW3F_THREADS_LIB}")
@@ -155,12 +158,14 @@ target_link_libraries(soip PUBLIC
   ${FFTW3F_LIBRARIES}
   imgui
   implot
+  OpenMP::OpenMP_CXX
   spdlog::spdlog
   GLEW::GLEW
   SDL2::SDL2
   OpenGL::GL
   Threads::Threads
 )
+target_compile_options(soip PRIVATE -O3 -mavx2 -ffast-math)
 
 # ---------- GUI executable ----------
 add_executable(main

@@ -1,59 +1,66 @@
 #include "common.hpp"
 #include "phy/dsp.hpp"
 
-int ofdm_zc_corr(const std::vector<std::complex<float>> &r, const std::vector<std::complex<float>> &zc, std::vector<float> &plato)
+void split_to_float(const std::complex<float> *__restrict src, float *__restrict dst_re, float *__restrict dst_im, size_t n)
 {
-    const int N = zc.size();
-    const int L = r.size();
+    const float *raw_src = reinterpret_cast<const float *>(src);
 
-    int best_pos = -1;
-    float best_val = 0;
-
-    const float *rptr = reinterpret_cast<const float *>(r.data());
-    const float *zptr = reinterpret_cast<const float *>(zc.data());
-
-    float zc_energy = 0;
-    for (int n = 0; n < N; n++)
+    #pragma omp simd
+    for (size_t i = 0; i < n; ++i)
     {
-        float br = zptr[2 * n];
-        float bi = zptr[2 * n + 1];
-        zc_energy += br * br + bi * bi;
+        dst_re[i] = raw_src[2 * i];
+        dst_im[i] = raw_src[2 * i + 1];
     }
+}
 
-    for (int k = 0; k <= L - N; k++)
+int zc_sync(const std::vector<std::complex<float>> &for_ofdm, const std::vector<std::complex<float>> &zadoff_chu, const float zc_energy, std::vector<float> &plato)
+{
+    auto N = zadoff_chu.size();
+    auto L = for_ofdm.size();
+    static std::vector<float> r_re(L);
+    static std::vector<float> r_im(L);
+    static std::vector<float> zc_re(N);
+    static std::vector<float> zc_im(N);
+
+    split_to_float(for_ofdm.data(), r_re.data(), r_im.data(), r_im.size());
+    split_to_float(zadoff_chu.data(), zc_re.data(), zc_im.data(), zc_im.size());
+
+    float max_norm = -1.f;
+    int best_idx = 0;
+
+    for (size_t n = 0; n <= L - N; ++n)
     {
-        float re = 0, im = 0;
-        float energy = 0;
+        float sum_re = 0.0f;
+        float sum_im = 0.0f;
+        float sig_energy = 0.0f;
 
-        const float *rp = rptr + 2 * k;
-
-        for (int n = 0; n < N; n++)
+        #pragma omp simd reduction(+ : sum_re, sum_im, sig_energy)
+        for (size_t k = 0; k < N; ++k)
         {
-            float ar = rp[2 * n];
-            float ai = rp[2 * n + 1];
+            float sr = r_re[n + k];
+            float si = r_im[n + k];
+            float zr = zc_re[k];
+            float zi = zc_im[k];
 
-            float br = zptr[2 * n];
-            float bi = zptr[2 * n + 1];
+            sum_re += sr * zr + si * zi;
+            sum_im += si * zr - sr * zi;
 
-            re += ar * br + ai * bi;
-            im += ai * br - ar * bi;
-
-            energy += ar * ar + ai * ai;
+            sig_energy += sr * sr + si * si;
         }
 
-        float corr = re * re + im * im;
-        float v = corr / (energy * zc_energy + 1e-12f);
+        float corr = sum_re * sum_re + sum_im * sum_im;
+        float norm = corr / (sig_energy * zc_energy + 1e-12f);
 
-        plato[k] = v;
+        plato[n] = norm;
 
-        if (v > best_val)
+        if (norm > max_norm)
         {
-            best_val = v;
-            best_pos = k;
+            max_norm = norm;
+            best_idx = (int)n;
         }
     }
 
-    return best_pos;
+    return best_idx;
 }
 
 void calculate_pilots_and_guard(DSP::OFDMConfig ofdm_config, std::vector<int> &pilots, std::vector<int> &data, std::vector<bool> &is_pilot, std::vector<bool> &is_guard)
@@ -286,6 +293,7 @@ int run_dsp(SharedData &data)
     DSP dsp;
     dsp.sample_rate = data.sdr.get_sample_rate();
     auto buff_size = data.sdr.get_buffer_size();
+    float zc_energy = 0.0f;
 
     FFTWPlan fft(dsp.ofdm_cfg.n_subcarriers, true);
     std::chrono::steady_clock::time_point start;
@@ -299,6 +307,10 @@ int run_dsp(SharedData &data)
     std::vector<int16_t> temp(buff_size * 2, 0);
     for_processing.reserve(buff_size * 2);
     std::vector<std::complex<float>> zadoff_chu = ofdm_zadoff_chu_symbol(dsp);
+
+    const float *zptr = reinterpret_cast<const float *>(zadoff_chu.data());
+    for (int n = 0; n < zadoff_chu.size() * 2; ++n)
+        zc_energy += zptr[n] * zptr[n];
 
     while (!has_flag(data.sdr.get_flags(), Flags::EXIT))
     {
@@ -330,7 +342,7 @@ int run_dsp(SharedData &data)
         int next = 0;
         for_processing = raw;
         plato.resize(for_processing.size());
-        dsp.max_index = ofdm_zc_corr(for_processing, zadoff_chu, plato);
+        dsp.max_index = zc_sync(for_processing, zadoff_chu, zc_energy, plato);
         for_processing = cfo_est(for_processing, dsp);
 
         if (static_cast<int>(for_processing.size()) > dsp.max_index + dsp.ofdm_cfg.n_subcarriers * 2)
