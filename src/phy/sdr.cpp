@@ -1,17 +1,31 @@
+#include "logger.hpp"
 #include "phy/sdr.hpp"
 
+#include <SoapySDR/Logger.hpp>
 #include <SoapySDR/Device.hpp>
 #include <SoapySDR/Formats.hpp>
 
+void soapy_log_handler(const SoapySDRLogLevel logLevel, const char *message)
+{
+    switch (logLevel)
+    {
+    case SOAPY_SDR_FATAL: logs::sdr.critical("SoapySDR: {}", message); break;
+    case SOAPY_SDR_ERROR: logs::sdr.error("SoapySDR: {}", message); break;
+    case SOAPY_SDR_WARNING: logs::sdr.warn("SoapySDR: {}", message); break;
+    case SOAPY_SDR_INFO: logs::sdr.info("SoapySDR: {}", message); break;
+    default: logs::sdr.debug("SoapySDR: {}", message); break;
+    }
+}
+
 SDR::SDR(const SDRConfig &config)
 {
+    SoapySDR::registerLogHandler(soapy_log_handler);
     cfg = config;
     auto list = SoapySDR::Device::enumerate();
     if (!list.empty())
     {
         args = list[0];
-        for (auto &x : args)
-            std::cout << x.first << "\t" << x.second << "\n";
+        logs::sdr.info("Found SDR: {}", args["uri"]);
         flags |= Flags::IS_ACTIVE;
     }
 }
@@ -35,7 +49,7 @@ bool SDR::init()
 
     if (!sdr)
     {
-        std::cerr << "Failed to create SDR " << args["uri"] << "\n";
+        logs::sdr.error("Failed to create SDR: {}", args["uri"]);
         return 0;
     }
 
@@ -63,16 +77,16 @@ bool SDR::init()
     if (cfg.enable_rx)
     {
         rxStream = sdr->setupStream(RX, SOAPY_SDR_CS16, channels);
-        sdr->activateStream(rxStream, 0, 0, 0);
-        std::cout << "\nActivate RX Stream" << "\n";
+        if (sdr->activateStream(rxStream, 0, 0, 0) == 0)
+            logs::sdr.info("{} stream is active", fmt::format(fg(fmt::color::cyan), "RX"));
     }
     if (cfg.enable_tx)
     {
         txStream = sdr->setupStream(TX, SOAPY_SDR_CS16, channels);
-        sdr->activateStream(txStream, 0, 0, 0);
-        std::cout << "\nActivate TX Stream" << "\n";
+        if (sdr->activateStream(txStream, 0, 0, 0) == 0)
+            logs::sdr.info("{} stream is active", fmt::format(fg(fmt::color::cyan), "TX"));
     }
-    std::cout << "\nCreate SDR:" << args["uri"] << "\n";
+    logs::sdr.info("Create SDR: {}", args["uri"]);
 
     return true;
 }
@@ -154,7 +168,7 @@ bool SDR::deinit()
             sdr->closeStream(txStream);
             txStream = nullptr;
         }
-        std::cout << "\nDelete SDR:" << args["uri"] << "\n";
+        logs::sdr.info("Delete SDR: {}", args["uri"]);
         SoapySDR::Device::unmake(sdr);
         sdr = nullptr;
     }

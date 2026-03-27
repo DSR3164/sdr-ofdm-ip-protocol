@@ -1,6 +1,6 @@
+#include "logger.hpp"
 #include "ip/ip_layer.hpp"
 
-#include <spdlog/spdlog.h>
 #include <fcntl.h>
 #include <linux/if.h>
 #include <linux/if_tun.h>
@@ -14,11 +14,11 @@ int allocate_tun(char *dev)
     int fd = open("/dev/net/tun", O_RDWR | O_NONBLOCK);
     if (fd < 0)
     {
-        spdlog::critical("Failed to open /dev/net/tun: {} (errno {})", strerror(errno), errno);
+        logs::tun.critical("Failed to open /dev/net/tun: {} (errno {})", strerror(errno), errno);
         return fd;
     }
 
-    spdlog::info("TUN device opened successfully, fd: {}", fd);
+    logs::tun.info("TUN device opened successfully, fd: {}", fd);
 
     memset(&ifr, 0, sizeof(ifr));
     ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
@@ -30,12 +30,12 @@ int allocate_tun(char *dev)
     int err = ioctl(fd, TUNSETIFF, (void *)&ifr);
     if (err < 0)
     {
-        spdlog::critical("ioctl(TUNSETIFF) failed: {} (errno {})", strerror(errno), errno);
+        logs::tun.critical("ioctl(TUNSETIFF) failed: {} (errno {})", strerror(errno), errno);
         close(fd);
         return err;
     }
 
-    spdlog::info("TUN interface allocated: {}", ifr.ifr_name);
+    logs::tun.info("TUN interface allocated: {}", ifr.ifr_name);
 
     strcpy(dev, ifr.ifr_name);
     return fd;
@@ -45,7 +45,7 @@ std::optional<std::string> set_interface_ip(const char *dev_name)
 {
     int sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
-        spdlog::error("Socket creation failed: {}", strerror(errno));
+        logs::tun.error("Socket creation failed: {}", strerror(errno));
         return std::nullopt;
     }
 
@@ -65,28 +65,28 @@ std::optional<std::string> set_interface_ip(const char *dev_name)
     inet_pton(AF_INET, ip, &addr->sin_addr);
 
     if (ioctl(sock, SIOCSIFADDR, &ifr) < 0) {
-        spdlog::error("SIOCSIFADDR failed: {}", strerror(errno));
+        logs::tun.error("SIOCSIFADDR failed: {}", strerror(errno));
         close(sock);
         return std::nullopt;
     }
-    spdlog::info("IP {} assigned to {}", ip, dev_name);
+    logs::tun.info("IP {} assigned to {}", ip, dev_name);
 
     struct sockaddr_in *netmask = (struct sockaddr_in *)&ifr.ifr_netmask;
     netmask->sin_family = AF_INET;
     inet_pton(AF_INET, "255.255.255.252", &netmask->sin_addr);
 
     if (ioctl(sock, SIOCSIFNETMASK, &ifr) < 0) {
-        spdlog::error("SIOCSIFNETMASK failed: {}", strerror(errno));
+        logs::tun.error("SIOCSIFNETMASK failed: {}", strerror(errno));
     }
 
     if (ioctl(sock, SIOCGIFFLAGS, &ifr) < 0) {
-        spdlog::error("SIOCGIFFLAGS failed: {}", strerror(errno));
+        logs::tun.error("SIOCGIFFLAGS failed: {}", strerror(errno));
     } else {
         ifr.ifr_flags |= IFF_UP | IFF_RUNNING; 
         if (ioctl(sock, SIOCSIFFLAGS, &ifr) < 0) {
-            spdlog::error("SIOCSIFFLAGS failed: {}", strerror(errno));
+            logs::tun.error("SIOCSIFFLAGS failed: {}", strerror(errno));
         } else {
-            spdlog::info("Interface {} is UP", dev_name);
+            logs::tun.info("Interface {} is UP", dev_name);
         }
     }
 

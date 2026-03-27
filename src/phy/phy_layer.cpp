@@ -1,4 +1,5 @@
 #include "common.hpp"
+#include "logger.hpp"
 #include "phy/phy_layer.hpp"
 #include "phy/sdr.hpp"
 
@@ -12,7 +13,7 @@ int run_sdr(SharedData &data)
     {
         if (has_flag(sdr.get_flags(), Flags::EXIT))
         {
-            std::cout << "Closing SDR thread\n";
+            logs::sdr.info("Closing SDR thread");
             return 0;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
@@ -20,7 +21,7 @@ int run_sdr(SharedData &data)
 
     if (!sdr.init())
     {
-        std::cerr << "Initialization error\n";
+        logs::sdr.error("Initialization error");
         return -1;
     }
     std::vector<uint8_t> bits;
@@ -32,13 +33,13 @@ int run_sdr(SharedData &data)
         if (ret > 0)
             data.sdr_dsp_rx.swap();
         else if (ret == SOAPY_SDR_OVERFLOW)
-            std::cout << "OVERFLOW\n";
+            logs::sdr.error("OVERFLOW");
         else
-            std::cout << "ERR " << ret << std::endl;
+            logs::sdr.error("ERR read {}", ret);
 
         if (has_flag(sdr.get_flags(), Flags::REINIT))
             if (!sdr.reinit())
-                std::cout << ("Cannot reinit SDR\n");
+                logs::sdr.info("Cannot reinit SDR");
         if (has_flag(sdr.get_flags(), apply))
             sdr.apply_runtime();
     }
