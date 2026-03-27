@@ -22,7 +22,7 @@ int main()
     std::thread sdr_thread(run_sdr, std::ref(data));
     std::thread tun_rx_thread(run_tun_rx, std::ref(data));
 
-    std::thread dsp_gui_bridge_thread(run_gui_bridge, std::ref(data));
+    std::thread dsp_gui_bridge_thread(run_dsp_gui_bridge, std::ref(data));
     std::thread ip_gui_bridge_thread(run_ip_gui_bridge, std::ref(data));
 
     dsp_thread.join();
