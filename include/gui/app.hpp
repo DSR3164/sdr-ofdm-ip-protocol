@@ -7,6 +7,14 @@
 #include <span>
 #include "implot.h"
 
+extern float lat;
+
+struct Buffers
+{
+    DoubleBuffer<int16_t> sdr_raw;
+    DoubleBuffer<std::complex<float>> dsp;
+};
+
 class App {
 public:
     App(const std::string &title, int width, int height);
@@ -24,7 +32,8 @@ public:
     void set_vsync_state(bool vsync_state) { (vsync_state) ? SDL_GL_SetSwapInterval(1) : SDL_GL_SetSwapInterval(0); }
     void begin_plot_1d(const std::string &label, std::span<const float> data);
     void begin_plot_2d(const std::string &label, const std::string &label_i, const std::string &label_q, std::span<const float> data);
-    void begin_scatter(const std::string &label, std::span<const float> data);
+    template<typename T>
+    void begin_scatter(const std::string &label, std::span<const T> data);
 
     class PlotSpec
     {
@@ -45,4 +54,4 @@ private:
     bool ip_run = false;
 };
 
-void run_gui(SharedData &sd);
+void run_gui(Buffers &sd);

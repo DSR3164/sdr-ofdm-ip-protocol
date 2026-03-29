@@ -129,7 +129,8 @@ void App::begin_plot_2d(const std::string &label, const std::string &label_i, co
     }
 }
 
-void App::begin_scatter(const std::string &label, std::span<const float> data)
+template<typename T>
+void App::begin_scatter(const std::string &label, std::span<const T> data)
 {
     PlotSpec plot_scatter(2, ImPlotMarker_Asterisk, 1.0f);
     int count = data.size() / 2;
@@ -141,7 +142,7 @@ void App::begin_scatter(const std::string &label, std::span<const float> data)
     }
 }
 
-void run_gui(SharedData &sd)
+void run_gui(Buffers &sd)
 {
     App app("Development", 1280, 720);
 
