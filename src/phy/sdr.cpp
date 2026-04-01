@@ -134,7 +134,7 @@ int SDR::writestream(std::vector<int16_t> &send)
         txbuffs,
         cfg.buffer_size,
         sdr_flags,
-        timeNs,
+        timeNs + (4 * 1000 * 1000),
         timeoutUs);
 
     return ret;
