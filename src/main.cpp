@@ -11,7 +11,6 @@ int main()
 {
     SharedData data;
 
-    data.sdr.add_flag(Flags::IS_ACTIVE);
     fftwf_init_threads();
     fftwf_plan_with_nthreads(std::thread::hardware_concurrency());
     fftwf_make_planner_thread_safe();
