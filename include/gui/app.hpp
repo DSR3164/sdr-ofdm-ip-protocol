@@ -7,6 +7,18 @@
 #include <span>
 #include "implot.h"
 
+struct Buffers
+{
+    DoubleBuffer<int16_t> sdr_raw;
+    DoubleBuffer<std::complex<float>> dsp;
+
+    Buffers(int size1 = 3840, int size2 = 3840)
+        : sdr_raw(size1),
+        dsp(size2)
+    {
+    }
+};
+
 class App {
 public:
     App(const std::string &title, int width, int height);
@@ -45,4 +57,4 @@ private:
     bool ip_run = false;
 };
 
-void run_gui(SharedData &sd);
+void run_gui(Buffers &sd);

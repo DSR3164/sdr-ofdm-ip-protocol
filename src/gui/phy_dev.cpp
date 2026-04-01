@@ -4,38 +4,25 @@
 #include "implot.h"
 #include <thread>
 
-void phy_dev(App &app) // Phy layer
+extern float lat;
+
+void phy_dev(App &app, Buffers &data) // Phy layer
 {
-    (void)app;
-    static std::vector<int16_t> buffer;
-    static IPC client;
-    static ipc_header h;
-    static std::string label = "Raw signal";
-    static bool init = false;
+    static std::vector<std::complex<float>> buffer(1920);
     static ImGuiIO &io = ImGui::GetIO();
     static ImPlotSpec specs;
     static ImPlotSpec specs2;
-    static float lat = 1.0f;
-
-    if (!init)
-    {
-        while (client.connect_to_socket("/tmp/dsp_gui.sock") == 1)
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        init = true;
-        specs.Stride = sizeof(int16_t); // Шаг в байтах между элементами
+    static std::string label = "Raw signal";
+    specs.Stride = sizeof(float);
         specs.Offset = 0;
-        specs2.Stride = sizeof(int16_t); // Шаг в байтах между элементами
+    specs2.Stride = sizeof(float) * 2;
         specs2.Offset = 0;
-        specs.Marker = ImPlotMarker_Square;
+    specs.Marker = ImPlotMarker_Asterisk;
         specs.MarkerSize = 2.0f;
-    }
 
-    client.recv_frame(h, buffer);
-
-    static int size = buffer.size() / 2;
-    const int16_t *raw_ptr = reinterpret_cast<const int16_t *>(buffer.data());
-
-    lat = 0.001 * (client.now_ns() - h.timestamp_ns) + 0.999 * lat;
+    data.dsp.read(buffer);
+    auto size = buffer.size() / 2;
+    const float *raw_ptr = reinterpret_cast<const float *>(buffer.data());
 
     if (ImGui::Begin("Phy"))
     {

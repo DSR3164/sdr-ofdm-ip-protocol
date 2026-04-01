@@ -3,11 +3,12 @@
 
 #include <thread>
 
+float lat = 1.0f;
+
 int main()
 {
-    SharedData sd;
-    std::thread gui(run_gui, std::ref(sd));
+    Buffers bufs(1920 * 2);
+    std::thread gui(run_gui, std::ref(bufs));
     gui.join();
-
     return 0;
 }

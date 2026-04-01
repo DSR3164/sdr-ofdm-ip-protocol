@@ -141,7 +141,7 @@ void App::begin_scatter(const std::string &label, std::span<const float> data)
     }
 }
 
-void run_gui(SharedData &sd)
+void run_gui(Buffers &buf)
 {
     App app("Development", 1280, 720);
 
@@ -157,7 +157,7 @@ void run_gui(SharedData &sd)
             gui_dev(app);
 
         if (app.is_phy_run())
-            phy_dev(app);
+            phy_dev(app, buf);
 
         if (app.is_ip_run())
             ip_dev(app);
