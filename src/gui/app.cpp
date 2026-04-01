@@ -36,14 +36,6 @@ App::~App()
     SDL_Quit();
 }
 
-App::PlotSpec::PlotSpec(int stride_elements, ImPlotMarker marker, float marker_size)
-{
-    spec.Marker = marker;
-    spec.MarkerSize = marker_size;
-    spec.Stride = (int)sizeof(float) * stride_elements;
-    spec.Offset = 0;
-}
-
 void App::start_frame()
 {
     SDL_Event event;
@@ -108,7 +100,7 @@ void App::begin_debug()
 
 void App::begin_plot_1d(const std::string &label, std::span<const float> data)
 {
-    PlotSpec plot_1d(1);
+    PlotSpec<float> plot_1d(1);
     if (ImPlot::BeginPlot(label.c_str(), ImVec2(ImGui::GetContentRegionAvail())))
     {
         ImPlot::PlotLine(label.c_str(), data.data(), (int)data.size(), 1.0, 0.0, plot_1d.spec);
@@ -118,7 +110,7 @@ void App::begin_plot_1d(const std::string &label, std::span<const float> data)
 
 void App::begin_plot_2d(const std::string &label, const std::string &label_i, const std::string &label_q, std::span<const float> data)
 {
-    PlotSpec plot_2d(2);
+    PlotSpec<float> plot_2d(2, ImPlotMarker_None);
     int count = data.size() / 2;
 
     if (ImPlot::BeginPlot(label.c_str(), ImGui::GetContentRegionAvail()))
@@ -131,7 +123,7 @@ void App::begin_plot_2d(const std::string &label, const std::string &label_i, co
 
 void App::begin_scatter(const std::string &label, std::span<const float> data)
 {
-    PlotSpec plot_scatter(2, ImPlotMarker_Asterisk, 1.0f);
+    PlotSpec<float> plot_scatter(2, ImPlotMarker_Asterisk, 1.0f);
     int count = data.size() / 2;
 
     if (ImPlot::BeginPlot(label.c_str(), ImVec2(ImGui::GetContentRegionAvail()), ImPlotFlags_Equal))

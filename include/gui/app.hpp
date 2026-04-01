@@ -37,13 +37,18 @@ public:
     void begin_plot_1d(const std::string &label, std::span<const float> data);
     void begin_plot_2d(const std::string &label, const std::string &label_i, const std::string &label_q, std::span<const float> data);
     void begin_scatter(const std::string &label, std::span<const float> data);
-
+    template <typename T>
     class PlotSpec
     {
     public:
         ImPlotSpec spec;
-
-        PlotSpec(int stride_elements = 1, ImPlotMarker marker = ImPlotMarker_None, float marker_size = 1.0f);
+        PlotSpec(int stride_elements, ImPlotMarker marker = ImPlotMarker_Asterisk, float marker_size = 2.0f)
+        {
+            spec.Marker = marker;
+            spec.MarkerSize = marker_size;
+            spec.Stride = sizeof(T) * stride_elements;
+            spec.Offset = 0;
+        }
     };
 
 private:
