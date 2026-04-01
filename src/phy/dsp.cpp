@@ -158,7 +158,6 @@ void split_to_float(const std::complex<float> *__restrict src, float *__restrict
 {
     const float *raw_src = reinterpret_cast<const float *>(src);
 
-#pragma omp simd
     for (size_t i = 0; i < n; ++i)
     {
         dst_re[i] = raw_src[2 * i];
@@ -187,7 +186,6 @@ int zc_sync(const std::vector<std::complex<float>> &for_ofdm, const std::vector<
         float sum_im = 0.0f;
         float sig_energy = 0.0f;
 
-#pragma omp simd reduction(+ : sum_re, sum_im, sig_energy)
         for (size_t k = 0; k < N; ++k)
         {
             float sr = r_re[n + k];
@@ -594,7 +592,6 @@ int run_dsp_rx(SharedData &data)
         }
         else
             continue;
-
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
         start = std::chrono::steady_clock::now();
