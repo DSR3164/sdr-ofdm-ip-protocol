@@ -330,7 +330,7 @@ struct SharedData
     DoubleBuffer<int16_t> sdr_dsp_tx;
     DoubleBuffer<int16_t> sdr_dsp_rx;
 
-    DoubleBuffer<int16_t> dsp_sockets;
+    DoubleBuffer<std::complex<float>> dsp_sockets;
     DoubleBuffer<uint8_t> ip_sockets_bytes;
 
     SharedData() : sdr(SDRConfig{}) {}

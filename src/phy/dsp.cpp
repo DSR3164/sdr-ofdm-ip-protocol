@@ -1,4 +1,3 @@
-#include "common.hpp"
 #include "logger.hpp"
 #include "phy/dsp.hpp"
 
@@ -159,7 +158,7 @@ void split_to_float(const std::complex<float> *__restrict src, float *__restrict
 {
     const float *raw_src = reinterpret_cast<const float *>(src);
 
-    #pragma omp simd
+#pragma omp simd
     for (size_t i = 0; i < n; ++i)
     {
         dst_re[i] = raw_src[2 * i];
@@ -188,7 +187,7 @@ int zc_sync(const std::vector<std::complex<float>> &for_ofdm, const std::vector<
         float sum_im = 0.0f;
         float sig_energy = 0.0f;
 
-        #pragma omp simd reduction(+ : sum_re, sum_im, sig_energy)
+#pragma omp simd reduction(+ : sum_re, sum_im, sig_energy)
         for (size_t k = 0; k < N; ++k)
         {
             float sr = r_re[n + k];
@@ -550,9 +549,9 @@ void ofdm(const std::vector<uint8_t> &bits, std::vector<int16_t> &buffer, DSP &d
     }
 }
 
-int run_dsp(SharedData &data)
+int run_dsp_rx(SharedData &data)
 {
-    DSP dsp;
+    auto &dsp = data.dsp;
     dsp.sample_rate = data.sdr.get_sample_rate();
     auto buff_size = data.sdr.get_buffer_size();
     float zc_energy = 0.0f;
@@ -596,7 +595,6 @@ int run_dsp(SharedData &data)
         else
             continue;
 
-        data.dsp_sockets.write(temp);
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
         start = std::chrono::steady_clock::now();
@@ -628,11 +626,35 @@ int run_dsp(SharedData &data)
         }
         ofdm_equalize(processed, equalized, dsp.ofdm_cfg);
 
+        data.dsp_sockets.write(equalized);
+        auto bits = demodulate(dsp.ofdm_cfg.mod, equalized);
+        data.phy_ip.write(bits);
+
         std::atomic_signal_fence(std::memory_order_seq_cst);
         end = std::chrono::steady_clock::now();
         std::atomic_signal_fence(std::memory_order_seq_cst);
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     }
     logs::dsp.info("Closing DSP thread");
+    return 0;
+}
+
+int run_dsp_tx(SharedData &data)
+{
+    logs::dsp.info("[{}] Starting", fmt::format(fmt::fg(fmt::color::cyan), "TX"));
+    std::vector<uint8_t> bits;
+    std::vector<int16_t> buffer;
+
+    while (!has_flag(data.sdr.get_flags(), Flags::EXIT))
+    {
+        if (data.ip_phy.read(bits) == -1)
+            continue;
+
+        logs::dsp.info("[{}] Read {} bits", fmt::format(fmt::fg(fmt::color::cyan), "TX"), bits.size());
+        ofdm(bits, buffer, data.dsp);
+        logs::dsp.info("[{}] Modulate {} samples", fmt::format(fmt::fg(fmt::color::cyan), "OFDM"), buffer.size());
+        data.sdr_dsp_tx.write(buffer);
+    }
+
     return 0;
 }
