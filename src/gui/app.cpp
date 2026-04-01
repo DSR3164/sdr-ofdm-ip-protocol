@@ -69,7 +69,7 @@ void App::control_wd()
         {
             ImGui::SeparatorText("Video Settings");
             ImGui::MenuItem("VSYNC", nullptr, &vsync_state);
-                this->set_vsync_state(vsync_state);
+            this->set_vsync_state(vsync_state);
 
             ImGui::SeparatorText("Workstation");
 
@@ -96,41 +96,6 @@ void App::begin_debug()
         ImGui::Text("FPS: %.f (%0.3f ms)", io.Framerate, 1000.0f / io.Framerate);
     }
     ImGui::End();
-}
-
-void App::begin_plot_1d(const std::string &label, std::span<const float> data)
-{
-    PlotSpec<float> plot_1d(1);
-    if (ImPlot::BeginPlot(label.c_str(), ImVec2(ImGui::GetContentRegionAvail())))
-    {
-        ImPlot::PlotLine(label.c_str(), data.data(), (int)data.size(), 1.0, 0.0, plot_1d.spec);
-        ImPlot::EndPlot();
-    }
-}
-
-void App::begin_plot_2d(const std::string &label, const std::string &label_i, const std::string &label_q, std::span<const float> data)
-{
-    PlotSpec<float> plot_2d(2, ImPlotMarker_None);
-    int count = data.size() / 2;
-
-    if (ImPlot::BeginPlot(label.c_str(), ImGui::GetContentRegionAvail()))
-    {
-        ImPlot::PlotLine(label_i.c_str(), data.data(), count, 1.0, 0.0, plot_2d.spec);
-        ImPlot::PlotLine(label_q.c_str(), data.data() + 1, count, 1.0, 0.0, plot_2d.spec);
-        ImPlot::EndPlot();
-    }
-}
-
-void App::begin_scatter(const std::string &label, std::span<const float> data)
-{
-    PlotSpec<float> plot_scatter(2, ImPlotMarker_Asterisk, 1.0f);
-    int count = data.size() / 2;
-
-    if (ImPlot::BeginPlot(label.c_str(), ImVec2(ImGui::GetContentRegionAvail()), ImPlotFlags_Equal))
-    {
-        ImPlot::PlotScatter(label.c_str(), data.data(), data.data() + 1, count, plot_scatter.spec);
-        ImPlot::EndPlot();
-    }
 }
 
 void run_gui(Buffers &buf)
