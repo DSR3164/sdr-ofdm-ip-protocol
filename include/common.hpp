@@ -57,7 +57,7 @@ struct DSP {
 template <typename T>
 class DoubleBuffer {
     public:
-    DoubleBuffer(size_t reserve_size = 4096)
+    DoubleBuffer(size_t reserve_size = 1920*2)
     {
         buff[0].resize(reserve_size);
         buff[1].resize(reserve_size);
@@ -333,5 +333,5 @@ struct SharedData
     DoubleBuffer<std::complex<float>> dsp_sockets;
     DoubleBuffer<uint8_t> ip_sockets_bytes;
 
-    SharedData() : sdr(SDRConfig{}) {}
+    SharedData() : sdr(SDRConfig{}), dsp_sockets(SDRConfig{}.buffer_size * 2) {}
 };
