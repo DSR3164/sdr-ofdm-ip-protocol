@@ -32,8 +32,8 @@ void phy_dev(App &app, Buffers &data) // Phy layer
         {
             ImPlot::SetupAxesLimits(-2048, 2048, -2048, 2048, ImPlotCond_Once);
             ImPlot::PlotScatter("Const", raw_ptr, raw_ptr + 1, size, specs);
+            ImPlot::EndPlot();
         }
-        ImPlot::EndPlot();
     }
     ImGui::End();
     if (ImGui::Begin("Line"))
@@ -42,8 +42,8 @@ void phy_dev(App &app, Buffers &data) // Phy layer
         {
             ImPlot::PlotLine("I", raw_ptr, size, 1.0, 0.0, specs2);
             ImPlot::PlotLine("Q", raw_ptr + 1, size, 1.0, 0.0, specs2);
+            ImPlot::EndPlot();
         }
-        ImPlot::EndPlot();
     }
     ImGui::End();
 }
