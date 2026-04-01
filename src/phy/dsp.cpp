@@ -73,6 +73,88 @@ struct FFTWPlan
     FFTWPlan &operator=(const FFTWPlan &) = delete;
 };
 
+void bpsk_mapper_3gpp(const std::vector<uint8_t> &bits, std::vector<std::complex<float>> &symbols)
+{
+    for (size_t i = 0; i < symbols.size(); ++i)
+        symbols[i] = std::complex<float>(
+            bits[i] * -2.0 + 1.0,
+            bits[i] * -2.0 + 1.0)
+        / sqrtf(2);
+}
+
+void qpsk_mapper_3gpp(const std::vector<uint8_t> &bits, std::vector<std::complex<float>> &symbols)
+{
+    for (size_t i = 0; i < symbols.size(); ++i)
+        symbols[i] = std::complex<float>(
+            bits[2 * i + 0] * -2.0 + 1.0,
+            bits[2 * i + 1] * -2.0 + 1.0)
+        / sqrtf(2.0);
+}
+
+void qam16_mapper_3gpp(const std::vector<uint8_t> &bits, std::vector<std::complex<float>> &symbols)
+{
+    for (size_t i = 0; i < symbols.size(); ++i)
+        symbols[i] = std::complex<float>(
+            (1 - 2 * bits[4 * i + 0]) * (2 - (1 - 2 * bits[4 * i + 2])),
+            (1 - 2 * bits[4 * i + 1]) * (2 - (1 - 2 * bits[4 * i + 3])))
+        / sqrtf(10.0);
+}
+
+void qam64_mapper_3gpp(const std::vector<uint8_t> &bits, std::vector<std::complex<float>> &symbols)
+{
+    for (size_t i = 0; i < symbols.size(); ++i)
+        symbols[i] = std::complex<float>(
+            (1 - 2 * bits[7 * i + 0]) * (4 - (1 - 2 * bits[7 * i + 2]) * (2 - (1 - 2 * bits[7 * i + 4]))),
+            (1 - 2 * bits[7 * i + 1]) * (4 - (1 - 2 * bits[7 * i + 3]) * (2 - (1 - 2 * bits[7 * i + 5]))))
+        / sqrtf(42.0);
+}
+
+static std::pair<uint8_t, uint8_t> demap_component_3gpp(float val)
+{
+    uint8_t b_sign = (val < 0.0f) ? 1 : 0;
+    uint8_t b_amp = (std::abs(val) < 2.0f) ? 0 : 1;
+    return { b_sign, b_amp };
+}
+
+std::vector<uint8_t> demodulate(Modulation mod, const std::vector<std::complex<float>> &symbols)
+{
+    std::vector<uint8_t> bits;
+
+    switch (mod)
+    {
+    case Modulation::QAM16: {
+        bits.resize(symbols.size() * 4);
+        const float scale = std::sqrt(10.0f);
+
+        for (size_t i = 0; i < symbols.size(); ++i)
+        {
+            auto [b0, b2] = demap_component_3gpp(symbols[i].real() * scale);
+            auto [b1, b3] = demap_component_3gpp(symbols[i].imag() * scale);
+
+            bits[4 * i + 0] = b0;
+            bits[4 * i + 1] = b1;
+            bits[4 * i + 2] = b2;
+            bits[4 * i + 3] = b3;
+        }
+        break;
+    }
+    case Modulation::QPSK: {
+        bits.resize(symbols.size() * 2);
+
+        for (size_t i = 0; i < symbols.size(); ++i)
+        {
+            bits[2 * i + 0] = demap_component_3gpp(symbols[i].real()).first;
+            bits[2 * i + 1] = demap_component_3gpp(symbols[i].imag()).first;
+        }
+        break;
+    }
+    default:
+        logs::dsp.warn("Неподдерживаемый тип демодуляции");
+    }
+
+    return bits;
+}
+
 void split_to_float(const std::complex<float> *__restrict src, float *__restrict dst_re, float *__restrict dst_im, size_t n)
 {
     const float *raw_src = reinterpret_cast<const float *>(src);
@@ -358,6 +440,114 @@ std::vector<std::complex<float>> cfo_est(const std::vector<std::complex<float>> 
     }
 
     return corrected;
+}
+
+void ofdm(const std::vector<uint8_t> &bits, std::vector<int16_t> &buffer, DSP &dsp_config)
+{
+    auto &ofdm_config = dsp_config.ofdm_cfg;
+    int Ncp = ofdm_config.n_cp;
+    int N = ofdm_config.n_subcarriers;
+    int pilot_spacing = ofdm_config.pilot_spacing;
+    Modulation modulation_type = ofdm_config.mod;
+
+    if (N < 4 or pilot_spacing < 2)
+        return;
+
+    buffer.clear();
+    std::vector<std::complex<float>> symbols(bits.size() / 1);
+    std::vector<std::complex<float>> schmidl(N);
+    auto zc = generate_zc(127, 5);
+    switch (modulation_type)
+    {
+    case Modulation::BPSK:
+        bpsk_mapper_3gpp(bits, symbols);
+        break;
+    case Modulation::QPSK:
+        symbols.resize(bits.size() / 2);
+        qpsk_mapper_3gpp(bits, symbols);
+        break;
+    case Modulation::QAM16:
+        symbols.resize(bits.size() / 4);
+        qam16_mapper_3gpp(bits, symbols);
+        break;
+    case Modulation::QAM64:
+        symbols.resize(bits.size() / 7);
+        qam64_mapper_3gpp(bits, symbols);
+        break;
+    default:
+        symbols.resize(bits.size() / 4);
+        qpsk_mapper_3gpp(bits, symbols);
+        break;
+    }
+
+    FFTWPlan ifft(N, false);
+
+    int total_qpsk = (int)symbols.size();
+    std::vector<int> data;
+    std::vector<int> pilots;
+    std::vector<bool> is_guard;
+    std::vector<bool> is_pilot;
+    calculate_pilots_and_guard(ofdm_config, pilots, data, is_pilot, is_guard);
+
+    int symbols_per_ofdm = static_cast<int>(data.size());
+    int num_ofdm_symbols = total_qpsk / symbols_per_ofdm;
+
+    buffer.reserve((num_ofdm_symbols + Ncp) * (N + 2));
+
+    auto ofdm_zc_symbol = ofdm_zadoff_chu_symbol(dsp_config);
+
+    for (size_t i = 0; i < ofdm_zc_symbol.size(); ++i)
+    {
+        buffer.push_back(static_cast<int16_t>(ofdm_zc_symbol[i].real()));
+        buffer.push_back(static_cast<int16_t>(ofdm_zc_symbol[i].imag()));
+    }
+
+    for (int sym = 0; sym < num_ofdm_symbols; ++sym)
+    {
+        for (int i = 0; i < N; ++i)
+        {
+            ifft.in[i][0] = 0.0f;
+            ifft.in[i][1] = 0.0f;
+        }
+
+        for (int k : pilots)
+        {
+            ifft.in[k][0] = 1.0f;
+            ifft.in[k][1] = 0.0f;
+        }
+
+        for (int i = 0; i < data.size(); ++i)
+        {
+            int idx = sym * symbols_per_ofdm + i;
+            int k = data[i];
+
+            ifft.in[k][0] = (float)std::real(symbols[idx]);
+            ifft.in[k][1] = (float)std::imag(symbols[idx]);
+        }
+
+        fftwf_execute(ifft.plan);
+
+        //Norm
+        for (int n = 0; n < N; ++n)
+        {
+            ifft.out[n][0] /= (float)(N / (3.0 * 16000.0f));
+            ifft.out[n][1] /= (float)(N / (3.0 * 16000.0f));
+        }
+
+        //Cyclic Prefix
+        for (int n = N - Ncp; n < N; ++n)
+        {
+            buffer.push_back((int16_t)ifft.out[n][0]);
+            buffer.push_back((int16_t)ifft.out[n][1]);
+        }
+
+        //Data
+        for (int n = 0; n < N; ++n)
+        {
+            buffer.push_back((int16_t)ifft.out[n][0]);
+            buffer.push_back((int16_t)ifft.out[n][1]);
+        }
+    }
 }
 
 int run_dsp(SharedData &data)
