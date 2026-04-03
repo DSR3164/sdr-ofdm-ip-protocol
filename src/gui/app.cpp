@@ -36,14 +36,6 @@ App::~App()
     SDL_Quit();
 }
 
-App::PlotSpec::PlotSpec(int stride_elements, ImPlotMarker marker, float marker_size)
-{
-    spec.Marker = marker;
-    spec.MarkerSize = marker_size;
-    spec.Stride = (int)sizeof(float) * stride_elements;
-    spec.Offset = 0;
-}
-
 void App::start_frame()
 {
     SDL_Event event;
@@ -77,7 +69,7 @@ void App::control_wd()
         {
             ImGui::SeparatorText("Video Settings");
             ImGui::MenuItem("VSYNC", nullptr, &vsync_state);
-                this->set_vsync_state(vsync_state);
+            this->set_vsync_state(vsync_state);
 
             ImGui::SeparatorText("Workstation");
 
@@ -106,42 +98,7 @@ void App::begin_debug()
     ImGui::End();
 }
 
-void App::begin_plot_1d(const std::string &label, std::span<const float> data)
-{
-    PlotSpec plot_1d(1);
-    if (ImPlot::BeginPlot(label.c_str(), ImVec2(ImGui::GetContentRegionAvail())))
-    {
-        ImPlot::PlotLine(label.c_str(), data.data(), (int)data.size(), 1.0, 0.0, plot_1d.spec);
-        ImPlot::EndPlot();
-    }
-}
-
-void App::begin_plot_2d(const std::string &label, const std::string &label_i, const std::string &label_q, std::span<const float> data)
-{
-    PlotSpec plot_2d(2);
-    int count = data.size() / 2;
-
-    if (ImPlot::BeginPlot(label.c_str(), ImGui::GetContentRegionAvail()))
-    {
-        ImPlot::PlotLine(label_i.c_str(), data.data(), count, 1.0, 0.0, plot_2d.spec);
-        ImPlot::PlotLine(label_q.c_str(), data.data() + 1, count, 1.0, 0.0, plot_2d.spec);
-        ImPlot::EndPlot();
-    }
-}
-
-void App::begin_scatter(const std::string &label, std::span<const float> data)
-{
-    PlotSpec plot_scatter(2, ImPlotMarker_Asterisk, 1.0f);
-    int count = data.size() / 2;
-
-    if (ImPlot::BeginPlot(label.c_str(), ImVec2(ImGui::GetContentRegionAvail()), ImPlotFlags_Equal))
-    {
-        ImPlot::PlotScatter(label.c_str(), data.data(), data.data() + 1, count, plot_scatter.spec);
-        ImPlot::EndPlot();
-    }
-}
-
-void run_gui(SharedData &sd)
+void run_gui(Buffers &buf)
 {
     App app("Development", 1280, 720);
 
@@ -157,7 +114,7 @@ void run_gui(SharedData &sd)
             gui_dev(app);
 
         if (app.is_phy_run())
-            phy_dev(app);
+            phy_dev(app, buf);
 
         if (app.is_ip_run())
             ip_dev(app);

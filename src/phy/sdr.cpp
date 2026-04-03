@@ -26,7 +26,8 @@ SDR::SDR(const SDRConfig &config)
     {
         args = list[0];
         logs::sdr.info("Found SDR: {}", args["uri"]);
-        flags |= Flags::IS_ACTIVE;
+        if (cfg.init_on_start)
+            flags |= Flags::IS_ACTIVE;
     }
 }
 
@@ -133,7 +134,7 @@ int SDR::writestream(std::vector<int16_t> &send)
         txbuffs,
         cfg.buffer_size,
         sdr_flags,
-        timeNs,
+        timeNs + (4 * 1000 * 1000),
         timeoutUs);
 
     return ret;

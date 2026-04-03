@@ -6,4 +6,4 @@
 
 int run_sdr(SharedData &data);
 
-int run_gui_bridge(SharedData &data);
+int run_dsp_gui_bridge(SharedData &data);

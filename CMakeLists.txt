@@ -18,7 +18,7 @@ find_package(OpenGL REQUIRED)
 # ---------- FFTW ----------
 find_library(FFTW3F_LIB fftw3f REQUIRED)
 find_library(FFTW3F_THREADS_LIB fftw3f_threads REQUIRED)
-find_path(FFTW3F_INCLUDE_DIRS fftw3.h REQUIRED)
+find_path(FFTW3F_INCLUDE_DIR fftw3.h REQUIRED)
 
 set(FFTW3F_LIBRARIES ${FFTW3F_THREADS_LIB} ${FFTW3F_LIB})
 message(STATUS "Found FFTW3F: ${FFTW3F_LIB}")
@@ -76,7 +76,7 @@ fetchcontent_makeavailable(imgui)
 fetchcontent_declare(
   spdlog
   GIT_REPOSITORY https://github.com/gabime/spdlog
-  GIT_TAG  v1.17.0
+  GIT_TAG v1.17.0
 )
 
 fetchcontent_makeavailable(spdlog)
@@ -91,7 +91,8 @@ add_library(imgui STATIC
   ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
 )
 
-target_include_directories(imgui PUBLIC
+target_include_directories(imgui
+  PUBLIC
   ${imgui_SOURCE_DIR}
   ${imgui_SOURCE_DIR}/backends
 )
@@ -132,34 +133,51 @@ target_include_directories(implot PUBLIC
 target_link_libraries(implot PUBLIC imgui)
 
 # ---------- Core SDR library ----------
-add_library(soip STATIC
-  ${PROJECT_SOURCE_DIR}/src/gui/gui_layer.cpp
-  ${PROJECT_SOURCE_DIR}/src/gui/phy_dev.cpp
-  ${PROJECT_SOURCE_DIR}/src/gui/ip_dev.cpp
-  ${PROJECT_SOURCE_DIR}/src/gui/app.cpp
+add_library(soip_core STATIC
   ${PROJECT_SOURCE_DIR}/src/ip/ip_layer.cpp
   ${PROJECT_SOURCE_DIR}/src/ip/tun_layer.cpp
   ${PROJECT_SOURCE_DIR}/src/ip/bit_utils.cpp
+
   ${PROJECT_SOURCE_DIR}/src/phy/phy_layer.cpp
   ${PROJECT_SOURCE_DIR}/src/phy/sdr.cpp
   ${PROJECT_SOURCE_DIR}/src/phy/dsp.cpp
 )
 
-target_include_directories(soip PUBLIC
-  ${PROJECT_SOURCE_DIR}/include
-  ${FFTW3F_INCLUDE_DIRS}
+add_library(soip_gui STATIC
+  ${PROJECT_SOURCE_DIR}/src/gui/gui_layer.cpp
+  ${PROJECT_SOURCE_DIR}/src/gui/phy_dev.cpp
+  ${PROJECT_SOURCE_DIR}/src/gui/ip_dev.cpp
+  ${PROJECT_SOURCE_DIR}/src/gui/app.cpp
 )
 
-target_link_libraries(soip PUBLIC
+target_include_directories(soip_core
+  PUBLIC ${PROJECT_SOURCE_DIR}/include
+  PRIVATE ${FFTW3F_INCLUDE_DIR}
+)
+target_include_directories(soip_gui
+  PUBLIC
+  ${PROJECT_SOURCE_DIR}/include
+)
+
+target_link_libraries(soip_core
+  PRIVATE
   ${SOAPY_TARGET}
-  ${FFTW3F_LIBRARIES}
+  ${FFTW3F_THREADS_LIB}
+  ${FFTW3F_LIB}
+  PUBLIC
+  Threads::Threads
+  spdlog::spdlog
+)
+target_compile_options(soip_core PRIVATE -mavx2 -ffast-math)
+
+target_link_libraries(soip_gui
+  PUBLIC
+  soip_core
   imgui
   implot
-  spdlog::spdlog
   GLEW::GLEW
   SDL2::SDL2
   OpenGL::GL
-  Threads::Threads
 )
 
 # ---------- GUI executable ----------
@@ -172,23 +190,11 @@ add_executable(gui
 )
 
 target_link_libraries(main PRIVATE
-  soip
-  imgui
-  implot
-  GLEW::GLEW
-  SDL2::SDL2
-  OpenGL::GL
-  Threads::Threads
+  soip_core
 )
 
 target_link_libraries(gui PRIVATE
-  soip
-  imgui
-  implot
-  GLEW::GLEW
-  SDL2::SDL2
-  OpenGL::GL
-  Threads::Threads
+  soip_gui
 )
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")

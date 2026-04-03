@@ -21,6 +21,14 @@ enum class MsgType : uint32_t {
     Error
 };
 
+enum class Modulation
+{
+    BPSK,
+    QPSK,
+    QAM16,
+    QAM64,
+};
+
 struct ipc_header
 {
     MsgType type;
@@ -34,10 +42,22 @@ struct ipc_frame
     char payload[];
 };
 
+struct DSP {
+    float cfo = 0.0f;
+    int max_index = 0;
+    float sample_rate = 1.92e6;
+    struct OFDMConfig {
+        Modulation mod = Modulation::QAM16;
+        int n_subcarriers = 128;
+        int pilot_spacing = 6;
+        int n_cp = 32;
+    } ofdm_cfg;
+};
+
 template <typename T>
 class DoubleBuffer {
     public:
-    DoubleBuffer(size_t reserve_size = 4096)
+    DoubleBuffer(size_t reserve_size = 1920*2)
     {
         buff[0].resize(reserve_size);
         buff[1].resize(reserve_size);
@@ -302,6 +322,7 @@ class IPC {
 struct SharedData
 {
     SDR sdr;
+    DSP dsp;
 
     DoubleBuffer<uint8_t> ip_phy;
     DoubleBuffer<uint8_t> phy_ip;
@@ -309,8 +330,8 @@ struct SharedData
     DoubleBuffer<int16_t> sdr_dsp_tx;
     DoubleBuffer<int16_t> sdr_dsp_rx;
 
-    DoubleBuffer<int16_t> dsp_sockets;
+    DoubleBuffer<std::complex<float>> dsp_sockets;
     DoubleBuffer<uint8_t> ip_sockets_bytes;
 
-    SharedData() : sdr(SDRConfig{}) {}
+    SharedData() : sdr(SDRConfig{}), dsp_sockets(SDRConfig{}.buffer_size * 2) {}
 };

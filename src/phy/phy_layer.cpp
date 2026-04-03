@@ -8,6 +8,8 @@
 int run_sdr(SharedData &data)
 {
     auto &sdr = data.sdr;
+    int ret_tx = data.sdr.get_buffer_size();
+    std::vector<int16_t> writebuffer(data.sdr.get_buffer_size() * 2);
     Flags apply = Flags::APPLY_BANDWIDTH | Flags::APPLY_FREQUENCY | Flags::APPLY_GAIN | Flags::APPLY_SAMPLE_RATE;
     while (!has_flag(sdr.get_flags(), Flags::IS_ACTIVE))
     {
@@ -25,17 +27,22 @@ int run_sdr(SharedData &data)
         return -1;
     }
     std::vector<uint8_t> bits;
+    data.sdr_dsp_rx.get_write_buffer().resize(data.sdr.get_buffer_size() * 2, 0);
 
     while (!has_flag(sdr.get_flags(), Flags::EXIT))
     {
-        auto ret = sdr.readstream(data.sdr_dsp_rx.get_write_buffer());
+        auto ret_rx = sdr.readstream(data.sdr_dsp_rx.get_write_buffer());
+        if (data.sdr_dsp_tx.read(writebuffer) == 0)
+            ret_tx = sdr.writestream(writebuffer);
 
-        if (ret > 0)
+        if (ret_rx > 0)
             data.sdr_dsp_rx.swap();
-        else if (ret == SOAPY_SDR_OVERFLOW)
+        else if (ret_rx == SOAPY_SDR_OVERFLOW)
             logs::sdr.error("OVERFLOW");
         else
-            logs::sdr.error("ERR read {}", ret);
+            logs::sdr.warn("ERR read {}", ret_rx);
+        if (ret_tx < sdr.get_buffer_size())
+            logs::sdr.warn("ERR send {}", ret_tx);
 
         if (has_flag(sdr.get_flags(), Flags::REINIT))
             if (!sdr.reinit())
@@ -48,27 +55,28 @@ int run_sdr(SharedData &data)
     return 0;
 }
 
-int run_gui_bridge(SharedData &data)
+int run_dsp_gui_bridge(SharedData &data)
 {
-    static IPC server;
-    static bool socket_init = false;
+    IPC server;
+    bool socket_init = false;
+    std::vector<std::complex<float>> temp;
 
-    std::vector<int16_t> temp;
+    while (server.create_socket("/tmp/dsp_gui.sock") == -1)
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     while (!has_flag(data.sdr.get_flags(), Flags::EXIT))
     {
         if (!socket_init)
         {
-            while (server.create_socket("/tmp/dsp_gui.sock") == -1);
-            while (server.set_socket() == -1);
+            while (server.set_socket() == -1)
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
             socket_init = true;
         }
 
         data.dsp_sockets.read(temp);
 
         server.create_msg(temp);
-        server.send_frame();
-
+        socket_init = server.send_frame();
     }
 
     return 0;

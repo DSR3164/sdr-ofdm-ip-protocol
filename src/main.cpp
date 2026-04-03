@@ -18,14 +18,16 @@ int main()
     if (getuid() != 0)
         logs::main.critical("Please run with sudo or as root");
 
-    std::thread dsp_thread(run_dsp, std::ref(data));
+    std::thread dsp_rx_thread(run_dsp_rx, std::ref(data));
+    std::thread dsp_tx_thread(run_dsp_tx, std::ref(data));
     std::thread sdr_thread(run_sdr, std::ref(data));
     std::thread tun_rx_thread(run_tun_rx, std::ref(data));
 
-    std::thread dsp_gui_bridge_thread(run_gui_bridge, std::ref(data));
+    std::thread dsp_gui_bridge_thread(run_dsp_gui_bridge, std::ref(data));
     std::thread ip_gui_bridge_thread(run_ip_gui_bridge, std::ref(data));
 
-    dsp_thread.join();
+    dsp_rx_thread.join();
+    dsp_tx_thread.join();
     sdr_thread.join();
     dsp_gui_bridge_thread.join();
     if (tun_rx_thread.joinable())

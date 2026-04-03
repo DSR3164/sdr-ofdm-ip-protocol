@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <fftw3.h>
 #include <vector>
-#include <iostream>
 
 enum class Flags : uint16_t
 {
@@ -75,6 +74,7 @@ struct SDRConfig {
     bool enable_rx = true;
     float tx_bandwidth = 1e6;
     float rx_bandwidth = 10e6;
+    bool init_on_start = true;
 };
 
 class SDR {
