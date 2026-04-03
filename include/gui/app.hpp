@@ -38,7 +38,7 @@ class App {
     template <typename T, typename R>
     void begin_plot_1d(const std::string &label, std::span<const R> data)
     {
-        PlotSpec<T> plot_1d(1, ImPlotMarker_None);
+        PlotSpec<T> plot_1d;
         if (ImPlot::BeginPlot(label.c_str(), ImVec2(ImGui::GetContentRegionAvail())))
         {
             ImPlot::PlotLine(label.c_str(), data.data(), (int)data.size(), 1.0, 0.0, plot_1d.spec);
@@ -49,7 +49,7 @@ class App {
     template <typename T, typename R>
     void begin_plot_2d(const std::string &label, const std::string &label_i, const std::string &label_q, std::span<const R> data)
     {
-        PlotSpec<T> plot_2d(2, ImPlotMarker_None);
+        PlotSpec<T> plot_2d(2);
         int count = data.size() / 2;
         const T *raw_ptr = reinterpret_cast<const T *>(data.data());
         if (ImPlot::BeginPlot(label.c_str(), ImGui::GetContentRegionAvail()))
@@ -64,7 +64,6 @@ class App {
     void begin_scatter(const std::string &label, std::span<const R> data)
     {
         PlotSpec<T> plot_scatter(2, ImPlotMarker_Square, 1.0f);
-        plot_scatter.spec.Stride = sizeof(T) * 2;
         const T *raw_ptr = reinterpret_cast<const T *>(data.data());
         int count = data.size() / 2;
 
@@ -80,7 +79,7 @@ class App {
     {
         public:
         ImPlotSpec spec;
-        PlotSpec(int stride_elements, ImPlotMarker marker = ImPlotMarker_Asterisk, float marker_size = 2.0f)
+        PlotSpec(int stride_elements = 1, ImPlotMarker marker = ImPlotMarker_None, float marker_size = 2.0f)
         {
             spec.Marker = marker;
             spec.MarkerSize = marker_size;
