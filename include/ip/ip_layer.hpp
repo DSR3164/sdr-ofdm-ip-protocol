@@ -33,3 +33,4 @@ int allocate_tun(char *dev);
 std::optional<std::string> set_interface_ip(const char *dev_name);
 
 std::vector<uint8_t> byte_to_bits(uint8_t *bytes, struct IP &sd);
+std::vector<uint8_t> bits_to_bytes(const std::vector<uint8_t>& bits);
