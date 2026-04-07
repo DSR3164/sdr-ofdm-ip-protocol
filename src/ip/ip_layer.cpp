@@ -1,10 +1,10 @@
-#include "logger.hpp"
+#include "sockets.hpp"
 #include "ip/ip_layer.hpp"
 
 #include <linux/if.h>
 #include <netinet/in.h>
 
-void run_tun_rx(SharedData &data)
+void run_tun_tx(SharedData &data)
 {
     char tun_name[IFNAMSIZ] = "";
     int tun_fd = allocate_tun(tun_name);
@@ -24,8 +24,7 @@ void run_tun_rx(SharedData &data)
     }
 
 
-    std::thread tx_thread(run_tun_tx, std::ref(data), tun_fd, tun_name);
-    tx_thread.detach();
+    std::thread rx_thread(run_tun_rx, std::ref(data), tun_fd, tun_name);
 
     struct IP ip;
 
@@ -33,7 +32,7 @@ void run_tun_rx(SharedData &data)
     std::vector<uint8_t> frame;
     FrameHeader hdr;
 
-    while (ip.back_running)
+    while (!data.stop.load())
     {
         ssize_t nbytes = read(tun_fd, buffer, sizeof(buffer));
 
@@ -57,13 +56,13 @@ void run_tun_rx(SharedData &data)
 
             ip.buffer.assign(buffer, buffer + nbytes);
             ip.ready_buf.store(true, std::memory_order_release);
-            
+
             hdr.magic = htons(0x1F35);
             hdr.length = htons(nbytes);
             hdr.seq = htons(ip.seq++);
             hdr.flags = 0;
             hdr.reserved = 0;
-            
+
             auto *hdr_ptr = reinterpret_cast<uint8_t *>(&hdr);
             frame.insert(frame.end(), hdr_ptr, hdr_ptr + sizeof(FrameHeader));
             frame.insert(frame.end(), buffer, buffer + nbytes);
@@ -76,13 +75,20 @@ void run_tun_rx(SharedData &data)
     }
 
     close(tun_fd);
+    logs::tun.info("TUN FD {} Closed", tun_fd);
+
+    if (rx_thread.joinable()) {
+        logs::tun.info("Waiting for TX thread to join...");
+        rx_thread.join();
+    }
+    logs::tun.info("TUN RX and TX threads finished");
 }
 
-void run_tun_tx(SharedData &data, int tun_fd, const char *tun_name)
+void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
 {
     std::vector<uint8_t> frame;
 
-    while (true)
+    while (!data.stop.load())
     {
         if (data.phy_ip.read(frame) < 0)
         {
@@ -98,7 +104,7 @@ void run_tun_tx(SharedData &data, int tun_fd, const char *tun_name)
 
         if (ntohs(hdr.magic) != 0x1F35)
         {
-            logs::tun.warn("[{}] Bad magic: {:04x}", tun_name, ntohs(hdr.magic));
+            // logs::tun.warn("[{}] Bad magic: {:04x}", tun_name, ntohs(hdr.magic));
             continue;
         }
 
@@ -120,42 +126,24 @@ void run_tun_tx(SharedData &data, int tun_fd, const char *tun_name)
     }
 }
 
-int run_ip_gui_bridge(SharedData &data)
+int run_ip_gui_bridge(SharedData &data, socketData &socket)
 {
-    logs::tun.info("GUI bridge thread initialized");
     static IPC server;
-    static bool init = false;
+    logs::tun.info("GUI bridge thread initialized");
 
-    while (server.create_socket("/tmp/ip_gui.sock") == -1)
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    logs::tun.info("GUI bridge socket created");
+    server.start_server(socket.ip_socket);
 
-    std::vector<int16_t> bits;
-    std::vector<uint8_t> bytes;
-
-    std::vector<std::byte> send_buf;
-
-    while (1)
+    while (!data.stop.load())
     {
-        data.ip_sockets_bytes.read(bytes);
+        std::vector<uint8_t> bytes;
 
-        if (!init)
+        if (data.ip_sockets_bytes.read(bytes) == 0)
         {
-            while (server.set_socket() == -1)
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            logs::tun.info("GUI bridge socket initialized");
-            init = true;
+            if (!server.send_frame(MsgType::Vector, bytes))
+                logs::socket.error("Frame send failed");
         }
-
-        server.create_msg(bytes);
-
-        if (!server.send_frame())
-        {
-            logs::tun.warn("Client disconnected");
-            init = false;
-        }
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        else
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
     logs::tun.info("GUI bridge stopped");

@@ -1,4 +1,3 @@
-#include "logger.hpp"
 #include "ip/ip_layer.hpp"
 
 #include <fcntl.h>
@@ -55,7 +54,7 @@ std::optional<std::string> set_interface_ip(const char *dev_name)
 
     int id = 0;
     if (sscanf(dev_name, "tun%d", &id) != 1) {
-        id = 0; 
+        id = 0;
     }
     char ip[INET_ADDRSTRLEN];
     snprintf(ip, sizeof(ip), "10.0.0.%d", id + 1);
@@ -82,7 +81,7 @@ std::optional<std::string> set_interface_ip(const char *dev_name)
     if (ioctl(sock, SIOCGIFFLAGS, &ifr) < 0) {
         logs::tun.error("SIOCGIFFLAGS failed: {}", strerror(errno));
     } else {
-        ifr.ifr_flags |= IFF_UP | IFF_RUNNING; 
+        ifr.ifr_flags |= IFF_UP | IFF_RUNNING;
         if (ioctl(sock, SIOCSIFFLAGS, &ifr) < 0) {
             logs::tun.error("SIOCSIFFLAGS failed: {}", strerror(errno));
         } else {

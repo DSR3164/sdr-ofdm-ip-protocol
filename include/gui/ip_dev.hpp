@@ -2,4 +2,4 @@
 
 #include "app.hpp"
 
-void ip_dev(App &app);
+void ip_dev(App &app, Buffers &buf);
