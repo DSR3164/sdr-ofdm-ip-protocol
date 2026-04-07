@@ -4,8 +4,12 @@
 #include "gui/ip_dev.hpp"
 
 #include <GL/glew.h>
+#include "imgui.h"
 #include "backends/imgui_impl_opengl3.h"
 #include "backends/imgui_impl_sdl2.h"
+#include <string>
+#include <vector>
+#include <filesystem>
 
 App::App(const std::string &title, int width, int height)
 {
@@ -61,7 +65,7 @@ void App::stop_frame()
     SDL_GL_SwapWindow(window);
 }
 
-void App::control_wd()
+void App::control_wd(const std::vector<std::string> &sockets)
 {
     if (ImGui::BeginMainMenuBar())
     {
@@ -76,6 +80,21 @@ void App::control_wd()
             ImGui::MenuItem("GUI Dev", nullptr, &gui_run);
             ImGui::MenuItem("PHY Dev", nullptr, &phy_run);
             ImGui::MenuItem("IP Dev", nullptr, &ip_run);
+
+            ImGui::SeparatorText("Socket Folders");
+            static std::string last_socket_path = "None";
+
+            if (sockets.empty())
+                ImGui::Text("%s", last_socket_path.c_str());
+            else
+                for (int i = 0; i < sockets.size(); ++i)
+                {
+                    if (ImGui::MenuItem(sockets[i].c_str()))
+                    {
+                        selected_socket_idx = i;
+                        this->choose_socket = true;
+                    }
+                }
 
             ImGui::SeparatorText("Debug");
 
@@ -98,14 +117,24 @@ void App::begin_debug()
     ImGui::End();
 }
 
-void run_gui(Buffers &buf)
+void run_gui(Buffers &buf, const std::vector<std::string> &sockets, socketData &sock)
 {
     App app("Development", 1280, 720);
 
     while (app.is_open())
     {
         app.start_frame();
-        app.control_wd();
+        app.control_wd(sockets);
+
+        if (app.is_chos_sock())
+        {
+            if (app.selected_socket_idx >= 0 && app.selected_socket_idx < sockets.size())
+            {
+                sock = choose_socket(sockets[app.selected_socket_idx]);
+                logs::gui.info("Selected socket: {}", sockets[app.selected_socket_idx]);
+            }
+            app.choose_socket = false;
+        }
 
         if (app.is_debug_run())
             app.begin_debug();
@@ -117,8 +146,20 @@ void run_gui(Buffers &buf)
             phy_dev(app, buf);
 
         if (app.is_ip_run())
-            ip_dev(app);
+            ip_dev(app, buf);
 
         app.stop_frame();
     }
+}
+
+socketData choose_socket(const std::string &folder_name)
+{
+    socketData socket(false);
+
+    std::filesystem::path base = "/tmp/" + folder_name;
+    socket.socketPath = base.string();
+    socket.ip_socket = "ipc://" + (base / "ip_gui.sock").string();
+    socket.phy_socket = "ipc://" + (base / "dsp_gui.sock").string();
+
+    return socket;
 }

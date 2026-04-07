@@ -1,8 +1,10 @@
 #pragma once
 
 #include "common.hpp"
+#include "sockets.hpp"
 
 #include <SDL2/SDL.h>
+#include <cstdint>
 #include <string>
 #include <span>
 #include "implot.h"
@@ -11,6 +13,8 @@ struct Buffers
 {
     DoubleBuffer<int16_t> sdr_raw;
     DoubleBuffer<std::complex<float>> dsp;
+    DoubleBuffer<uint8_t> ip;
+    DoubleBuffer<std::string> socket;
 
     Buffers(int size1 = 3840, int size2 = 3840)
         : sdr_raw(size1),
@@ -29,11 +33,15 @@ class App {
     bool is_gui_run() { return gui_run; }
     bool is_phy_run() { return phy_run; }
     bool is_ip_run() { return ip_run; }
+    bool is_chos_sock() { return choose_socket; }
     void start_frame();
     void stop_frame();
-    void control_wd();
+    void control_wd(const std::vector<std::string> &sockets);
     void begin_debug();
     void set_vsync_state(bool vsync_state) { (vsync_state) ? SDL_GL_SetSwapInterval(1) : SDL_GL_SetSwapInterval(0); }
+
+    bool choose_socket = false;
+    int selected_socket_idx = -1;
 
     template <typename T, typename R>
     void begin_plot_1d(const std::string &label, std::span<const R> data)
@@ -99,4 +107,6 @@ class App {
     bool ip_run = false;
 };
 
-void run_gui(Buffers &sd);
+socketData choose_socket(const std::string &sock);
+
+void run_gui(Buffers &buf, const std::vector<std::string> &sockets, socketData &sock);
