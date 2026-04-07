@@ -434,6 +434,25 @@ std::vector<std::complex<float>> ofdm_zadoff_chu_symbol(DSP &data)
     return zadoff_chu;
 };
 
+float coarse_cfo(std::vector<std::complex<float>> &r, int max_index, int N, int Lcp, float fs)
+{
+    std::complex<float> P = 0.0f;
+    for (int i = 0; i < Lcp; ++i)
+        P += r[max_index + i] * std::conj(r[max_index + i + N]);
+
+    float epsilon = std::arg(P) / (2 * M_PIf);
+
+    float cfo_hz = epsilon * fs / N;
+
+    for (size_t n = 0; n < r.size(); ++n)
+    {
+        float phase = 2 * M_PIf * cfo_hz * n / fs;
+        r[n] *= std::complex<float>(std::cos(phase), std::sin(phase));
+    }
+
+    return cfo_hz;
+}
+
 std::vector<std::complex<float>> cfo_est(const std::vector<std::complex<float>> &signal, DSP data)
 {
     int N = data.ofdm_cfg.n_subcarriers;
