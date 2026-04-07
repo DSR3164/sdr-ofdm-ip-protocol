@@ -122,6 +122,23 @@ std::vector<uint8_t> demodulate(Modulation mod, const std::vector<std::complex<f
 
     switch (mod)
     {
+    case Modulation::BPSK: {
+        bits.resize(symbols.size());
+
+        for (size_t i = 0; i < symbols.size(); ++i)
+            bits[i] = demap_component_3gpp(symbols[i].real() + symbols[i].imag()).first;
+        break;
+    }
+    case Modulation::QPSK: {
+        bits.resize(symbols.size() * 2);
+
+        for (size_t i = 0; i < symbols.size(); ++i)
+        {
+            bits[2 * i + 0] = demap_component_3gpp(symbols[i].real()).first;
+            bits[2 * i + 1] = demap_component_3gpp(symbols[i].imag()).first;
+        }
+        break;
+    }
     case Modulation::QAM16: {
         bits.resize(symbols.size() * 4);
         const float scale = std::sqrt(10.0f);
@@ -138,13 +155,25 @@ std::vector<uint8_t> demodulate(Modulation mod, const std::vector<std::complex<f
         }
         break;
     }
-    case Modulation::QPSK: {
-        bits.resize(symbols.size() * 2);
+    case Modulation::QAM64: {
+        bits.resize(symbols.size() * 6);
+        const float scale = sqrt(42.0f);
 
         for (size_t i = 0; i < symbols.size(); ++i)
         {
-            bits[2 * i + 0] = demap_component_3gpp(symbols[i].real()).first;
-            bits[2 * i + 1] = demap_component_3gpp(symbols[i].imag()).first;
+            float I = symbols[i].real() * scale;
+            float Q = symbols[i].imag() * scale;
+
+            bits[6 * i + 0] = (I < 0) ? 1 : 0;
+            bits[6 * i + 1] = (Q < 0) ? 1 : 0;
+
+            bits[6 * i + 2] = (std::abs(I) < 4.0f) ? 0 : 1;
+            bits[6 * i + 3] = (std::abs(Q) < 4.0f) ? 0 : 1;
+
+            float absI2 = std::abs(std::abs(I) - 4.0f);
+            float absQ2 = std::abs(std::abs(Q) - 4.0f);
+            bits[6 * i + 4] = (absI2 < 2.0f) ? 0 : 1;
+            bits[6 * i + 5] = (absQ2 < 2.0f) ? 0 : 1;
         }
         break;
     }
