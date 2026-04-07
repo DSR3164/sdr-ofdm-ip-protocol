@@ -16,4 +16,5 @@ namespace logs
     inline spdlog::logger& gui = create_logger("GUI", "[%Y-%m-%d %H:%M:%S.%e] [\033[35m%n\033[0m] [%^%l%$] %v");
     inline spdlog::logger& dsp = create_logger("DSP", "[%Y-%m-%d %H:%M:%S.%e] [\033[33m%n\033[0m] [%^%l%$] %v");
     inline spdlog::logger& main = create_logger("MAIN", "[%Y-%m-%d %H:%M:%S.%e] [\033[31m%n\033[0m] [%^%l%$] %v");
+    inline spdlog::logger& socket = create_logger("SOCK", "[%Y-%m-%d %H:%M:%S.%e] [\033[34m%n\033[0m] [%^%l%$] %v");
 }
