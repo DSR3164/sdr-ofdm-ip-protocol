@@ -22,7 +22,7 @@ SDR::SDR(const SDRConfig &config)
     SoapySDR::registerLogHandler(soapy_log_handler);
     cfg = config;
     auto list = SoapySDR::Device::enumerate();
-    if (!list.empty())
+    if (!list.empty() and (list[0]["uri"] != "ip:pluto.local"))
     {
         args = list[0];
         logs::sdr.info("Found SDR: {}", args["uri"]);

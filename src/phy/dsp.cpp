@@ -103,8 +103,8 @@ void qam64_mapper_3gpp(const std::vector<uint8_t> &bits, std::vector<std::comple
 {
     for (size_t i = 0; i < symbols.size(); ++i)
         symbols[i] = std::complex<float>(
-            (1 - 2 * bits[7 * i + 0]) * (4 - (1 - 2 * bits[7 * i + 2]) * (2 - (1 - 2 * bits[7 * i + 4]))),
-            (1 - 2 * bits[7 * i + 1]) * (4 - (1 - 2 * bits[7 * i + 3]) * (2 - (1 - 2 * bits[7 * i + 5]))))
+            (1 - 2 * bits[6 * i + 0]) * (4 - (1 - 2 * bits[6 * i + 2]) * (2 - (1 - 2 * bits[6 * i + 4]))),
+            (1 - 2 * bits[6 * i + 1]) * (4 - (1 - 2 * bits[6 * i + 3]) * (2 - (1 - 2 * bits[6 * i + 5]))))
         / sqrtf(42.0);
 }
 
@@ -404,7 +404,6 @@ std::vector<std::complex<float>> ofdm_zadoff_chu_symbol(DSP &data)
     return zadoff_chu;
 };
 
-
 std::vector<std::complex<float>> cfo_est(const std::vector<std::complex<float>> &signal, DSP data)
 {
     int N = data.ofdm_cfg.n_subcarriers;
@@ -479,7 +478,7 @@ void ofdm(const std::vector<uint8_t> &bits, std::vector<int16_t> &buffer, DSP &d
 
     FFTWPlan ifft(N, false);
 
-    int total_qpsk = (int)symbols.size();
+    int total_symbols = (int)symbols.size();
     std::vector<int> data;
     std::vector<int> pilots;
     std::vector<bool> is_guard;
@@ -487,7 +486,7 @@ void ofdm(const std::vector<uint8_t> &bits, std::vector<int16_t> &buffer, DSP &d
     calculate_pilots_and_guard(ofdm_config, pilots, data, is_pilot, is_guard);
 
     int symbols_per_ofdm = static_cast<int>(data.size());
-    int num_ofdm_symbols = total_qpsk / symbols_per_ofdm;
+    int num_ofdm_symbols = (total_symbols + symbols_per_ofdm - 1) / symbols_per_ofdm;
 
     buffer.reserve((num_ofdm_symbols + Ncp) * (N + 2));
 
@@ -518,8 +517,16 @@ void ofdm(const std::vector<uint8_t> &bits, std::vector<int16_t> &buffer, DSP &d
             int idx = sym * symbols_per_ofdm + i;
             int k = data[i];
 
-            ifft.in[k][0] = (float)std::real(symbols[idx]);
-            ifft.in[k][1] = (float)std::imag(symbols[idx]);
+            if (idx < total_symbols)
+            {
+                ifft.in[k][0] = std::real(symbols[idx]);
+                ifft.in[k][1] = std::imag(symbols[idx]);
+            }
+            else
+            {
+                ifft.in[k][0] = 0.0f;
+                ifft.in[k][1] = 0.0f;
+            }
         }
 
         fftwf_execute(ifft.plan);
