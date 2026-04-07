@@ -137,6 +137,7 @@ add_library(soip_core STATIC
   ${PROJECT_SOURCE_DIR}/src/ip/ip_layer.cpp
   ${PROJECT_SOURCE_DIR}/src/ip/tun_layer.cpp
   ${PROJECT_SOURCE_DIR}/src/ip/bit_utils.cpp
+  ${PROJECT_SOURCE_DIR}/src/ip/crc.cpp
 
   ${PROJECT_SOURCE_DIR}/src/phy/phy_layer.cpp
   ${PROJECT_SOURCE_DIR}/src/phy/sdr.cpp
