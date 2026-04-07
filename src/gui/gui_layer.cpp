@@ -1,7 +1,6 @@
 #include "gui/gui_layer.hpp"
 
 #include <vector>
-#include "implot.h"
 
 void gui_dev(App &app) // GUI layer
 {
@@ -13,4 +12,3 @@ void gui_dev(App &app) // GUI layer
         app.begin_plot_1d<float, float>("Plot 1D", data);
     ImGui::End();
 }
-
