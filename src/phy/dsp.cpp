@@ -1,6 +1,7 @@
 #include "logger.hpp"
 #include "phy/dsp.hpp"
 
+#include <cstddef>
 #include <fftw3.h>
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/bundled/color.h>
@@ -568,10 +569,10 @@ int run_dsp_rx(SharedData &data)
     std::vector<std::complex<float>> zadoff_chu = ofdm_zadoff_chu_symbol(dsp);
 
     const float *zptr = reinterpret_cast<const float *>(zadoff_chu.data());
-    for (int n = 0; n < zadoff_chu.size() * 2; ++n)
+    for (size_t n = 0; n < zadoff_chu.size() * 2; ++n)
         zc_energy += zptr[n] * zptr[n];
 
-    while (!has_flag(data.sdr.get_flags(), Flags::EXIT))
+    while (!data.stop.load())
     {
         if (data.sdr_dsp_rx.read(temp) == 0)
         {
@@ -630,7 +631,7 @@ int run_dsp_rx(SharedData &data)
         std::atomic_signal_fence(std::memory_order_seq_cst);
         end = std::chrono::steady_clock::now();
         std::atomic_signal_fence(std::memory_order_seq_cst);
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+        // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     }
     logs::dsp.info("Closing DSP thread");
     return 0;
@@ -642,7 +643,7 @@ int run_dsp_tx(SharedData &data)
     std::vector<uint8_t> bits;
     std::vector<int16_t> buffer;
 
-    while (!has_flag(data.sdr.get_flags(), Flags::EXIT))
+    while (!data.stop.load())
     {
         if (data.ip_phy.read(bits) == -1)
             continue;
