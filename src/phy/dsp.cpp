@@ -103,8 +103,8 @@ void qam64_mapper_3gpp(const std::vector<uint8_t> &bits, std::vector<std::comple
 {
     for (size_t i = 0; i < symbols.size(); ++i)
         symbols[i] = std::complex<float>(
-            (1 - 2 * bits[7 * i + 0]) * (4 - (1 - 2 * bits[7 * i + 2]) * (2 - (1 - 2 * bits[7 * i + 4]))),
-            (1 - 2 * bits[7 * i + 1]) * (4 - (1 - 2 * bits[7 * i + 3]) * (2 - (1 - 2 * bits[7 * i + 5]))))
+            (1 - 2 * bits[6 * i + 0]) * (4 - (1 - 2 * bits[6 * i + 2]) * (2 - (1 - 2 * bits[6 * i + 4]))),
+            (1 - 2 * bits[6 * i + 1]) * (4 - (1 - 2 * bits[6 * i + 3]) * (2 - (1 - 2 * bits[6 * i + 5]))))
         / sqrtf(42.0);
 }
 
@@ -403,7 +403,6 @@ std::vector<std::complex<float>> ofdm_zadoff_chu_symbol(DSP &data)
 
     return zadoff_chu;
 };
-
 
 std::vector<std::complex<float>> cfo_est(const std::vector<std::complex<float>> &signal, DSP data)
 {
