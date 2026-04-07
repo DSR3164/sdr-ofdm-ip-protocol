@@ -132,6 +132,27 @@ target_include_directories(implot PUBLIC
 
 target_link_libraries(implot PUBLIC imgui)
 
+# ---------- ZeroMQ (Core) ----------
+set(ZMQ_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(WITH_PERF_TOOL OFF CACHE BOOL "" FORCE)
+set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(ENABLE_CPACK OFF CACHE BOOL "" FORCE)
+
+fetchcontent_declare(
+  libzmq
+  GIT_REPOSITORY https://github.com/zeromq/libzmq
+  GIT_TAG v4.3.5
+)
+fetchcontent_makeavailable(libzmq)
+
+# ---------- cppzmq (C++ Bindings) ----------
+fetchcontent_declare(
+  cppzmq
+  GIT_REPOSITORY https://github.com/zeromq/cppzmq
+  GIT_TAG v4.10.0
+)
+fetchcontent_makeavailable(cppzmq)
+
 # ---------- Core SDR library ----------
 add_library(soip_core STATIC
   ${PROJECT_SOURCE_DIR}/src/ip/ip_layer.cpp
@@ -141,6 +162,7 @@ add_library(soip_core STATIC
   ${PROJECT_SOURCE_DIR}/src/phy/phy_layer.cpp
   ${PROJECT_SOURCE_DIR}/src/phy/sdr.cpp
   ${PROJECT_SOURCE_DIR}/src/phy/dsp.cpp
+  ${PROJECT_SOURCE_DIR}/src/sockets.cpp
 )
 
 add_library(soip_gui STATIC
@@ -167,6 +189,7 @@ target_link_libraries(soip_core
   PUBLIC
   Threads::Threads
   spdlog::spdlog
+  cppzmq
 )
 target_compile_options(soip_core PRIVATE -mavx2 -ffast-math)
 
