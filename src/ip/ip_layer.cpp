@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <linux/if.h>
 #include <netinet/in.h>
+#include <vector>
 
 void run_tun_rx(SharedData &data)
 {
@@ -73,13 +74,9 @@ void run_tun_rx(SharedData &data)
             auto crc = calculateCRC16(frame);
             frame.insert(frame.end(), crc.begin(), crc.end());
 
-            logs::tun.warn(
-                "CRC RX {:02X}{:02X}",
-                crc[0], crc[1]
-            );
+            ip.raw_bits = byte_to_bits(frame.data(), frame.size());
 
-            ip.raw_bits = byte_to_bits(frame.data(), ip);
-
+            data.ip_sockets_bytes.write(frame);
             data.ip_phy.write(ip.raw_bits);
         }
     }
@@ -99,56 +96,49 @@ void run_tun_tx(SharedData &data, int tun_fd, const char *tun_name)
             continue;
         }
 
-        if (frame.size() <= sizeof(FrameHeader))
-            continue;
-
         frame = bits_to_bytes(frame);
+
+        if (frame.size() < sizeof(FrameHeader) + 2)
+            continue;
 
         FrameHeader hdr;
         memcpy(&hdr, frame.data(), sizeof(FrameHeader));
-
-        size_t payload_len = ntohs(hdr.length);
+        uint16_t payload_len = ntohs(hdr.length);
         size_t expected_len = sizeof(FrameHeader) + payload_len + 2;
 
-        if (frame.size() > expected_len) {
-            frame.resize(expected_len);
+        frame.resize(expected_len);
+
+        if (ntohs(hdr.magic) != 0x1F35)
+        {
+            logs::tun.debug("[{}] Bad magic: 0x{:04X}", tun_name, ntohs(hdr.magic));
+            continue;
         }
 
         std::vector<uint8_t> crc_received(frame.end() - 2, frame.end());
 
         frame.resize(sizeof(FrameHeader) + payload_len);
         
-        if (ntohs(hdr.magic) != 0x1F35)
-        {
-            // logs::tun.warn("[{}] Bad magic: {:04x}", tun_name, ntohs(hdr.magic));
-            continue;
-        }
-        
-        data.ip_sockets_bytes.write(frame);
-
         std::vector<uint8_t> crc_calc = calculateCRC16(frame);
 
-        if (crc_calc[0] != crc_received[0] || crc_calc[1] != crc_received[1]) {
-            logs::tun.warn(
-                "CRC mismatch, frame corrupted: received {:02X}{:02X}, calculated {:02X}{:02X}",
-                crc_received[0], crc_received[1],
-                crc_calc[0], crc_calc[1]
+        if (crc_calc[0] != frame[sizeof(FrameHeader) + payload_len] || crc_calc[1] != frame[sizeof(FrameHeader) + payload_len + 1]) {
+            logs::tun.error(
+                "[{}] CRC mismatch: received {:02X}{:02X}, calculated {:02X}{:02X} | payload_len={}",
+                tun_name,
+                frame[sizeof(FrameHeader) + payload_len], frame[sizeof(FrameHeader) + payload_len + 1],
+                crc_calc[0], crc_calc[1],
+                payload_len
             );
             continue;
         }
-
-
-        uint16_t len = ntohs(hdr.length);
-
-        if (sizeof(FrameHeader) + len > frame.size())
-        {
-            logs::tun.warn("[{}] Frame too short", tun_name);
-            continue;
-        }
-
+        
+        
         const uint8_t *payload = frame.data() + sizeof(FrameHeader);
+        ssize_t written = write(tun_fd, payload, payload_len);
 
-        ssize_t written = write(tun_fd, payload, len);
+        std::vector<uint8_t> payload_vec(frame.data(), frame.data() + sizeof(FrameHeader) + payload_len);
+
+        data.ip_sockets_bytes.write(payload_vec);
+        
         if (written < 0)
             logs::tun.error("[{}] Write error: {}", tun_name, strerror(errno));
         else
