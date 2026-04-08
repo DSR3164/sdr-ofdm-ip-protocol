@@ -54,7 +54,7 @@ void run_tun_tx(SharedData &data)
             frame.clear();
             frame.reserve(sizeof(FrameHeader) + nbytes + 2); 
 
-            logs::tun.info("[{}] Read {} bytes", tun_name, static_cast<size_t>(nbytes));
+            logs::tun.trace("[{}] Read {} bytes", tun_name, static_cast<size_t>(nbytes));
             ip.nbytes = nbytes;
 
             ip.buffer.assign(buffer, buffer + nbytes);
@@ -148,7 +148,7 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
         if (written < 0)
             logs::tun.error("[{}] Write error: {}", tun_name, strerror(errno));
         else
-            logs::tun.info("[{}] Injected {} bytes into TUN", tun_name, written);
+            logs::tun.trace("[{}] Injected {} bytes into TUN", tun_name, written);
     }
 }
 

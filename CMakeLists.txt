@@ -163,7 +163,9 @@ add_library(soip_core STATIC
   ${PROJECT_SOURCE_DIR}/src/phy/phy_layer.cpp
   ${PROJECT_SOURCE_DIR}/src/phy/sdr.cpp
   ${PROJECT_SOURCE_DIR}/src/phy/dsp.cpp
+
   ${PROJECT_SOURCE_DIR}/src/sockets.cpp
+  ${PROJECT_SOURCE_DIR}/src/logger.cpp
 )
 
 add_library(soip_gui STATIC

@@ -47,7 +47,7 @@ int run_sdr(SharedData &data)
 
         if (has_flag(sdr.get_flags(), Flags::REINIT))
             if (!sdr.reinit())
-                logs::sdr.info("Cannot reinit SDR");
+                logs::sdr.warn("Cannot reinit SDR");
         if (has_flag(sdr.get_flags(), apply))
             sdr.apply_runtime();
     }
@@ -76,7 +76,7 @@ int run_dsp_gui_bridge(SharedData &data, socketData &socket)
         if (data.dsp_sockets.read(temp) == 0)
         {
             server.send_frame(MsgType::Vector, temp);
-            logs::dsp.info("Sent frame to GUI, size: {}", temp.size());
+            logs::dsp.trace("Sent frame to GUI, size: {}", temp.size());
         }
     }
 

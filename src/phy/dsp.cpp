@@ -655,9 +655,9 @@ int run_dsp_tx(SharedData &data)
         if (data.ip_phy.read(bits) == -1)
             continue;
 
-        logs::dsp.info("[{}] Read {} bits", fmt::format(fmt::fg(fmt::color::cyan), "TX"), bits.size());
+        logs::dsp.trace("[{}] Read {} bits", fmt::format(fmt::fg(fmt::color::cyan), "TX"), bits.size());
         ofdm(bits, buffer, data.dsp);
-        logs::dsp.info("[{}] Modulate {} samples", fmt::format(fmt::fg(fmt::color::cyan), "OFDM"), buffer.size());
+        logs::dsp.trace("[{}] Modulate {} samples", fmt::format(fmt::fg(fmt::color::cyan), "OFDM"), buffer.size());
         data.sdr_dsp_tx.write(buffer);
     }
 
