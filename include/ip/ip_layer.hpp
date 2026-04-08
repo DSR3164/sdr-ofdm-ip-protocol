@@ -1,6 +1,9 @@
 #pragma once
 
 #include "common.hpp"
+#include "sockets.hpp"
+
+#include <optional>
 
 #pragma pack(push, 1)
 struct FrameHeader
@@ -25,9 +28,9 @@ struct IP
     size_t seq = 0;
 };
 
-void run_tun_rx(SharedData &data);
-void run_tun_tx(SharedData &data, int tun_fd, const char *tun_name);
-int run_ip_gui_bridge(SharedData &data);
+void run_tun_tx(SharedData &data);
+void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name);
+int run_ip_gui_bridge(SharedData &data, socketData &socket);
 
 int allocate_tun(char *dev);
 std::optional<std::string> set_interface_ip(const char *dev_name);

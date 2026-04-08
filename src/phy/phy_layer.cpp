@@ -1,5 +1,6 @@
 #include "common.hpp"
-#include "logger.hpp"
+#include "sockets.hpp"
+
 #include "phy/phy_layer.hpp"
 #include "phy/sdr.hpp"
 
@@ -13,7 +14,7 @@ int run_sdr(SharedData &data)
     Flags apply = Flags::APPLY_BANDWIDTH | Flags::APPLY_FREQUENCY | Flags::APPLY_GAIN | Flags::APPLY_SAMPLE_RATE;
     while (!has_flag(sdr.get_flags(), Flags::IS_ACTIVE))
     {
-        if (has_flag(sdr.get_flags(), Flags::EXIT))
+        if (!data.stop.load())
         {
             logs::sdr.info("Closing SDR thread");
             return 0;
@@ -29,7 +30,7 @@ int run_sdr(SharedData &data)
     std::vector<uint8_t> bits;
     data.sdr_dsp_rx.get_write_buffer().resize(data.sdr.get_buffer_size() * 2, 0);
 
-    while (!has_flag(sdr.get_flags(), Flags::EXIT))
+    while (!data.stop.load())
     {
         auto ret_rx = sdr.readstream(data.sdr_dsp_rx.get_write_buffer());
         if (data.sdr_dsp_tx.read(writebuffer) == 0)
@@ -46,7 +47,7 @@ int run_sdr(SharedData &data)
 
         if (has_flag(sdr.get_flags(), Flags::REINIT))
             if (!sdr.reinit())
-                logs::sdr.info("Cannot reinit SDR");
+                logs::sdr.warn("Cannot reinit SDR");
         if (has_flag(sdr.get_flags(), apply))
             sdr.apply_runtime();
     }
@@ -55,30 +56,36 @@ int run_sdr(SharedData &data)
     return 0;
 }
 
-int run_dsp_gui_bridge(SharedData &data)
+int run_dsp_gui_bridge(SharedData &data, socketData &socket)
 {
     IPC server;
-    bool socket_init = false;
+    bool init = false;
     std::vector<std::complex<float>> temp;
 
-    while (server.create_socket("/tmp/dsp_gui.sock") == -1)
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-    while (!has_flag(data.sdr.get_flags(), Flags::EXIT))
+    while (!init && !data.stop.load())
     {
-        if (!socket_init)
+        if (!server.start_server(socket.phy_socket))
         {
-            while (server.set_socket() == -1)
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            socket_init = true;
+            logs::socket.error("Failed to start PHY to GUI bridge");
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
         }
+        else
+        {
+            logs::socket.info("PHY to GUI bridge server started");
+            init = true;
+        }
+    }
 
-        data.dsp_sockets.read(temp);
+    logs::dsp.info("Socket created succsesfully {}", socket.phy_socket);
 
-        server.create_msg(temp);
-        socket_init = server.send_frame();
+    while (!data.stop.load())
+    {
+        if (data.dsp_sockets.read(temp) == 0)
+        {
+            server.send_frame(MsgType::Vector, temp);
+            logs::dsp.trace("Sent frame to GUI, size: {}", temp.size());
+        }
     }
 
     return 0;
 };
-

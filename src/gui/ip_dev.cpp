@@ -1,31 +1,17 @@
-#include "logger.hpp"
 #include "gui/ip_dev.hpp"
 
-#include <vector>
+#include "imgui.h"
 #include "implot.h"
 
-void ip_dev(App &app) // IP layer
+#include <vector>
+
+void ip_dev(App &app, Buffers &data) // IP layer
 {
     (void)app;
-    static IPC client;
-    static ipc_header header;
-    static bool init = false;
     static ImPlotSpec specs;
-    static std::vector<uint8_t> bytes(100);
+    static std::vector<uint8_t> bytes(10, 0);
 
-    if (!init)
-    {
-        if (client.connect_to_socket("/tmp/ip_gui.sock") == 0)
-        {
-            init = true;
-            logs::gui.info("IP device GUI initialized");
-        }
-        else
-            return;
-    }
-
-    if (!client.recv_frame(header, bytes))
-        return;
+    data.ip.read(bytes);
 
     const uint8_t *raw_ptr_bits = reinterpret_cast<const uint8_t *>(bytes.data());
 

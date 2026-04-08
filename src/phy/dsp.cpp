@@ -1,6 +1,7 @@
 #include "logger.hpp"
 #include "phy/dsp.hpp"
 
+#include <cstddef>
 #include <fftw3.h>
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/bundled/color.h>
@@ -575,10 +576,10 @@ int run_dsp_rx(SharedData &data)
     std::vector<std::complex<float>> zadoff_chu = ofdm_zadoff_chu_symbol(dsp);
 
     const float *zptr = reinterpret_cast<const float *>(zadoff_chu.data());
-    for (int n = 0; n < zadoff_chu.size() * 2; ++n)
+    for (size_t n = 0; n < zadoff_chu.size() * 2; ++n)
         zc_energy += zptr[n] * zptr[n];
 
-    while (!has_flag(data.sdr.get_flags(), Flags::EXIT))
+    while (!data.stop.load())
     {
         if (data.sdr_dsp_rx.read(temp) == 0)
         {
@@ -649,14 +650,14 @@ int run_dsp_tx(SharedData &data)
     std::vector<uint8_t> bits;
     std::vector<int16_t> buffer;
 
-    while (!has_flag(data.sdr.get_flags(), Flags::EXIT))
+    while (!data.stop.load())
     {
         if (data.ip_phy.read(bits) == -1)
             continue;
 
-        logs::dsp.info("[{}] Read {} bits", fmt::format(fmt::fg(fmt::color::cyan), "TX"), bits.size());
+        logs::dsp.trace("[{}] Read {} bits", fmt::format(fmt::fg(fmt::color::cyan), "TX"), bits.size());
         ofdm(bits, buffer, data.dsp);
-        logs::dsp.info("[{}] Modulate {} samples", fmt::format(fmt::fg(fmt::color::cyan), "OFDM"), buffer.size());
+        logs::dsp.trace("[{}] Modulate {} samples", fmt::format(fmt::fg(fmt::color::cyan), "OFDM"), buffer.size());
         data.sdr_dsp_tx.write(buffer);
     }
 
