@@ -1,19 +1,21 @@
 #include "common.hpp"
-#include "phy/phy_layer.hpp"
-#include "phy/dsp.hpp"
 #include "ip/ip_layer.hpp"
+#include "phy/dsp.hpp"
+#include "phy/phy_layer.hpp"
 #include "sockets.hpp"
 
 #include <atomic>
 #include <csignal>
+#include <fftw3.h>
 #include <functional>
 #include <thread>
-#include <fftw3.h>
 
-std::atomic<bool>* stop_ptr = nullptr;
+std::atomic<bool> *stop_ptr = nullptr;
 
-void signal_handler(int signum) {
-    if (stop_ptr) stop_ptr->store(true);
+void signal_handler(int signum)
+{
+    if (stop_ptr)
+        stop_ptr->store(true);
     logs::main.info("Signal {} received, stopping threads...", signum);
 }
 
@@ -30,7 +32,10 @@ int main()
     fftwf_make_planner_thread_safe();
 
     if (getuid() != 0)
+    {
         logs::main.critical("Please run with sudo or as root");
+        return 0;
+    }
     else
     {
         socketData socket;
@@ -43,23 +48,28 @@ int main()
         std::thread ip_gui_bridge_thread(run_ip_gui_bridge, std::ref(data), std::ref(socket));
 
         logs::main.info("Joining dsp_rx...");
-        if (dsp_rx_thread.joinable()) dsp_rx_thread.join();
+        if (dsp_rx_thread.joinable())
+            dsp_rx_thread.join();
 
         logs::main.info("Joining dsp_tx...");
-        if (dsp_tx_thread.joinable()) dsp_tx_thread.join();
+        if (dsp_tx_thread.joinable())
+            dsp_tx_thread.join();
 
         logs::main.info("Joining sdr...");
-        if (sdr_thread.joinable()) sdr_thread.join();
+        if (sdr_thread.joinable())
+            sdr_thread.join();
 
         logs::main.info("Joining tun_tx...");
-        if (tun_tx_thread.joinable()) tun_tx_thread.join();
+        if (tun_tx_thread.joinable())
+            tun_tx_thread.join();
 
         logs::main.info("Joining dsp_bridge...");
-        if (dsp_gui_bridge_thread.joinable()) dsp_gui_bridge_thread.join();
+        if (dsp_gui_bridge_thread.joinable())
+            dsp_gui_bridge_thread.join();
 
         logs::main.info("Joining ip_bridge...");
-        if (ip_gui_bridge_thread.joinable()) ip_gui_bridge_thread.join();
-
+        if (ip_gui_bridge_thread.joinable())
+            ip_gui_bridge_thread.join();
     }
 
     logs::main.info("All threads joined. Exiting.");

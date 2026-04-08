@@ -2,12 +2,12 @@
 #include "zmq.hpp"
 
 #include <cstring>
+#include <filesystem>
 #include <string>
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <unistd.h>
 #include <sys/un.h>
-#include <filesystem>
+#include <unistd.h>
 #include <vector>
 
 socketData::socketData(const bool setup_dir, const std::string &base_folder) : is_owner(setup_dir)
@@ -48,7 +48,7 @@ socketData::~socketData()
                 logs::socket.error("Socket directory not found: {}", socketPath);
             }
         }
-        catch (const fs::filesystem_error& e)
+        catch (const fs::filesystem_error &e)
         {
             logs::main.error("Cleanup error: {}", e.what());
         }
@@ -58,7 +58,6 @@ socketData::~socketData()
         logs::socket.info("Not owner or empty path [{}], skipping cleanup", socketPath);
     }
 }
-
 
 std::string socketData::setup_socket_dir(const std::string &folder_name)
 {
@@ -107,7 +106,8 @@ void found_sockets(std::vector<std::string> &sockets, const std::string base_nam
                         logs::gui.info("Found socket directory: {}", filename);
                         sockets.push_back(filename);
 
-                        if (fs::is_directory(entry)) {
+                        if (fs::is_directory(entry))
+                        {
                             for (const auto &sock : fs::directory_iterator(entry))
                             {
                                 logs::gui.info("  -> Socket file: {}", sock.path().filename().string());
@@ -124,20 +124,37 @@ void found_sockets(std::vector<std::string> &sockets, const std::string base_nam
     }
 }
 
-void IPC::start_server(const std::string &path)
+bool IPC::start_server(const std::string &path)
 {
-    _socket.set(zmq::sockopt::linger, 0);
-    _socket.set(zmq::sockopt::sndhwm, 1);
-    _socket.bind(path);
+    try
+    {
+        _socket.set(zmq::sockopt::linger, 0);
+        _socket.set(zmq::sockopt::sndhwm, 1);
+        _socket.bind(path);
+        return true;
+    }
+    catch (const zmq::error_t &e)
+    {
+        logs::socket.error("Failed to bind to {}: {}", path, e.what());
+        return false;
+    }
 }
 
-void IPC::connect_to(std::string &path)
+bool IPC::connect_to(const std::string &path)
 {
-    _socket = zmq::socket_t(_context, zmq::socket_type::sub);
-    // _socket.set(zmq::sockopt::conflate, 1);
-    _socket.set(zmq::sockopt::subscribe, "");
-    _socket.set(zmq::sockopt::rcvtimeo, 500);
-    _socket.connect(path);
+    try
+    {
+        _socket = zmq::socket_t(_context, zmq::socket_type::sub);
+        _socket.set(zmq::sockopt::subscribe, "");
+        _socket.set(zmq::sockopt::rcvtimeo, 500);
+        _socket.connect(path);
 
-    logs::socket.info("SUB socket connected to {}", path);
+        logs::socket.info("SUB socket connected to {}", path);
+        return true;
+    }
+    catch (const zmq::error_t &e)
+    {
+        logs::socket.error("Failed to connect to {}: {}", path, e.what());
+        return false;
+    }
 }

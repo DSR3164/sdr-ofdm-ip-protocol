@@ -59,20 +59,27 @@ int run_sdr(SharedData &data)
 int run_dsp_gui_bridge(SharedData &data, socketData &socket)
 {
     IPC server;
-    bool socket_init = false;
+    bool init = false;
     std::vector<std::complex<float>> temp;
 
-    server.start_server(socket.phy_socket);
+    while (!init && !data.stop.load())
+    {
+        if (!server.start_server(socket.phy_socket))
+        {
+            logs::socket.error("Failed to start PHY to GUI bridge");
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        }
+        else
+        {
+            logs::socket.info("PHY to GUI bridge server started");
+            init = true;
+        }
+    }
+
     logs::dsp.info("Socket created succsesfully {}", socket.phy_socket);
 
     while (!data.stop.load())
     {
-        if (!socket_init)
-        {
-            socket_init = true;
-            logs::dsp.info("Client connected succsesfully {}", socket.phy_socket);
-        }
-
         if (data.dsp_sockets.read(temp) == 0)
         {
             server.send_frame(MsgType::Vector, temp);

@@ -1,10 +1,12 @@
-#include "sockets.hpp"
-#include "ip/ip_layer.hpp"
 #include "ip/crc.hpp"
+#include "ip/ip_layer.hpp"
+#include "sockets.hpp"
 
+#include <chrono>
 #include <cstdint>
 #include <linux/if.h>
 #include <netinet/in.h>
+#include <thread>
 #include <vector>
 
 void run_tun_tx(SharedData &data)
@@ -25,7 +27,6 @@ void run_tun_tx(SharedData &data)
     {
         logs::tun.error("Failed to assign IP to {}", tun_name);
     }
-
 
     std::thread rx_thread(run_tun_rx, std::ref(data), tun_fd, tun_name);
 
@@ -52,7 +53,7 @@ void run_tun_tx(SharedData &data)
         {
             ip.raw_bits.clear();
             frame.clear();
-            frame.reserve(sizeof(FrameHeader) + nbytes + 2); 
+            frame.reserve(sizeof(FrameHeader) + nbytes + 2);
 
             logs::tun.trace("[{}] Read {} bytes", tun_name, static_cast<size_t>(nbytes));
             ip.nbytes = nbytes;
@@ -83,7 +84,8 @@ void run_tun_tx(SharedData &data)
     close(tun_fd);
     logs::tun.info("TUN FD {} Closed", tun_fd);
 
-    if (rx_thread.joinable()) {
+    if (rx_thread.joinable())
+    {
         logs::tun.info("Waiting for TX thread to join...");
         rx_thread.join();
     }
@@ -123,28 +125,24 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
         std::vector<uint8_t> crc_received(frame.end() - 2, frame.end());
 
         frame.resize(sizeof(FrameHeader) + payload_len);
-        
+
         std::vector<uint8_t> crc_calc = calculateCRC16(frame);
 
-        if (crc_calc[0] != frame[sizeof(FrameHeader) + payload_len] || crc_calc[1] != frame[sizeof(FrameHeader) + payload_len + 1]) {
-            logs::tun.error(
-                "[{}] CRC mismatch: received {:02X}{:02X}, calculated {:02X}{:02X} | payload_len={}",
-                tun_name,
-                frame[sizeof(FrameHeader) + payload_len], frame[sizeof(FrameHeader) + payload_len + 1],
-                crc_calc[0], crc_calc[1],
-                payload_len
-            );
+        if (crc_calc[0] != frame[sizeof(FrameHeader) + payload_len] || crc_calc[1] != frame[sizeof(FrameHeader) + payload_len + 1])
+        {
+            logs::tun.error("[{}] CRC mismatch: received {:02X}{:02X}, calculated {:02X}{:02X} | payload_len={}", tun_name,
+                            frame[sizeof(FrameHeader) + payload_len], frame[sizeof(FrameHeader) + payload_len + 1], crc_calc[0], crc_calc[1],
+                            payload_len);
             continue;
         }
-        
-        
+
         const uint8_t *payload = frame.data() + sizeof(FrameHeader);
         ssize_t written = write(tun_fd, payload, payload_len);
 
         std::vector<uint8_t> payload_vec(frame.data(), frame.data() + sizeof(FrameHeader) + payload_len);
 
         data.ip_sockets_bytes.write(payload_vec);
-        
+
         if (written < 0)
             logs::tun.error("[{}] Write error: {}", tun_name, strerror(errno));
         else
@@ -155,9 +153,22 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
 int run_ip_gui_bridge(SharedData &data, socketData &socket)
 {
     static IPC server;
+    bool init = false;
     logs::tun.info("GUI bridge thread initialized");
 
-    server.start_server(socket.ip_socket);
+    while (!init && !data.stop.load())
+    {
+        if (!server.start_server(socket.ip_socket))
+        {
+            logs::socket.error("Failed to start IP to GUI bridge");
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        }
+        else
+        {
+            logs::socket.info("IP to GUI bridge server started");
+            init = true;
+        }
+    }
 
     while (!data.stop.load())
     {

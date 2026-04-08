@@ -4,8 +4,8 @@
 
 #include "zmq.hpp"
 #include <cstddef>
-#include <cstdlib>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <unistd.h>
@@ -26,7 +26,8 @@ struct socketData
 
 void found_sockets(std::vector<std::string> &sockets, const std::string base_name = "soip_sockets_");
 
-enum class MsgType : uint32_t {
+enum class MsgType : uint32_t
+{
     Flag,
     Spectrum,
     BER,
@@ -43,70 +44,78 @@ struct ipc_header
     uint64_t timestamp_ns;
 };
 
-class IPC {
-    private:
+class IPC
+{
+  private:
     zmq::context_t _context;
     zmq::socket_t _socket;
 
-    public:
-        IPC() : _context(1), _socket(_context, zmq::socket_type::pub) {}
+  public:
+    IPC() : _context(1), _socket(_context, zmq::socket_type::pub) {}
 
-        void start_server(const std::string &path);
-        void connect_to(std::string &path);
+    bool start_server(const std::string &path);
+    bool connect_to(const std::string &path);
 
-        static uint64_t now_ns()
+    static uint64_t now_ns()
+    {
+        return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    }
+
+    template <typename T> bool send_frame(MsgType type, const std::vector<T> &data)
+    {
+        ipc_header hdr;
+        hdr.type = type;
+        hdr.size = static_cast<uint32_t>(data.size() * sizeof(T));
+        hdr.timestamp_ns = now_ns();
+
+        try
         {
-            return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+            _socket.send(zmq::buffer(&hdr, sizeof(hdr)), zmq::send_flags::sndmore);
+            auto send_state = _socket.send(zmq::buffer(data.data(), hdr.size), zmq::send_flags::none);
+
+            return send_state.has_value();
         }
-
-        template<typename T>
-        bool send_frame(MsgType type, const std::vector<T> &data)
+        catch (const zmq::error_t &e)
         {
-            ipc_header hdr;
-            hdr.type = type;
-            hdr.size = static_cast<uint32_t>(data.size() * sizeof(T));
-            hdr.timestamp_ns = now_ns();
+            logs::socket.error("ZMQ Error: {} (Code: {})", e.what(), e.num());
+            return false;
+        }
+    }
 
-            try {
-                _socket.send(zmq::buffer(&hdr, sizeof(hdr)), zmq::send_flags::sndmore);
-                auto send_state = _socket.send(zmq::buffer(data.data(), hdr.size), zmq::send_flags::none);
+    template <typename T> bool recv_frame(ipc_header &header, std::vector<T> &data)
+    {
+        try
+        {
+            zmq::message_t msg_h;
 
-                return send_state.has_value();
-            } catch (const zmq::error_t &e) {
-                logs::socket.error("ZMQ Error: {} (Code: {})", e.what(), e.num());
+            auto res_h = _socket.recv(msg_h, zmq::recv_flags::none);
+            if (!res_h.has_value() || msg_h.size() != sizeof(ipc_header))
                 return false;
-            }
-        }
 
-        template<typename T>
-        bool recv_frame(ipc_header &header, std::vector<T> &data)
-        {
-            try {
-                zmq::message_t msg_h;
+            std::memcpy(&header, msg_h.data(), sizeof(ipc_header));
 
-                auto res_h = _socket.recv(msg_h, zmq::recv_flags::none);
-                if (!res_h.has_value() || msg_h.size() != sizeof(ipc_header)) return false;
+            if (msg_h.more())
+            {
+                zmq::message_t msg_p;
+                auto res_p = _socket.recv(msg_p, zmq::recv_flags::none);
 
-                std::memcpy(&header, msg_h.data(), sizeof(ipc_header));
-
-                if (msg_h.more()) {
-                    zmq::message_t msg_p;
-                    auto res_p = _socket.recv(msg_p, zmq::recv_flags::none);
-
-                    if (res_p) {
-                        size_t n_elements = header.size / sizeof(T);
-                        data.resize(n_elements);
-                        std::memcpy(data.data(), msg_p.data(), header.size);
-                    }
+                if (res_p)
+                {
+                    size_t n_elements = header.size / sizeof(T);
+                    data.resize(n_elements);
+                    std::memcpy(data.data(), msg_p.data(), header.size);
                 }
-                return true;
-            } catch (const zmq::error_t &e) {
-                logs::socket.error("ZMQ Error: {} (Code: {})", e.what(), e.num());
-                return false;
             }
+            return true;
         }
+        catch (const zmq::error_t &e)
+        {
+            logs::socket.error("ZMQ Error: {} (Code: {})", e.what(), e.num());
+            return false;
+        }
+    }
 
-        zmq::socket_t &socket() { return _socket; }
+    zmq::socket_t &socket() { return _socket; }
 };
 
 int run_gui_main(socketData &socket);

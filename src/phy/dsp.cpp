@@ -638,7 +638,7 @@ int run_dsp_rx(SharedData &data)
         std::atomic_signal_fence(std::memory_order_seq_cst);
         end = std::chrono::steady_clock::now();
         std::atomic_signal_fence(std::memory_order_seq_cst);
-        // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     }
     logs::dsp.info("Closing DSP thread");
     return 0;
