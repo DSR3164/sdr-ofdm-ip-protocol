@@ -1,15 +1,16 @@
 #include "gui/app.hpp"
 #include "gui/gui_layer.hpp"
-#include "gui/phy_dev.hpp"
 #include "gui/ip_dev.hpp"
+#include "gui/phy_dev.hpp"
 
-#include <GL/glew.h>
-#include "imgui.h"
 #include "backends/imgui_impl_opengl3.h"
 #include "backends/imgui_impl_sdl2.h"
+#include "imgui.h"
+#include "sockets.hpp"
+#include <GL/glew.h>
+#include <filesystem>
 #include <string>
 #include <vector>
-#include <filesystem>
 
 App::App(const std::string &title, int width, int height)
 {
@@ -65,7 +66,7 @@ void App::stop_frame()
     SDL_GL_SwapWindow(window);
 }
 
-void App::control_wd(const std::vector<std::string> &sockets)
+void App::control_wd(std::vector<std::string> &sockets)
 {
     bool chosen_socket = false;
 
@@ -85,6 +86,9 @@ void App::control_wd(const std::vector<std::string> &sockets)
 
             ImGui::SeparatorText("Socket Folders");
             static std::string last_socket_path = "None";
+
+            if (ImGui::Button("Update sockets", ImVec2(ImGui::GetContentRegionAvail().x, 0.0f)))
+                found_sockets(sockets);
 
             if (sockets.empty())
                 ImGui::Text("%s", last_socket_path.c_str());
@@ -120,7 +124,7 @@ void App::begin_debug()
     ImGui::End();
 }
 
-void run_gui(Buffers &buf, const std::vector<std::string> &sockets, socketData &sock)
+void run_gui(Buffers &buf, std::vector<std::string> &sockets, socketData &sock)
 {
     App app("Development", 1280, 720);
 

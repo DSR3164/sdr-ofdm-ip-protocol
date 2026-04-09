@@ -87,7 +87,7 @@ void found_sockets(std::vector<std::string> &sockets, const std::string base_nam
 {
     namespace fs = std::filesystem;
     sockets.clear();
-    sockets.reserve(10);
+    sockets.reserve(100);
     const std::string tmp_path = "/tmp";
     static std::atomic<bool> searching = false;
 
@@ -121,6 +121,7 @@ void found_sockets(std::vector<std::string> &sockets, const std::string base_nam
         {
             logs::gui.error("FS error: {}", e.what());
         }
+        searching.store(false);
     }
 }
 
