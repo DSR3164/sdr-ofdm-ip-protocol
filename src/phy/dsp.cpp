@@ -244,6 +244,56 @@ int zc_sync(const std::vector<std::complex<float>> &for_ofdm, const std::vector<
     return best_idx;
 }
 
+int ofdm_cp_corr(const std::vector<std::complex<float>> &r, int N, int Lcp, std::vector<float> &plato)
+{
+    int size = r.size();
+    float max_metric = 0.0f;
+    int max_index = -1;
+
+    std::complex<float> P = 0.0f;
+    float R = 0.0f;
+
+    for (int i = 0; i < Lcp; i++)
+    {
+        P += r[i] * std::conj(r[i + N]);
+        R += std::norm(r[i + N]);
+    }
+
+    for (int d = 0; d < size - N - Lcp; d++)
+    {
+
+        float R_cp = 0.0f;
+        float R_tail = 0.0f;
+
+        for (int i = 0; i < Lcp; i++)
+        {
+            R_cp += std::norm(r[d + i]);
+            R_tail += std::norm(r[d + i + N]);
+        }
+
+        float denom = 0.5f * (R_cp + R_tail);
+        float metric = std::norm(P) / (denom * denom + 1e-12f);
+
+        if (metric > max_metric and metric > 0.95)
+        {
+            max_metric = metric;
+            max_index = d;
+        }
+
+        if (d + 1 >= size - N - Lcp)
+            break;
+
+        P -= r[d] * std::conj(r[d + N]);
+        P += r[d + Lcp] * std::conj(r[d + N + Lcp]);
+
+        R -= std::norm(r[d + N]);
+        R += std::norm(r[d + N + Lcp]);
+        plato[d] = metric;
+    }
+
+    return max_index;
+}
+
 void calculate_pilots_and_guard(DSP::OFDMConfig ofdm_config, std::vector<int> &pilots, std::vector<int> &data, std::vector<bool> &is_pilot, std::vector<bool> &is_guard)
 {
     size_t N = static_cast<size_t>(ofdm_config.n_subcarriers);
