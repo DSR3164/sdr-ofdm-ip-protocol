@@ -1,10 +1,29 @@
-#include "ip/ip_layer.hpp"
-
+#include <cstdint>
+#include <cstring>
+#include <cstdio>
 #include <fcntl.h>
 #include <linux/if.h>
 #include <linux/if_tun.h>
+#include <netinet/in.h>
+#include <string>
 #include <sys/ioctl.h>
 #include <arpa/inet.h>
+#include <iostream>
+#include "logger.hpp"
+
+uint8_t node_id_prompt(){
+    std::cout << "Enter node ID (10.0.0.x, x=): ";
+    std::string input;
+    std::getline(std::cin, input);
+
+    uint8_t id = 1;
+    if (!input.empty())
+        id = static_cast<uint8_t>(std::stoi(input));
+
+    std::cout << "→ Using IP: 10.0.0." << static_cast<int>(id) << "\n";
+
+    return id;
+}
 
 int allocate_tun(char *dev)
 {
@@ -40,7 +59,7 @@ int allocate_tun(char *dev)
     return fd;
 }
 
-std::optional<std::string> set_interface_ip(const char *dev_name)
+std::optional<std::string> set_interface_ip(const char *dev_name, uint8_t node_id)
 {
     int sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
@@ -52,12 +71,8 @@ std::optional<std::string> set_interface_ip(const char *dev_name)
     memset(&ifr, 0, sizeof(ifr));
     strncpy(ifr.ifr_name, dev_name, IFNAMSIZ - 1);
 
-    int id = 0;
-    if (sscanf(dev_name, "tun%d", &id) != 1) {
-        id = 0;
-    }
     char ip[INET_ADDRSTRLEN];
-    snprintf(ip, sizeof(ip), "10.0.0.%d", id + 1);
+    snprintf(ip, sizeof(ip), "10.0.0.%d", node_id);
 
     struct sockaddr_in *addr = (struct sockaddr_in *)&ifr.ifr_addr;
     addr->sin_family = AF_INET;
