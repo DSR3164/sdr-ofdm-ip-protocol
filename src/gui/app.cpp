@@ -67,6 +67,8 @@ void App::stop_frame()
 
 void App::control_wd(const std::vector<std::string> &sockets)
 {
+    bool chosen_socket = false;
+
     if (ImGui::BeginMainMenuBar())
     {
         if (ImGui::BeginMenu("Control Panel"))
@@ -89,7 +91,8 @@ void App::control_wd(const std::vector<std::string> &sockets)
             else
                 for (int i = 0; i < sockets.size(); ++i)
                 {
-                    if (ImGui::MenuItem(sockets[i].c_str()))
+                    bool is_selected = (selected_socket_idx == i);
+                    if (ImGui::MenuItem(sockets[i].c_str(), nullptr, is_selected))
                     {
                         selected_socket_idx = i;
                         this->choose_socket = true;
