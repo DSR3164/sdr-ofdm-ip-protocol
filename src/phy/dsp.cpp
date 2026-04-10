@@ -3,8 +3,8 @@
 
 #include <cstddef>
 #include <fftw3.h>
-#include <spdlog/spdlog.h>
 #include <spdlog/fmt/bundled/color.h>
+#include <spdlog/spdlog.h>
 
 struct FFTWPlan
 {
@@ -41,9 +41,9 @@ struct FFTWPlan
     // move constructor
     FFTWPlan(FFTWPlan &&other) noexcept
         : window(std::move(other.window)),
-        in(other.in),
-        out(other.out),
-        plan(other.plan)
+          in(other.in),
+          out(other.out),
+          plan(other.plan)
     {
         other.in = nullptr;
         other.out = nullptr;
@@ -54,9 +54,12 @@ struct FFTWPlan
     {
         if (this != &other)
         {
-            if (plan) fftwf_destroy_plan(plan);
-            if (in)   fftwf_free(in);
-            if (out)  fftwf_free(out);
+            if (plan)
+                fftwf_destroy_plan(plan);
+            if (in)
+                fftwf_free(in);
+            if (out)
+                fftwf_free(out);
 
             window = std::move(other.window);
             in = other.in;
@@ -77,36 +80,40 @@ void bpsk_mapper_3gpp(const std::vector<uint8_t> &bits, std::vector<std::complex
 {
     for (size_t i = 0; i < symbols.size(); ++i)
         symbols[i] = std::complex<float>(
-            bits[i] * -2.0 + 1.0,
-            bits[i] * -2.0 + 1.0)
-        / sqrtf(2);
+                         bits[i] * -2.0 + 1.0,
+                         bits[i] * -2.0 + 1.0
+                     )
+                     / sqrtf(2);
 }
 
 void qpsk_mapper_3gpp(const std::vector<uint8_t> &bits, std::vector<std::complex<float>> &symbols)
 {
     for (size_t i = 0; i < symbols.size(); ++i)
         symbols[i] = std::complex<float>(
-            bits[2 * i + 0] * -2.0 + 1.0,
-            bits[2 * i + 1] * -2.0 + 1.0)
-        / sqrtf(2.0);
+                         bits[2 * i + 0] * -2.0 + 1.0,
+                         bits[2 * i + 1] * -2.0 + 1.0
+                     )
+                     / sqrtf(2.0);
 }
 
 void qam16_mapper_3gpp(const std::vector<uint8_t> &bits, std::vector<std::complex<float>> &symbols)
 {
     for (size_t i = 0; i < symbols.size(); ++i)
         symbols[i] = std::complex<float>(
-            (1 - 2 * bits[4 * i + 0]) * (2 - (1 - 2 * bits[4 * i + 2])),
-            (1 - 2 * bits[4 * i + 1]) * (2 - (1 - 2 * bits[4 * i + 3])))
-        / sqrtf(10.0);
+                         (1 - 2 * bits[4 * i + 0]) * (2 - (1 - 2 * bits[4 * i + 2])),
+                         (1 - 2 * bits[4 * i + 1]) * (2 - (1 - 2 * bits[4 * i + 3]))
+                     )
+                     / sqrtf(10.0);
 }
 
 void qam64_mapper_3gpp(const std::vector<uint8_t> &bits, std::vector<std::complex<float>> &symbols)
 {
     for (size_t i = 0; i < symbols.size(); ++i)
         symbols[i] = std::complex<float>(
-            (1 - 2 * bits[6 * i + 0]) * (4 - (1 - 2 * bits[6 * i + 2]) * (2 - (1 - 2 * bits[6 * i + 4]))),
-            (1 - 2 * bits[6 * i + 1]) * (4 - (1 - 2 * bits[6 * i + 3]) * (2 - (1 - 2 * bits[6 * i + 5]))))
-        / sqrtf(42.0);
+                         (1 - 2 * bits[6 * i + 0]) * (4 - (1 - 2 * bits[6 * i + 2]) * (2 - (1 - 2 * bits[6 * i + 4]))),
+                         (1 - 2 * bits[6 * i + 1]) * (4 - (1 - 2 * bits[6 * i + 3]) * (2 - (1 - 2 * bits[6 * i + 5])))
+                     )
+                     / sqrtf(42.0);
 }
 
 static std::pair<uint8_t, uint8_t> demap_component_3gpp(float val)
@@ -282,14 +289,13 @@ void ofdm_equalize(std::vector<std::complex<float>> &input, std::vector<std::com
 
     calculate_pilots_and_guard(ofdm_config, pilots, is_pilot, is_guard);
 
-    std::vector<std::complex<float>> H_prev(N, { 1,0 });
+    std::vector<std::complex<float>> H_prev(N, { 1, 0 });
 
     for (size_t i = 0; i + N <= temp.size(); i += N)
     {
-        std::vector<std::complex<float>> sym(temp.begin() + i,
-            temp.begin() + i + N);
+        std::vector<std::complex<float>> sym(temp.begin() + i, temp.begin() + i + N);
 
-        std::vector<std::complex<float>> H(N, { 0,0 });
+        std::vector<std::complex<float>> H(N, { 0, 0 });
         std::vector<std::complex<float>> equalized(N);
 
         for (auto k : pilots)
@@ -307,15 +313,18 @@ void ofdm_equalize(std::vector<std::complex<float>> &input, std::vector<std::com
             float a2 = std::arg(H2);
 
             float da = a2 - a1;
-            if (da > M_PIf) da -= 2 * M_PIf;
-            if (da < -M_PIf) da += 2 * M_PIf;
+            if (da > M_PIf)
+                da -= 2 * M_PIf;
+            if (da < -M_PIf)
+                da += 2 * M_PIf;
 
             float m1 = std::abs(H1);
             float m2 = std::abs(H2);
 
             for (int k = k1 + 1; k < k2; ++k)
             {
-                if (is_guard[k]) continue;
+                if (is_guard[k])
+                    continue;
 
                 float alpha = float(k - k1) / float(k2 - k1);
 
@@ -327,10 +336,12 @@ void ofdm_equalize(std::vector<std::complex<float>> &input, std::vector<std::com
         }
 
         for (int k = 0; k < pilots.front(); ++k)
-            if (!is_guard[k]) H[k] = H[pilots.front()];
+            if (!is_guard[k])
+                H[k] = H[pilots.front()];
 
         for (int k = pilots.back() + 1; k < N; ++k)
-            if (!is_guard[k]) H[k] = H[pilots.back()];
+            if (!is_guard[k])
+                H[k] = H[pilots.back()];
 
         for (int k = 1; k < N; ++k)
             if (std::abs(H[k]) > 1e-12f)
@@ -354,7 +365,6 @@ void ofdm_equalize(std::vector<std::complex<float>> &input, std::vector<std::com
             if (!is_pilot[k] and !is_guard[k])
                 output.push_back(equalized[k]);
     }
-
 }
 
 std::vector<std::complex<float>> generate_zc(int L, int q)
@@ -532,21 +542,21 @@ void ofdm(const std::vector<uint8_t> &bits, std::vector<int16_t> &buffer, DSP &d
 
         fftwf_execute(ifft.plan);
 
-        //Norm
+        // Norm
         for (int n = 0; n < N; ++n)
         {
             ifft.out[n][0] /= (float)(N / (3.0 * 16000.0f));
             ifft.out[n][1] /= (float)(N / (3.0 * 16000.0f));
         }
 
-        //Cyclic Prefix
+        // Cyclic Prefix
         for (int n = N - Ncp; n < N; ++n)
         {
             buffer.push_back((int16_t)ifft.out[n][0]);
             buffer.push_back((int16_t)ifft.out[n][1]);
         }
 
-        //Data
+        // Data
         for (int n = 0; n < N; ++n)
         {
             buffer.push_back((int16_t)ifft.out[n][0]);

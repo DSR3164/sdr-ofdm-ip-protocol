@@ -1,15 +1,17 @@
-#include <vector>
 #include <cstdint>
+#include <vector>
 
 std::vector<uint8_t> calculateCRC16(const std::vector<uint8_t> &data)
 {
     uint16_t crc = 0xFFFF;
     uint16_t polynomial = 0x1021;
 
-    for (uint8_t byte : data) {
-        crc ^= (uint16_t) byte << 8;
+    for (uint8_t byte : data)
+    {
+        crc ^= (uint16_t)byte << 8;
 
-        for (int i = 0; i < 8; ++i) {
+        for (int i = 0; i < 8; ++i)
+        {
             if (crc & 0x8000)
                 crc = (crc << 1) ^ polynomial;
             else

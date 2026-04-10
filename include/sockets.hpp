@@ -2,7 +2,6 @@
 
 #include "logger.hpp"
 
-#include "zmq.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -10,6 +9,7 @@
 #include <string>
 #include <unistd.h>
 #include <vector>
+#include <zmq.hpp>
 
 struct socketData
 {
@@ -44,12 +44,10 @@ struct ipc_header
     uint64_t timestamp_ns;
 };
 
-class IPC
-{
+class IPC {
   private:
     zmq::context_t _context;
     zmq::socket_t _socket;
-
   public:
     IPC() : _context(1), _socket(_context, zmq::socket_type::pub) {}
 
@@ -61,7 +59,8 @@ class IPC
         return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
     }
 
-    template <typename T> bool send_frame(MsgType type, const std::vector<T> &data)
+    template <typename T>
+    bool send_frame(MsgType type, const std::vector<T> &data)
     {
         ipc_header hdr;
         hdr.type = type;
@@ -82,7 +81,8 @@ class IPC
         }
     }
 
-    template <typename T> bool recv_frame(ipc_header &header, std::vector<T> &data)
+    template <typename T>
+    bool recv_frame(ipc_header &header, std::vector<T> &data)
     {
         try
         {

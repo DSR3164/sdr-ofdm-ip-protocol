@@ -1,19 +1,29 @@
 #include "logger.hpp"
 #include "phy/sdr.hpp"
 
-#include <SoapySDR/Logger.hpp>
 #include <SoapySDR/Device.hpp>
 #include <SoapySDR/Formats.hpp>
+#include <SoapySDR/Logger.hpp>
 
 void soapy_log_handler(const SoapySDRLogLevel logLevel, const char *message)
 {
     switch (logLevel)
     {
-    case SOAPY_SDR_FATAL: logs::sdr.critical("SoapySDR: {}", message); break;
-    case SOAPY_SDR_ERROR: logs::sdr.error("SoapySDR: {}", message); break;
-    case SOAPY_SDR_WARNING: logs::sdr.warn("SoapySDR: {}", message); break;
-    case SOAPY_SDR_INFO: logs::sdr.info("SoapySDR: {}", message); break;
-    default: logs::sdr.debug("SoapySDR: {}", message); break;
+    case SOAPY_SDR_FATAL:
+        logs::sdr.critical("SoapySDR: {}", message);
+        break;
+    case SOAPY_SDR_ERROR:
+        logs::sdr.error("SoapySDR: {}", message);
+        break;
+    case SOAPY_SDR_WARNING:
+        logs::sdr.warn("SoapySDR: {}", message);
+        break;
+    case SOAPY_SDR_INFO:
+        logs::sdr.info("SoapySDR: {}", message);
+        break;
+    default:
+        logs::sdr.debug("SoapySDR: {}", message);
+        break;
     }
 }
 
@@ -111,7 +121,8 @@ int SDR::readstream(std::vector<int16_t> &recv)
         cfg.buffer_size,
         sdr_flags,
         timeNs,
-        timeoutUs);
+        timeoutUs
+    );
 
     return ret;
 };
@@ -135,7 +146,8 @@ int SDR::writestream(std::vector<int16_t> &send)
         cfg.buffer_size,
         sdr_flags,
         timeNs + (4 * 1000 * 1000),
-        timeoutUs);
+        timeoutUs
+    );
 
     return ret;
 };
