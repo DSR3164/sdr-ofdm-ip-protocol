@@ -1,6 +1,6 @@
 #include "gui/phy_dev.hpp"
 
-#include "implot.h"
+#include <implot.h>
 #include <vector>
 
 extern float lat;

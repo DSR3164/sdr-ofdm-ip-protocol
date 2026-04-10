@@ -137,7 +137,7 @@ set(ZMQ_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(WITH_PERF_TOOL OFF CACHE BOOL "" FORCE)
 set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(ENABLE_CPACK OFF CACHE BOOL "" FORCE)
-set(CPPZMQ_BUILD_TESTS OFF)
+set(CPPZMQ_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 
 fetchcontent_declare(
   libzmq
@@ -158,8 +158,8 @@ fetchcontent_makeavailable(cppzmq)
 add_library(soip_core STATIC
   ${PROJECT_SOURCE_DIR}/src/ip/ip_layer.cpp
   ${PROJECT_SOURCE_DIR}/src/ip/tun_layer.cpp
-  ${PROJECT_SOURCE_DIR}/src/ip/bit_utils.cpp
   ${PROJECT_SOURCE_DIR}/src/ip/crc.cpp
+  ${PROJECT_SOURCE_DIR}/src/ip/fec_codec.cpp
 
   ${PROJECT_SOURCE_DIR}/src/phy/phy_layer.cpp
   ${PROJECT_SOURCE_DIR}/src/phy/sdr.cpp

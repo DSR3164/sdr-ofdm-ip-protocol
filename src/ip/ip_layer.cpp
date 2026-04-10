@@ -1,7 +1,11 @@
-#include "ip/crc.hpp"
-#include "ip/ip_layer.hpp"
 #include "sockets.hpp"
+#include "ip/bit_utils.hpp"
+#include "ip/crc.hpp"
+#include "ip/fec_codec.hpp"
+#include "ip/ip_layer.hpp"
+#include "ip/tun_layer.hpp"
 
+#include <SDL2/SDL_stdinc.h>
 #include <chrono>
 #include <cstdint>
 #include <linux/if.h>
@@ -17,16 +21,14 @@ void run_tun_tx(SharedData &data)
     if (tun_fd < 0)
         return;
 
-    auto ip_addr = set_interface_ip(tun_name);
+    uint8_t node_id = node_id_prompt();
+
+    auto ip_addr = set_interface_ip(tun_name, node_id);
 
     if (ip_addr)
-    {
         logs::tun.info("Interface {} started with IP {}", tun_name, *ip_addr);
-    }
     else
-    {
         logs::tun.error("Failed to assign IP to {}", tun_name);
-    }
 
     std::thread rx_thread(run_tun_rx, std::ref(data), tun_fd, tun_name);
 
@@ -34,6 +36,7 @@ void run_tun_tx(SharedData &data)
 
     uint8_t buffer[1500];
     std::vector<uint8_t> frame;
+    std::vector<uint32_t> encoded_bytes;
     FrameHeader hdr;
 
     while (!data.stop.load())
@@ -74,9 +77,11 @@ void run_tun_tx(SharedData &data)
             auto crc = calculateCRC16(frame);
             frame.insert(frame.end(), crc.begin(), crc.end());
 
-            ip.raw_bits = byte_to_bits(frame.data(), frame.size());
+            encoded_bytes = hamming_encoder(frame);
+            encoded_bytes = interleaving(encoded_bytes);
 
-            data.ip_sockets_bytes.write(frame);
+            ip.raw_bits = byte_to_bits(encoded_bytes, 32);
+
             data.ip_phy.write(ip.raw_bits);
         }
     }
@@ -95,6 +100,7 @@ void run_tun_tx(SharedData &data)
 void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
 {
     std::vector<uint8_t> frame;
+    std::vector<uint32_t> block;
 
     while (!data.stop.load())
     {
@@ -104,7 +110,11 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
             continue;
         }
 
-        frame = bits_to_bytes(frame);
+        block = bits_to_bytes<uint32_t>(frame, 32);
+
+        block = deinterleaving(block);
+
+        frame = hamming_decoder(block);
 
         if (frame.size() < sizeof(FrameHeader) + 2)
             continue;
@@ -128,11 +138,9 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
 
         std::vector<uint8_t> crc_calc = calculateCRC16(frame);
 
-        if (crc_calc[0] != frame[sizeof(FrameHeader) + payload_len] || crc_calc[1] != frame[sizeof(FrameHeader) + payload_len + 1])
+        if (crc_calc[0] != crc_received[0] || crc_calc[1] != crc_received[1])
         {
-            logs::tun.error("[{}] CRC mismatch: received {:02X}{:02X}, calculated {:02X}{:02X} | payload_len={}", tun_name,
-                            frame[sizeof(FrameHeader) + payload_len], frame[sizeof(FrameHeader) + payload_len + 1], crc_calc[0], crc_calc[1],
-                            payload_len);
+            logs::tun.error("[{}] CRC mismatch: received {:02X}{:02X}, calculated {:02X}{:02X} | payload_len={}", tun_name, crc_received[0], crc_received[1], crc_calc[0], crc_calc[1], payload_len);
             continue;
         }
 

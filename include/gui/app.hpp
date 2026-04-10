@@ -5,9 +5,9 @@
 
 #include <SDL2/SDL.h>
 #include <cstdint>
-#include <string>
+#include <implot.h>
 #include <span>
-#include "implot.h"
+#include <string>
 
 struct Buffers
 {
@@ -18,13 +18,13 @@ struct Buffers
 
     Buffers(int size1 = 3840, int size2 = 3840)
         : sdr_raw(size1),
-        dsp(size2)
+          dsp(size2)
     {
     }
 };
 
 class App {
-    public:
+  public:
     App(const std::string &title, int width, int height);
     ~App();
 
@@ -83,9 +83,8 @@ class App {
     }
 
     template <typename T>
-    class PlotSpec
-    {
-        public:
+    class PlotSpec {
+      public:
         ImPlotSpec spec;
         PlotSpec(int stride_elements = 1, ImPlotMarker marker = ImPlotMarker_None, float marker_size = 2.0f)
         {
@@ -95,8 +94,7 @@ class App {
             spec.Offset = 0;
         }
     };
-
-    private:
+  private:
     SDL_Window *window;
     SDL_GLContext gl_context;
     bool running = true;

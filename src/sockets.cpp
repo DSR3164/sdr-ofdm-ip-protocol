@@ -1,5 +1,4 @@
 #include "sockets.hpp"
-#include "zmq.hpp"
 
 #include <cstring>
 #include <filesystem>
@@ -9,6 +8,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 #include <vector>
+#include <zmq.hpp>
 
 socketData::socketData(const bool setup_dir, const std::string &base_folder) : is_owner(setup_dir)
 {

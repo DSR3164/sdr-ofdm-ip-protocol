@@ -3,10 +3,7 @@
 #include "common.hpp"
 #include "sockets.hpp"
 
-#include <optional>
-
-#pragma pack(push, 1)
-struct FrameHeader
+struct __attribute__((packed)) FrameHeader
 {
     uint16_t magic;
     uint16_t length;
@@ -14,7 +11,6 @@ struct FrameHeader
     uint8_t flags;
     uint8_t reserved;
 };
-#pragma pack(pop)
 
 struct IP
 {
@@ -32,8 +28,5 @@ void run_tun_tx(SharedData &data);
 void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name);
 int run_ip_gui_bridge(SharedData &data, socketData &socket);
 
-int allocate_tun(char *dev);
-std::optional<std::string> set_interface_ip(const char *dev_name);
-
-std::vector<uint8_t> byte_to_bits(const uint8_t *bytes, size_t size);
-std::vector<uint8_t> bits_to_bytes(const std::vector<uint8_t>& bits);
+std::vector<uint8_t> byte_to_bits(const std::vector<uint8_t> &bytes, int16_t r);
+std::vector<uint8_t> bits_to_bytes(const std::vector<uint8_t> &bits, int16_t r);

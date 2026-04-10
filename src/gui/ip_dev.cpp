@@ -1,8 +1,7 @@
 #include "gui/ip_dev.hpp"
 
-#include "imgui.h"
-#include "implot.h"
-
+#include <imgui.h>
+#include <implot.h>
 #include <vector>
 
 void ip_dev(App &app, Buffers &data) // IP layer
@@ -17,6 +16,7 @@ void ip_dev(App &app, Buffers &data) // IP layer
 
     if (ImGui::Begin("IP Layer"))
     {
+        // clang-format off
         ImGui::Text("[Hdr] Magic=0x%04X PLen=%d Seq=%d Flags=%d Reserved=%d",
             (raw_ptr_bits[0] << 8) | raw_ptr_bits[1],
             (raw_ptr_bits[2] << 8) | raw_ptr_bits[3],
@@ -33,6 +33,7 @@ void ip_dev(App &app, Buffers &data) // IP layer
             raw_ptr_bits[24], raw_ptr_bits[25],
             raw_ptr_bits[26], raw_ptr_bits[27]);
 
+        // clang-format on
         if (ImPlot::BeginPlot("IP Bits", ImGui::GetContentRegionAvail()))
         {
             ImPlot::SetupAxes("Index", "Value");
