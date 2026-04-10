@@ -1,5 +1,5 @@
-#include "gui/app.hpp"
 #include "sockets.hpp"
+#include "gui/app.hpp"
 
 #include <functional>
 #include <string>

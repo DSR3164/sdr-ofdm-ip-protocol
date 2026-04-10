@@ -1,17 +1,19 @@
+#include "logger.hpp"
+
+#include <arpa/inet.h>
 #include <cstdint>
-#include <cstring>
 #include <cstdio>
+#include <cstring>
 #include <fcntl.h>
+#include <iostream>
 #include <linux/if.h>
 #include <linux/if_tun.h>
 #include <netinet/in.h>
 #include <string>
 #include <sys/ioctl.h>
-#include <arpa/inet.h>
-#include <iostream>
-#include "logger.hpp"
 
-uint8_t node_id_prompt(){
+uint8_t node_id_prompt()
+{
     std::cout << "Enter node ID (10.0.0.x, x=): ";
     std::string input;
     std::getline(std::cin, input);
@@ -62,7 +64,8 @@ int allocate_tun(char *dev)
 std::optional<std::string> set_interface_ip(const char *dev_name, uint8_t node_id)
 {
     int sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock < 0) {
+    if (sock < 0)
+    {
         logs::tun.error("Socket creation failed: {}", strerror(errno));
         return std::nullopt;
     }
@@ -78,7 +81,8 @@ std::optional<std::string> set_interface_ip(const char *dev_name, uint8_t node_i
     addr->sin_family = AF_INET;
     inet_pton(AF_INET, ip, &addr->sin_addr);
 
-    if (ioctl(sock, SIOCSIFADDR, &ifr) < 0) {
+    if (ioctl(sock, SIOCSIFADDR, &ifr) < 0)
+    {
         logs::tun.error("SIOCSIFADDR failed: {}", strerror(errno));
         close(sock);
         return std::nullopt;
@@ -89,19 +93,18 @@ std::optional<std::string> set_interface_ip(const char *dev_name, uint8_t node_i
     netmask->sin_family = AF_INET;
     inet_pton(AF_INET, "255.255.255.252", &netmask->sin_addr);
 
-    if (ioctl(sock, SIOCSIFNETMASK, &ifr) < 0) {
+    if (ioctl(sock, SIOCSIFNETMASK, &ifr) < 0)
         logs::tun.error("SIOCSIFNETMASK failed: {}", strerror(errno));
-    }
 
-    if (ioctl(sock, SIOCGIFFLAGS, &ifr) < 0) {
+    if (ioctl(sock, SIOCGIFFLAGS, &ifr) < 0)
         logs::tun.error("SIOCGIFFLAGS failed: {}", strerror(errno));
-    } else {
+    else
+    {
         ifr.ifr_flags |= IFF_UP | IFF_RUNNING;
-        if (ioctl(sock, SIOCSIFFLAGS, &ifr) < 0) {
+        if (ioctl(sock, SIOCSIFFLAGS, &ifr) < 0)
             logs::tun.error("SIOCSIFFLAGS failed: {}", strerror(errno));
-        } else {
+        else
             logs::tun.info("Interface {} is UP", dev_name);
-        }
     }
 
     close(sock);

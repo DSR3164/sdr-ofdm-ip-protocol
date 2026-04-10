@@ -1,9 +1,9 @@
+#include "sockets.hpp"
+#include "ip/bit_utils.hpp"
 #include "ip/crc.hpp"
+#include "ip/fec_codec.hpp"
 #include "ip/ip_layer.hpp"
 #include "ip/tun_layer.hpp"
-#include "sockets.hpp"
-#include "ip/fec_codec.hpp"
-#include "ip/bit_utils.hpp"
 
 #include <SDL2/SDL_stdinc.h>
 #include <chrono>
@@ -26,13 +26,9 @@ void run_tun_tx(SharedData &data)
     auto ip_addr = set_interface_ip(tun_name, node_id);
 
     if (ip_addr)
-    {
         logs::tun.info("Interface {} started with IP {}", tun_name, *ip_addr);
-    }
     else
-    {
         logs::tun.error("Failed to assign IP to {}", tun_name);
-    }
 
     std::thread rx_thread(run_tun_rx, std::ref(data), tun_fd, tun_name);
 
@@ -144,9 +140,7 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
 
         if (crc_calc[0] != crc_received[0] || crc_calc[1] != crc_received[1])
         {
-            logs::tun.error("[{}] CRC mismatch: received {:02X}{:02X}, calculated {:02X}{:02X} | payload_len={}", tun_name,
-                            crc_received[0], crc_received[1], crc_calc[0], crc_calc[1],
-                            payload_len);
+            logs::tun.error("[{}] CRC mismatch: received {:02X}{:02X}, calculated {:02X}{:02X} | payload_len={}", tun_name, crc_received[0], crc_received[1], crc_calc[0], crc_calc[1], payload_len);
             continue;
         }
 

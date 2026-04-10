@@ -1,8 +1,8 @@
 #include "common.hpp"
-#include "ip/ip_layer.hpp"
+#include "sockets.hpp"
 #include "phy/dsp.hpp"
 #include "phy/phy_layer.hpp"
-#include "sockets.hpp"
+#include "ip/ip_layer.hpp"
 
 #include <atomic>
 #include <csignal>

@@ -1,6 +1,6 @@
-#include <spdlog/spdlog.h>
 #include <spdlog/fmt/bundled/color.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/spdlog.h>
 
 namespace logs
 {
@@ -10,4 +10,4 @@ namespace logs
     extern spdlog::logger &dsp;
     extern spdlog::logger &main;
     extern spdlog::logger &socket;
-}
+} // namespace logs
