@@ -20,7 +20,7 @@ uint8_t node_id_prompt(){
     if (!input.empty())
         id = static_cast<uint8_t>(std::stoi(input));
 
-    std::cout << "→ Using IP: 10.0.0." << static_cast<int>(id) << "\n";
+    logs::tun.info("Using IP: 10.0.0.{}", static_cast<int>(id));
 
     return id;
 }

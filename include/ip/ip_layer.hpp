@@ -7,8 +7,8 @@ struct __attribute__((packed)) FrameHeader {
     uint16_t magic;
     uint16_t length;
     uint16_t seq;
-    uint8_t  flags;
-    uint8_t  reserved;
+    uint8_t flags;
+    uint8_t reserved;
 };
 
 struct IP
