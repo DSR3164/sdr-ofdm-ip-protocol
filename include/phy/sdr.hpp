@@ -68,8 +68,8 @@ struct SDRConfig
 {
     int buffer_size = 1920;
     double sample_rate = 1.92e6;
-    double tx_freq = 2000e6;
-    double rx_freq = 2000e6;
+    double tx_freq = 2200e6; // FDD: set rx_freq to tx_freq + 3MHz on the other node
+    double rx_freq = 2200e6; // FDD: adjust per node, see Configuration in README
     float tx_gain = 89.0f;
     float rx_gain = 25.0f;
     bool enable_tx = true;
