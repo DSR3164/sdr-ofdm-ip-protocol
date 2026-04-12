@@ -3,6 +3,7 @@
 !/**/
 !*.hpp
 !*.cpp
+!*.png
 
 !.gitignore
 !README.md
