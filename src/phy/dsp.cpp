@@ -576,7 +576,7 @@ void ofdm(const std::vector<uint8_t> &bits, std::vector<int16_t> &buffer, DSP &d
         qam16_mapper_3gpp(bits, symbols);
         break;
     case Modulation::QAM64:
-        symbols.resize(bits.size() / 7);
+        symbols.resize(bits.size() / 6);
         qam64_mapper_3gpp(bits, symbols);
         break;
     default:
