@@ -45,25 +45,30 @@ class DoubleBuffer {
     }
     ~DoubleBuffer() = default;
 
-    int read(std::vector<T> &buffer)
+    int read(std::vector<T> &buffer, bool blocking = false)
     {
-        if (!ready.load(std::memory_order_acquire))
+        if (blocking)
+            ready.wait(false, std::memory_order_acquire);
+        else if (!ready.load(std::memory_order_acquire))
             return -1;
-        else
-        {
-            int ri = read_index.load(std::memory_order_relaxed);
-            buffer = buff[ri];
-            ready.store(false, std::memory_order_relaxed);
-            return 0;
-        }
+        int ri = read_index.load(std::memory_order_relaxed);
+        buffer = buff[ri];
+        ready.store(false, std::memory_order_release);
+        if (blocking)
+            ready.notify_one();
+        return 0;
     }
-    int write(std::vector<T> &buffer)
+    int write(std::vector<T> &buffer, bool blocking = false)
     {
+        if (blocking)
+            ready.wait(true, std::memory_order_acquire);
         int wi = write_index.load(std::memory_order_relaxed);
         buff[wi] = buffer;
         read_index.store(wi, std::memory_order_relaxed);
         write_index.store(wi ^ 1, std::memory_order_relaxed);
         ready.store(true, std::memory_order_release);
+        if (blocking)
+            ready.notify_one();
         return 0;
     }
     std::vector<T> &get_write_buffer()
@@ -71,12 +76,16 @@ class DoubleBuffer {
         int index = write_index.load(std::memory_order_relaxed);
         return buff[index];
     }
-    int swap()
+    int swap(bool blocking = false)
     {
+        if (blocking)
+            ready.wait(true, std::memory_order_acquire);
         int wi = write_index.load(std::memory_order_relaxed);
         read_index.store(wi, std::memory_order_relaxed);
         write_index.store(wi ^ 1, std::memory_order_relaxed);
         ready.store(true, std::memory_order_release);
+        if (blocking)
+            ready.notify_one();
         return 0;
     }
     bool is_ready() const
