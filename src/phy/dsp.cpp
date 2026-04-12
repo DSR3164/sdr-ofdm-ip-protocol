@@ -333,6 +333,7 @@ void calculate_pilots_and_guard(DSP::OFDMConfig ofdm_config, std::vector<int> &p
 void ofdm_equalize(std::vector<std::complex<float>> &input, std::vector<std::complex<float>> &output, DSP::OFDMConfig ofdm_config)
 {
     int N = ofdm_config.n_subcarriers;
+    float accumulated_phase = 0;
     const std::complex<float> known_pilot = { 1.0f, 0.0f };
     std::vector<std::complex<float>> temp = input;
     output.clear();
@@ -404,14 +405,23 @@ void ofdm_equalize(std::vector<std::complex<float>> &input, std::vector<std::com
             else
                 equalized[k] = sym[k];
 
-        float phase = 0;
+        float cpe = 0;
         for (auto k : pilots)
-            phase += std::arg(equalized[k] / known_pilot);
+            cpe += std::arg(equalized[k] / known_pilot);
+        cpe /= pilots.size();
 
-        phase /= pilots.size();
+        accumulated_phase += cpe;
 
-        std::complex<float> rot = std::exp(std::complex<float>(0, -phase));
+        float mean_amp_pilots = 0;
+        for (auto k : pilots)
+            mean_amp_pilots += std::abs(equalized[k]);
+        mean_amp_pilots /= pilots.size();
 
+        for (int k = 0; k < N; ++k)
+            if (!is_guard[k])
+                equalized[k] /= mean_amp_pilots;
+
+        std::complex<float> rot = std::exp(std::complex<float>(0, -accumulated_phase));
         for (int k = 0; k < N; ++k)
             if (!is_guard[k])
                 equalized[k] *= rot;
