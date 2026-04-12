@@ -30,7 +30,7 @@ struct DSP
     {
         Modulation mod = Modulation::QAM16;
         int n_subcarriers = 128;
-        int pilot_spacing = 6;
+        int pilot_spacing = 25;
         int n_cp = 32;
     } ofdm_cfg;
 };
