@@ -499,13 +499,12 @@ float coarse_cfo(std::vector<std::complex<float>> &r, int max_index, int N, int 
     return cfo_hz;
 }
 
-std::vector<std::complex<float>> cfo_est(const std::vector<std::complex<float>> &signal, DSP data)
+void cfo_est(std::vector<std::complex<float>> &signal, DSP &data)
 {
     int N = data.ofdm_cfg.n_subcarriers;
     int CP = data.ofdm_cfg.n_cp;
     float fs = static_cast<float>(data.sample_rate);
     int start = data.max_index + N;
-    std::vector<std::complex<float>> corrected = signal;
 
     int symbol_len = N + CP;
     for (size_t i = 0; i < 10; ++i)
@@ -526,11 +525,9 @@ std::vector<std::complex<float>> cfo_est(const std::vector<std::complex<float>> 
         for (int n = 0; n < N + CP; ++n)
         {
             float phase = -2 * M_PIf * delta_f * (sym_start + n) / fs;
-            corrected[sym_start + n] *= std::complex<float>(std::cos(phase), std::sin(phase));
+            signal[sym_start + n] *= std::complex<float>(std::cos(phase), std::sin(phase));
         }
     }
-
-    return corrected;
 }
 
 void ofdm(const std::vector<uint8_t> &bits, std::vector<int16_t> &buffer, DSP &dsp_config)
@@ -702,7 +699,7 @@ int run_dsp_rx(SharedData &data)
         for_processing = raw;
         plato.resize(for_processing.size());
         dsp.max_index = zc_sync(for_processing, zadoff_chu, zc_energy, plato);
-        for_processing = cfo_est(for_processing, dsp);
+        cfo_est(for_processing, dsp);
 
         if (static_cast<int>(for_processing.size()) > dsp.max_index + dsp.ofdm_cfg.n_subcarriers * 2)
             next += dsp.max_index + dsp.ofdm_cfg.n_subcarriers;
