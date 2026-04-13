@@ -36,7 +36,7 @@ int run_sdr(SharedData &data)
             ret_tx = sdr.writestream(writebuffer);
 
         if (ret_rx > 0)
-            data.sdr_dsp_rx.swap();
+            data.sdr_dsp_rx.swap(true);
         else if (ret_rx == SOAPY_SDR_OVERFLOW)
             logs::sdr.error("OVERFLOW");
         else

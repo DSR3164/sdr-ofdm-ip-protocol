@@ -672,8 +672,8 @@ int run_dsp_rx(SharedData &data)
 
     while (!data.stop.load())
     {
-        if (data.sdr_dsp_rx.read(temp) == 0)
-        {
+        data.sdr_dsp_rx.read(temp, true);
+
             size_t n = temp.size() / 2;
             raw.resize(n);
 
@@ -688,9 +688,6 @@ int run_dsp_rx(SharedData &data)
                 out[i] = { I, Q };
                 in += 2;
             }
-        }
-        else
-            continue;
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
         start = std::chrono::steady_clock::now();
@@ -724,7 +721,7 @@ int run_dsp_rx(SharedData &data)
 
         data.dsp_sockets.write(equalized);
         auto bits = demodulate(dsp.ofdm_cfg.mod, equalized);
-        data.phy_ip.write(bits);
+        data.phy_ip.write(bits, true);
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
         end = std::chrono::steady_clock::now();
@@ -743,8 +740,7 @@ int run_dsp_tx(SharedData &data)
 
     while (!data.stop.load())
     {
-        if (data.ip_phy.read(bits) == -1)
-            continue;
+        data.ip_phy.read(bits, true);
 
         logs::dsp.trace("[{}] Read {} bits", fmt::format(fmt::fg(fmt::color::cyan), "TX"), bits.size());
         ofdm(bits, buffer, data.dsp);
