@@ -4,6 +4,7 @@
 #include "ip/fec_codec.hpp"
 #include "ip/ip_layer.hpp"
 #include "ip/tun_layer.hpp"
+#include "ip/ip_nat.hpp"
 
 #include <SDL2/SDL_stdinc.h>
 #include <chrono>
@@ -26,7 +27,18 @@ void run_tun_tx(SharedData &data)
     auto ip_addr = set_interface_ip(tun_name, node_id);
 
     if (ip_addr)
+    {
         logs::tun.info("Interface {} started with IP {}", tun_name, *ip_addr);
+        if (ip_addr)
+        {
+            logs::tun.info("Interface {} started with IP {}", tun_name, *ip_addr);
+
+            if (node_id == 1)
+                enable_nat(tun_name);
+            else if (node_id == 2)
+                enable_client(tun_name);
+        }
+    }
     else
         logs::tun.error("Failed to assign IP to {}", tun_name);
 
