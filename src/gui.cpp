@@ -49,8 +49,22 @@ int run_ip_brigde(Buffers &data, socketData &socket)
             continue;
         }
 
-        if (client.recv_frame(header, bytes))
-            data.ip.write(bytes);
+        bool has_more = false;
+
+        while (client.recv_header(header, has_more))
+        {
+            if (header.type == MsgType::Vector)
+                if (has_more && client.recv_payload_vector(bytes))
+                    data.ip.write(bytes);
+
+
+            if (header.type == MsgType::var)
+            {
+                int chet_vosem_vosem = 0;
+                if (has_more && client.recv_payload_value(chet_vosem_vosem))
+                    logs::gui.trace("Received var: ", chet_vosem_vosem);
+            }
+        }
     }
 
     return 0;
@@ -97,12 +111,20 @@ int run_dsp_bridge(Buffers &bufs, socketData &socket)
             continue;
         }
 
-        if (client.recv_frame(h, symbols))
+        bool has_more = false;
+
+        while (client.recv_header(h, has_more))
         {
-            logs::gui.trace("RECIEVED frame from SDR, size: {}", symbols.size());
+            if (h.type == MsgType::Vector)
+            {
+                if (has_more && client.recv_payload_vector(symbols))
+                {
+                    logs::gui.trace("RECIEVED frame from SDR, size: {}", symbols.size());
+                    bufs.dsp.write(symbols);
+                }
+            }
             lat = 0.001 * (client.now_ns() - h.timestamp_ns) + 0.999 * lat;
             bufs.sdr_raw.write(raw);
-            bufs.dsp.write(symbols);
         }
     }
     return 0;

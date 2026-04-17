@@ -178,6 +178,9 @@ int run_ip_gui_bridge(SharedData &data, socketData &socket)
         {
             if (!server.send_frame(MsgType::Vector, bytes))
                 logs::socket.error("Frame send failed");
+
+            if (!server.send_value(MsgType::var, 1440))
+                logs::socket.error("Var send failed");
         }
         else
             std::this_thread::sleep_for(std::chrono::milliseconds(10));

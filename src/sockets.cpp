@@ -130,7 +130,7 @@ bool IPC::start_server(const std::string &path)
     try
     {
         _socket.set(zmq::sockopt::linger, 0);
-        _socket.set(zmq::sockopt::sndhwm, 1);
+        _socket.set(zmq::sockopt::sndhwm, 100);
         _socket.bind(path);
         return true;
     }
@@ -158,4 +158,16 @@ bool IPC::connect_to(const std::string &path)
         logs::socket.error("Failed to connect to {}: {}", path, e.what());
         return false;
     }
+}
+
+bool IPC::recv_header(ipc_header &header, bool &has_more)
+{
+    zmq::message_t msg_h;
+    auto res = _socket.recv(msg_h, zmq::recv_flags::none);
+    if (!res || msg_h.size() != sizeof(ipc_header))
+        return false;
+
+    std::memcpy(&header, msg_h.data(), sizeof(ipc_header));
+    has_more = msg_h.more();
+    return true;
 }
