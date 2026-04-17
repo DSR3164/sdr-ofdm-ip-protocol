@@ -101,6 +101,7 @@ target_link_libraries(imgui
   PUBLIC
   SDL2::SDL2
   OpenGL::GL
+  GLEW::GLEW
 )
 
 # ---------- ImPlot ----------
@@ -111,6 +112,15 @@ fetchcontent_declare(
 )
 
 fetchcontent_makeavailable(implot)
+
+# ---------- ImPlot3D ----------
+fetchcontent_declare(
+  implot3d
+  GIT_REPOSITORY https://github.com/brenocq/implot3d
+  GIT_TAG main
+)
+
+fetchcontent_makeavailable(implot3d)
 
 if(TARGET SoapySDR::SoapySDR)
   set(SOAPY_TARGET SoapySDR::SoapySDR)
@@ -130,7 +140,19 @@ target_include_directories(implot PUBLIC
   ${implot_SOURCE_DIR}
 )
 
+add_library(implot3d STATIC
+  ${implot3d_SOURCE_DIR}/implot3d.cpp
+  ${implot3d_SOURCE_DIR}/implot3d_demo.cpp
+  ${implot3d_SOURCE_DIR}/implot3d_items.cpp
+  ${implot3d_SOURCE_DIR}/implot3d_meshes.cpp
+)
+
+target_include_directories(implot3d PUBLIC
+  ${implot3d_SOURCE_DIR}
+)
+
 target_link_libraries(implot PUBLIC imgui)
+target_link_libraries(implot3d PUBLIC imgui)
 
 # ---------- ZeroMQ (Core) ----------
 set(ZMQ_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -202,6 +224,7 @@ target_link_libraries(soip_gui
   soip_core
   imgui
   implot
+  implot3d
   GLEW::GLEW
   SDL2::SDL2
   OpenGL::GL

@@ -6,6 +6,7 @@
 #include "backends/imgui_impl_opengl3.h"
 #include "backends/imgui_impl_sdl2.h"
 #include "imgui.h"
+#include "implot3d.h"
 #include "sockets.hpp"
 #include <GL/glew.h>
 #include <filesystem>
@@ -21,6 +22,7 @@ App::App(const std::string &title, int width, int height)
 
     ImGui::CreateContext();
     ImPlot::CreateContext();
+    ImPlot3D::CreateContext();
 
     ImGuiIO &io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
@@ -34,6 +36,7 @@ App::~App()
 {
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
+    ImPlot3D::DestroyContext();
     ImPlot::DestroyContext();
     ImGui::DestroyContext();
     SDL_GL_DeleteContext(gl_context);
