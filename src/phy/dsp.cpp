@@ -548,7 +548,7 @@ void cfo_est(std::vector<std::complex<float>> &signal, DSP &data)
     }
 }
 
-void ofdm(const std::vector<uint8_t> &bits, std::vector<int16_t> &buffer, DSP &dsp_config)
+void ofdm(std::vector<uint8_t> &bits, std::vector<int16_t> &buffer, DSP &dsp_config)
 {
     auto &ofdm_config = dsp_config.ofdm_cfg;
     int Ncp = ofdm_config.n_cp;
@@ -560,30 +560,43 @@ void ofdm(const std::vector<uint8_t> &bits, std::vector<int16_t> &buffer, DSP &d
         return;
 
     buffer.clear();
-    std::vector<std::complex<float>> symbols(bits.size() / 1);
+    std::vector<std::complex<float>> symbols(bits.size());
     std::vector<std::complex<float>> schmidl(N);
     auto zc = generate_zc(127, 5);
     switch (modulation_type)
     {
-    case Modulation::BPSK:
+    case Modulation::BPSK: {
         bpsk_mapper_3gpp(bits, symbols);
         break;
-    case Modulation::QPSK:
+    }
+    case Modulation::QPSK: {
+        if (bits.size() % 2 != 0)
+            bits.resize(bits.size() + (2 - bits.size() % 2), 0);
         symbols.resize(bits.size() / 2);
         qpsk_mapper_3gpp(bits, symbols);
         break;
-    case Modulation::QAM16:
+    }
+    case Modulation::QAM16: {
+        if (bits.size() % 4 != 0)
+            bits.resize(bits.size() + (4 - bits.size() % 4), 0);
         symbols.resize(bits.size() / 4);
         qam16_mapper_3gpp(bits, symbols);
         break;
-    case Modulation::QAM64:
+    }
+    case Modulation::QAM64: {
+        if (bits.size() % 6 != 0)
+            bits.resize(bits.size() + (6 - bits.size() % 6), 0);
         symbols.resize(bits.size() / 6);
         qam64_mapper_3gpp(bits, symbols);
         break;
-    default:
+    }
+    default: {
+        if (bits.size() % 4 != 0)
+            bits.resize(bits.size() + (4 - bits.size() % 4), 0);
         symbols.resize(bits.size() / 4);
         qpsk_mapper_3gpp(bits, symbols);
         break;
+    }
     }
 
     FFTWPlan ifft(N, false);
