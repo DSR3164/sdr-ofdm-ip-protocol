@@ -123,9 +123,8 @@ static std::pair<uint8_t, uint8_t> demap_component_3gpp(float val)
     return { b_sign, b_amp };
 }
 
-std::vector<uint8_t> demodulate(Modulation mod, const std::vector<std::complex<float>> &symbols)
+void demodulate(Modulation mod, const std::vector<std::complex<float>> &symbols, std::vector<uint8_t> &bits)
 {
-    std::vector<uint8_t> bits;
 
     switch (mod)
     {
@@ -164,31 +163,56 @@ std::vector<uint8_t> demodulate(Modulation mod, const std::vector<std::complex<f
     }
     case Modulation::QAM64: {
         bits.resize(symbols.size() * 6);
-        const float scale = sqrt(42.0f);
+
+        std::vector<std::complex<float>> s(1);
+        std::vector<uint8_t> b(6);
+
+        struct Point
+        {
+            float I, Q;
+            uint8_t bits[6];
+        };
+        std::vector<Point> constellation(64);
+
+        for (int idx = 0; idx < 64; ++idx)
+        {
+            for (int bit = 0; bit < 6; ++bit)
+                b[bit] = (idx >> (5 - bit)) & 1;
+            qam64_mapper_3gpp(b, s);
+            constellation[idx].I = s[0].real();
+            constellation[idx].Q = s[0].imag();
+            for (int bit = 0; bit < 6; ++bit)
+                constellation[idx].bits[bit] = b[bit];
+        }
 
         for (size_t i = 0; i < symbols.size(); ++i)
         {
-            float I = symbols[i].real() * scale;
-            float Q = symbols[i].imag() * scale;
+            float rI = symbols[i].real();
+            float rQ = symbols[i].imag();
 
-            bits[6 * i + 0] = (I < 0) ? 1 : 0;
-            bits[6 * i + 1] = (Q < 0) ? 1 : 0;
+            int best_idx = 0;
+            float best_dist = std::numeric_limits<float>::max();
 
-            bits[6 * i + 2] = (std::abs(I) < 4.0f) ? 0 : 1;
-            bits[6 * i + 3] = (std::abs(Q) < 4.0f) ? 0 : 1;
+            for (int j = 0; j < 64; ++j)
+            {
+                float dI = rI - constellation[j].I;
+                float dQ = rQ - constellation[j].Q;
+                float dist = dI * dI + dQ * dQ;
+                if (dist < best_dist)
+                {
+                    best_dist = dist;
+                    best_idx = j;
+                }
+            }
 
-            float absI2 = std::abs(std::abs(I) - 4.0f);
-            float absQ2 = std::abs(std::abs(Q) - 4.0f);
-            bits[6 * i + 4] = (absI2 < 2.0f) ? 0 : 1;
-            bits[6 * i + 5] = (absQ2 < 2.0f) ? 0 : 1;
+            for (int bit = 0; bit < 6; ++bit)
+                bits[6 * i + bit] = constellation[best_idx].bits[bit];
         }
         break;
     }
     default:
         logs::dsp.warn("Неподдерживаемый тип демодуляции");
     }
-
-    return bits;
 }
 
 void split_to_float(const std::complex<float> *__restrict src, float *__restrict dst_re, float *__restrict dst_im, size_t n)
@@ -658,6 +682,7 @@ int run_dsp_rx(SharedData &data)
     std::chrono::steady_clock::time_point end;
     std::vector<std::complex<float>> raw(buff_size);
     std::vector<float> plato(1920);
+    std::vector<uint8_t> bits(4000);
 
     std::vector<std::complex<float>> for_processing(buff_size);
     std::vector<std::complex<float>> processed(1920);
@@ -724,7 +749,7 @@ int run_dsp_rx(SharedData &data)
         ofdm_equalize(processed, equalized, dsp.ofdm_cfg);
 
         data.dsp_sockets.write(equalized);
-        auto bits = demodulate(dsp.ofdm_cfg.mod, equalized);
+        demodulate(dsp.ofdm_cfg.mod, equalized, bits);
         data.phy_ip.write(bits, true);
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
