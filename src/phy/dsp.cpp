@@ -689,6 +689,15 @@ int run_dsp_rx(SharedData &data)
     std::chrono::steady_clock::time_point end;
     std::vector<float> plato(buff_size * 2);
     std::vector<uint8_t> bits(4000);
+
+    float coarse_mean = 0.0f;
+    float coarse = 0.0f;
+    float alpha = 0.01f;
+    std::chrono::nanoseconds duration{};
+
+    const int N = dsp.ofdm_cfg.n_subcarriers;
+    const int CP = dsp.ofdm_cfg.n_cp;
+
     std::vector<int16_t> temp_a(buff_size * 2, 0);
     std::vector<int16_t> temp_b(buff_size * 2, 0);
 
@@ -725,6 +734,11 @@ int run_dsp_rx(SharedData &data)
         int next = 0;
         for_processing = raw_b;
         plato.resize(for_processing.size());
+
+        dsp.max_index = ofdm_cp_corr(for_processing, N, CP, plato);
+        coarse = coarse_cfo(for_processing, dsp.max_index, N, CP, data.sdr.get_sample_rate());
+        coarse_mean = alpha * coarse + (1.0f - alpha) * coarse_mean;
+
         dsp.max_index = zc_sync(for_processing, zadoff_chu, zc_energy, plato, 0.2) + dsp.offset;
 
         if (dsp.max_index < 0)
