@@ -145,5 +145,6 @@ class SDR {
 
     int sdr_flags = 0;
     long long timeNs = 0;
+    long long timeNSdelay = 2e6;
     long timeoutUs = 0;
 };
