@@ -478,13 +478,7 @@ std::vector<std::complex<float>> ofdm_zadoff_chu_symbol(DSP &data)
     ifft.in[0][0] = 0;
     ifft.in[0][1] = 0;
 
-    for (size_t i = 1; i <= 63; ++i)
-    {
-        ifft.in[i][0] = zc[i - 1].real();
-        ifft.in[i][1] = zc[i - 1].imag();
-    }
-
-    for (size_t i = 64; i <= 127; ++i)
+    for (size_t i = 1; i <= 127; ++i)
     {
         ifft.in[i][0] = zc[i - 1].real();
         ifft.in[i][1] = zc[i - 1].imag();
