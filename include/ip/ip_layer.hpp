@@ -9,7 +9,7 @@ struct __attribute__((packed)) FrameHeader
     uint16_t length;
     uint16_t seq;
     uint8_t flags;
-    uint8_t reserved;
+    uint8_t id;
 };
 
 struct IP
@@ -22,6 +22,13 @@ struct IP
     std::vector<uint8_t> frame_bits;
 
     size_t seq = 0;
+    size_t id = 0;
+};
+
+struct ReassemblyBuffer
+{
+    std::vector<uint8_t> data;
+    uint16_t last_seq = 0;
 };
 
 void run_tun_tx(SharedData &data);
@@ -30,3 +37,5 @@ int run_ip_gui_bridge(SharedData &data, socketData &socket);
 
 std::vector<uint8_t> byte_to_bits(const std::vector<uint8_t> &bytes, int16_t r);
 std::vector<uint8_t> bits_to_bytes(const std::vector<uint8_t> &bits, int16_t r);
+
+constexpr ssize_t BUF_MTU = 250;

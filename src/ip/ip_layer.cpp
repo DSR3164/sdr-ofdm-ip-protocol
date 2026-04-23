@@ -3,11 +3,13 @@
 #include "ip/crc.hpp"
 #include "ip/fec_codec.hpp"
 #include "ip/ip_layer.hpp"
-#include "ip/tun_layer.hpp"
 #include "ip/ip_nat.hpp"
+#include "ip/tun_layer.hpp"
 
 #include <SDL2/SDL_stdinc.h>
+#include <algorithm>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <linux/if.h>
 #include <netinet/in.h>
@@ -29,15 +31,11 @@ void run_tun_tx(SharedData &data)
     if (ip_addr)
     {
         logs::tun.info("Interface {} started with IP {}", tun_name, *ip_addr);
-        if (ip_addr)
-        {
-            logs::tun.info("Interface {} started with IP {}", tun_name, *ip_addr);
 
-            if (node_id == 1)
-                enable_nat(tun_name);
-            else if (node_id == 2)
-                enable_client(tun_name);
-        }
+        if (node_id == 1)
+            enable_nat(tun_name);
+        else if (node_id == 2)
+            enable_client(tun_name);
     }
     else
         logs::tun.error("Failed to assign IP to {}", tun_name);
@@ -66,35 +64,40 @@ void run_tun_tx(SharedData &data)
 
         if (nbytes > 0)
         {
-            ip.raw_bits.clear();
-            frame.clear();
-            frame.reserve(sizeof(FrameHeader) + nbytes + 2);
 
-            logs::tun.trace("[{}] Read {} bytes", tun_name, static_cast<size_t>(nbytes));
-            ip.nbytes = nbytes;
+            std::vector<uint8_t> payload(buffer, buffer + nbytes);
 
-            ip.buffer.assign(buffer, buffer + nbytes);
-            ip.ready_buf.store(true, std::memory_order_release);
+            auto crc = calculateCRC16(payload);
+            payload.insert(payload.end(), crc.begin(), crc.end());
 
-            hdr.magic = htons(0x1F35);
-            hdr.length = htons(nbytes);
-            hdr.seq = htons(ip.seq++);
-            hdr.flags = 0;
-            hdr.reserved = 0;
+            size_t total_len = payload.size();
+            size_t offset = 0;
+            uint8_t current_packet_id = static_cast<uint8_t>(ip.id++ & 0xFF);
 
-            auto *hdr_ptr = reinterpret_cast<uint8_t *>(&hdr);
-            frame.insert(frame.end(), hdr_ptr, hdr_ptr + sizeof(FrameHeader));
-            frame.insert(frame.end(), buffer, buffer + nbytes);
+            while (offset < total_len)
+            {
+                size_t chunk_size = std::min<size_t>(BUF_MTU, total_len - offset);
+                bool is_last = (offset + chunk_size >= total_len);
 
-            auto crc = calculateCRC16(frame);
-            frame.insert(frame.end(), crc.begin(), crc.end());
+                hdr.magic = htons(0x1F35);
+                hdr.length = htons(static_cast<uint16_t>(chunk_size));
+                hdr.seq = htons(ip.seq++);
+                hdr.id = current_packet_id;
+                hdr.flags = is_last ? 1 : 0;
 
-            encoded_bytes = hamming_encoder(frame);
-            encoded_bytes = interleaving(encoded_bytes);
+                std::vector<uint8_t> frame;
+                auto *hdr_ptr = reinterpret_cast<uint8_t *>(&hdr);
+                frame.insert(frame.end(), hdr_ptr, hdr_ptr + sizeof(FrameHeader));
+                frame.insert(frame.end(), payload.begin() + offset, payload.begin() + offset + chunk_size);
 
-            ip.raw_bits = byte_to_bits(encoded_bytes, 32);
+                auto encoded = hamming_encoder(frame);
+                encoded = interleaving(encoded);
+                auto bits = byte_to_bits(encoded, 32);
 
-            data.ip_phy.write(ip.raw_bits);
+                data.ip_phy.write(bits);
+
+                offset += chunk_size;
+            }
         }
     }
 
@@ -114,6 +117,8 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
     std::vector<uint8_t> frame;
     std::vector<uint32_t> block;
 
+    std::unordered_map<uint8_t, ReassemblyBuffer> assembly_map;
+
     while (!data.stop.load())
     {
         if (data.phy_ip.read(frame) < 0)
@@ -123,9 +128,7 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
         }
 
         block = bits_to_bytes<uint32_t>(frame, 32);
-
         block = deinterleaving(block);
-
         frame = hamming_decoder(block);
 
         if (frame.size() < sizeof(FrameHeader) + 2)
@@ -133,40 +136,46 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
 
         FrameHeader hdr;
         memcpy(&hdr, frame.data(), sizeof(FrameHeader));
-        uint16_t payload_len = ntohs(hdr.length);
-        size_t expected_len = sizeof(FrameHeader) + payload_len + 2;
-
-        frame.resize(expected_len);
-
         if (ntohs(hdr.magic) != 0x1F35)
         {
             logs::tun.debug("[{}] Bad magic: 0x{:04X}", tun_name, ntohs(hdr.magic));
             continue;
         }
 
-        std::vector<uint8_t> crc_received(frame.end() - 2, frame.end());
+        uint16_t payload_len = ntohs(hdr.length);
+        uint8_t *fragment_data = frame.data() + sizeof(FrameHeader);
 
-        frame.resize(sizeof(FrameHeader) + payload_len);
+        auto &res_buf = assembly_map[hdr.id];
+        res_buf.data.insert(res_buf.data.end(), fragment_data, fragment_data + payload_len);
+        res_buf.last_seq = ntohs(hdr.seq);
 
-        std::vector<uint8_t> crc_calc = calculateCRC16(frame);
-
-        if (crc_calc[0] != crc_received[0] || crc_calc[1] != crc_received[1])
+        if (hdr.flags & 1)
         {
-            logs::tun.error("[{}] CRC mismatch: received {:02X}{:02X}, calculated {:02X}{:02X} | payload_len={}", tun_name, crc_received[0], crc_received[1], crc_calc[0], crc_calc[1], payload_len);
-            continue;
+            std::vector<uint8_t> &full_packet = res_buf.data;
+
+            if (full_packet.size() > 2)
+            {
+                std::vector<uint8_t> crc_received(full_packet.end() - 2, full_packet.end());
+                full_packet.resize(full_packet.size() - 2);
+
+                std::vector<uint8_t> crc_calc = calculateCRC16(full_packet);
+
+                if (crc_calc[0] == crc_received[0] && crc_calc[1] == crc_received[1])
+                {
+                    ssize_t written = write(tun_fd, full_packet.data(), full_packet.size());
+
+                    data.ip_sockets_bytes.write(full_packet);
+
+                    if (written < 0)
+                        logs::tun.error("[{}] Write error: {}", tun_name, strerror(errno));
+                }
+                else
+                {
+                    logs::tun.error("[{}] CRC Failed for assembled packet ID {}", tun_name, hdr.id);
+                }
+            }
+            assembly_map.erase(hdr.id);
         }
-
-        const uint8_t *payload = frame.data() + sizeof(FrameHeader);
-        ssize_t written = write(tun_fd, payload, payload_len);
-
-        std::vector<uint8_t> payload_vec(frame.data(), frame.data() + sizeof(FrameHeader) + payload_len);
-
-        data.ip_sockets_bytes.write(payload_vec);
-
-        if (written < 0)
-            logs::tun.error("[{}] Write error: {}", tun_name, strerror(errno));
-        else
-            logs::tun.trace("[{}] Injected {} bytes into TUN", tun_name, written);
     }
 }
 
