@@ -25,6 +25,7 @@ struct DSP
 {
     float cfo = 0.0f;
     int max_index = 0;
+    int offset = -2;
     float sample_rate = 1.92e6;
     struct OFDMConfig
     {

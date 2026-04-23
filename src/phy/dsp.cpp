@@ -202,7 +202,7 @@ void split_to_float(const std::complex<float> *__restrict src, float *__restrict
     }
 }
 
-int zc_sync(const std::vector<std::complex<float>> &for_ofdm, const std::vector<std::complex<float>> &zadoff_chu, const float zc_energy, std::vector<float> &plato)
+int zc_sync(const std::vector<std::complex<float>> &for_ofdm, const std::vector<std::complex<float>> &zadoff_chu, const float zc_energy, std::vector<float> &plato, float threshold)
 {
     auto N = zadoff_chu.size();
     auto L = for_ofdm.size();
@@ -215,7 +215,7 @@ int zc_sync(const std::vector<std::complex<float>> &for_ofdm, const std::vector<
     split_to_float(zadoff_chu.data(), zc_re.data(), zc_im.data(), zc_im.size());
 
     float max_norm = -1.f;
-    int best_idx = 0;
+    int best_idx = -1;
 
     for (size_t n = 0; n <= L - N; ++n)
     {
@@ -241,7 +241,7 @@ int zc_sync(const std::vector<std::complex<float>> &for_ofdm, const std::vector<
 
         plato[n] = norm;
 
-        if (norm > max_norm)
+        if (norm > max_norm and norm > threshold)
         {
             max_norm = norm;
             best_idx = (int)n;
@@ -695,7 +695,11 @@ int run_dsp_rx(SharedData &data)
         int next = 0;
         for_processing = raw;
         plato.resize(for_processing.size());
-        dsp.max_index = zc_sync(for_processing, zadoff_chu, zc_energy, plato);
+        dsp.max_index = zc_sync(for_processing, zadoff_chu, zc_energy, plato, 0.2) + dsp.offset;
+
+        if (dsp.max_index < 0)
+            continue;
+
         cfo_est(for_processing, dsp);
 
         if (static_cast<int>(for_processing.size()) > dsp.max_index + dsp.ofdm_cfg.n_subcarriers * 2)
