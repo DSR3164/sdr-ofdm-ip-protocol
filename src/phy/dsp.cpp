@@ -709,6 +709,7 @@ int run_dsp_rx(SharedData &data)
     std::vector<std::complex<float>> equalized(buff_size * 2);
     for_processing.reserve(buff_size * 2);
     std::vector<std::complex<float>> zadoff_chu = ofdm_zadoff_chu_symbol(dsp);
+    const int zc_len = static_cast<int>(zadoff_chu.size());
 
     const float *zptr = reinterpret_cast<const float *>(zadoff_chu.data());
     for (size_t n = 0; n < zadoff_chu.size() * 2; ++n)
@@ -728,43 +729,72 @@ int run_dsp_rx(SharedData &data)
         data.sdr_dsp_rx.read(temp_b, true);
         convert(temp_b, raw_b);
 
+        for_processing.clear();
+        for_processing.insert(for_processing.end(), raw_a.begin(), raw_a.end());
+        for_processing.insert(for_processing.end(), raw_b.begin(), raw_b.end());
+        data.dsp_sockets_raw.write(for_processing);
+
+        const int boundary = static_cast<int>(raw_a.size());
+
+        plato.resize(for_processing.size());
+
         std::atomic_signal_fence(std::memory_order_seq_cst);
         start = std::chrono::steady_clock::now();
         std::atomic_signal_fence(std::memory_order_seq_cst);
-        int next = 0;
-        for_processing = raw_b;
-        plato.resize(for_processing.size());
 
         dsp.max_index = ofdm_cp_corr(for_processing, N, CP, plato);
         coarse = coarse_cfo(for_processing, dsp.max_index, N, CP, data.sdr.get_sample_rate());
         coarse_mean = alpha * coarse + (1.0f - alpha) * coarse_mean;
 
-        dsp.max_index = zc_sync(for_processing, zadoff_chu, zc_energy, plato, 0.2) + dsp.offset;
+        int zc_idx = zc_sync(for_processing, zadoff_chu, zc_energy, plato, 0.3) + dsp.offset;
+        const int zc_end = zc_idx + zc_len;
+        const int needed_after_zc = 10 * (N + CP);
+        const int total_len = static_cast<int>(for_processing.size());
 
-        if (dsp.max_index < 0)
+        if (zc_idx >= boundary or zc_end + needed_after_zc > total_len or zc_idx < 0)
+        {
+            raw_a = std::move(raw_b);
+            raw_b.resize(buff_size);
             continue;
+        }
 
+        dsp.max_index = zc_idx;
         cfo_est(for_processing, dsp);
 
-        if (static_cast<int>(for_processing.size()) > dsp.max_index + dsp.ofdm_cfg.n_subcarriers * 2)
-            next += dsp.max_index + dsp.ofdm_cfg.n_subcarriers;
-        for (size_t n = 0; n < 10; ++n)
+        int next = 0;
+        int last = 0;
+
+        if (static_cast<int>(for_processing.size()) > zc_idx + zc_len + N)
+            next = zc_idx + zc_len;
+        else
         {
-            if (static_cast<int>(for_processing.size()) - next < dsp.ofdm_cfg.n_subcarriers + dsp.ofdm_cfg.n_cp)
+            raw_a = raw_b;
+            continue;
+        }
+
+        for (size_t s = 0; s < 10; ++s)
+        {
+            if (static_cast<int>(for_processing.size()) - next < N + CP)
                 break;
-            next += dsp.ofdm_cfg.n_cp;
-            for (size_t i = 0; i < static_cast<size_t>(dsp.ofdm_cfg.n_subcarriers); ++i)
+
+            next += CP;
+
+            for (size_t i = 0; i < static_cast<size_t>(N); ++i)
             {
                 fft.in[i][0] = std::real(for_processing[next + i]);
                 fft.in[i][1] = std::imag(for_processing[next + i]);
             }
             fftwf_execute(fft.plan);
 
-            for (size_t i = 0; i < static_cast<size_t>(dsp.ofdm_cfg.n_subcarriers); ++i)
-                processed[i + n * static_cast<size_t>(dsp.ofdm_cfg.n_subcarriers)] = std::complex<float>(fft.out[i][0], fft.out[i][1]);
+            for (size_t i = 0; i < static_cast<size_t>(N); ++i)
+                processed[i + s * static_cast<size_t>(N)] = std::complex<float>(fft.out[i][0], fft.out[i][1]);
 
-            next += dsp.ofdm_cfg.n_subcarriers;
+            next += N;
+            last = next;
         }
+        if (last > 0)
+            processed.resize(last);
+
         ofdm_equalize(processed, equalized, dsp.ofdm_cfg);
 
         data.dsp_sockets.write(equalized);
@@ -774,7 +804,10 @@ int run_dsp_rx(SharedData &data)
         std::atomic_signal_fence(std::memory_order_seq_cst);
         end = std::chrono::steady_clock::now();
         std::atomic_signal_fence(std::memory_order_seq_cst);
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+        duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+
+        raw_a = std::move(raw_b);
+        raw_b.resize(buff_size);
     }
     logs::dsp.info("Closing DSP thread");
     return 0;
