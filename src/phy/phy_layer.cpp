@@ -13,7 +13,7 @@ int run_sdr(SharedData &data)
     Flags apply = Flags::APPLY_BANDWIDTH | Flags::APPLY_FREQUENCY | Flags::APPLY_GAIN | Flags::APPLY_SAMPLE_RATE;
     while (!has_flag(sdr.get_flags(), Flags::IS_ACTIVE))
     {
-        if (!data.stop.load())
+        if (data.stop.load())
         {
             logs::sdr.info("Closing SDR thread");
             return 0;
