@@ -111,10 +111,13 @@ struct SharedData
     DoubleBuffer<int16_t> sdr_dsp_tx;
     DoubleBuffer<int16_t> sdr_dsp_rx;
 
-    DoubleBuffer<std::complex<float>> dsp_sockets;
+    DoubleBuffer<std::complex<float>> dsp_sockets_raw;
+    DoubleBuffer<std::complex<float>> dsp_sockets_symbols;
     DoubleBuffer<uint8_t> ip_sockets_bytes;
 
     std::atomic<bool> stop{ false };
 
-    SharedData() : sdr(SDRConfig{}), dsp_sockets(SDRConfig{}.buffer_size * 2) {}
+    SharedData() : sdr(SDRConfig{}),
+                   dsp_sockets_raw(SDRConfig{}.buffer_size * 2),
+                   dsp_sockets_symbols(SDRConfig{}.buffer_size * 2) {}
 };

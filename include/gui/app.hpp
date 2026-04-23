@@ -11,7 +11,7 @@
 
 struct Buffers
 {
-    DoubleBuffer<int16_t> sdr_raw;
+    DoubleBuffer<std::complex<float>> sdr_raw;
     DoubleBuffer<std::complex<float>> dsp;
     DoubleBuffer<uint8_t> ip;
     DoubleBuffer<std::string> socket;

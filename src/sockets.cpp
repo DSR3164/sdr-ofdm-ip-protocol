@@ -130,7 +130,7 @@ bool IPC::start_server(const std::string &path)
     try
     {
         _socket.set(zmq::sockopt::linger, 0);
-        _socket.set(zmq::sockopt::sndhwm, 1);
+        _socket.set(zmq::sockopt::sndhwm, 10);
         _socket.bind(path);
         return true;
     }

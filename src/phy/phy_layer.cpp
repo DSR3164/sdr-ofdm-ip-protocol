@@ -59,7 +59,8 @@ int run_dsp_gui_bridge(SharedData &data, socketData &socket)
 {
     IPC server;
     bool init = false;
-    std::vector<std::complex<float>> temp;
+    std::vector<std::complex<float>> raw;
+    std::vector<std::complex<float>> symbols;
 
     while (!init && !data.stop.load())
     {
@@ -79,11 +80,10 @@ int run_dsp_gui_bridge(SharedData &data, socketData &socket)
 
     while (!data.stop.load())
     {
-        if (data.dsp_sockets.read(temp) == 0)
-        {
-            server.send_frame(MsgType::Vector, temp);
-            logs::dsp.trace("Sent frame to GUI, size: {}", temp.size());
-        }
+        if (data.dsp_sockets_raw.read(raw) == 0)
+            server.send_frame(MsgType::Spectrum, raw);
+        if (data.dsp_sockets_symbols.read(symbols) == 0)
+            server.send_frame(MsgType::Vector, symbols);
     }
 
     return 0;

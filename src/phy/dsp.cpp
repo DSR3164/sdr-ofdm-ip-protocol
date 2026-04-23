@@ -797,7 +797,7 @@ int run_dsp_rx(SharedData &data)
 
         ofdm_equalize(processed, equalized, dsp.ofdm_cfg);
 
-        data.dsp_sockets.write(equalized);
+        data.dsp_sockets_symbols.write(equalized);
         demodulate(dsp.ofdm_cfg.mod, equalized, bits);
         data.phy_ip.write(bits, true);
 
