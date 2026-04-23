@@ -687,14 +687,17 @@ int run_dsp_rx(SharedData &data)
     FFTWPlan fft(dsp.ofdm_cfg.n_subcarriers, true);
     std::chrono::steady_clock::time_point start;
     std::chrono::steady_clock::time_point end;
-    std::vector<std::complex<float>> raw(buff_size);
-    std::vector<float> plato(1920);
+    std::vector<float> plato(buff_size * 2);
     std::vector<uint8_t> bits(4000);
+    std::vector<int16_t> temp_a(buff_size * 2, 0);
+    std::vector<int16_t> temp_b(buff_size * 2, 0);
 
-    std::vector<std::complex<float>> for_processing(buff_size);
-    std::vector<std::complex<float>> processed(1920);
-    std::vector<std::complex<float>> equalized(1920);
-    std::vector<int16_t> temp(buff_size * 2, 0);
+    std::vector<std::complex<float>> raw_a(buff_size);
+    std::vector<std::complex<float>> raw_b(buff_size);
+
+    std::vector<std::complex<float>> for_processing;
+    std::vector<std::complex<float>> processed(buff_size * 2);
+    std::vector<std::complex<float>> equalized(buff_size * 2);
     for_processing.reserve(buff_size * 2);
     std::vector<std::complex<float>> zadoff_chu = ofdm_zadoff_chu_symbol(dsp);
 
@@ -702,30 +705,25 @@ int run_dsp_rx(SharedData &data)
     for (size_t n = 0; n < zadoff_chu.size() * 2; ++n)
         zc_energy += zptr[n] * zptr[n];
 
+    auto convert = [](const std::vector<int16_t> &src,
+                      std::vector<std::complex<float>> &dst)
+    {
+        size_t n = src.size() / 2;
+        dst.resize(n);
+        const int16_t *p = src.data();
+        for (size_t i = 0; i < n; ++i, p += 2)
+            dst[i] = { static_cast<float>(p[0]), static_cast<float>(p[1]) };
+    };
     while (!data.stop.load())
     {
-        data.sdr_dsp_rx.read(temp, true);
-
-            size_t n = temp.size() / 2;
-            raw.resize(n);
-
-            int16_t *in = temp.data();
-            std::complex<float> *out = raw.data();
-
-            for (size_t i = 0; i < n; ++i)
-            {
-                float I = in[0];
-                float Q = in[1];
-
-                out[i] = { I, Q };
-                in += 2;
-            }
+        data.sdr_dsp_rx.read(temp_b, true);
+        convert(temp_b, raw_b);
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
         start = std::chrono::steady_clock::now();
         std::atomic_signal_fence(std::memory_order_seq_cst);
         int next = 0;
-        for_processing = raw;
+        for_processing = raw_b;
         plato.resize(for_processing.size());
         dsp.max_index = zc_sync(for_processing, zadoff_chu, zc_energy, plato, 0.2) + dsp.offset;
 
