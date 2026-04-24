@@ -72,7 +72,7 @@ void run_tun_tx(SharedData &data)
 
             size_t total_len = payload.size();
             size_t offset = 0;
-            uint16_t packet_id = static_cast<uint16_t>(ip.id++ & 0xFF);
+            uint16_t packet_id = static_cast<uint16_t>(ip.id++ & 0xFFFF);
             uint16_t packet_seq = 0;
 
             while (offset < total_len)
@@ -87,7 +87,7 @@ void run_tun_tx(SharedData &data)
                 hdr.magic = htons(0x1F35);
                 hdr.length = htons(static_cast<uint16_t>(chunk_size));
                 hdr.seq = htons(packet_seq++);
-                hdr.id = packet_id;
+                hdr.id = htons(packet_id);
                 hdr.flags = hflag;
 
                 std::vector<uint8_t> frame;
@@ -150,8 +150,9 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
         uint16_t payload_len = ntohs(hdr.length);
         uint8_t *fragment_data = frame.data() + sizeof(FrameHeader);
         uint16_t current_seq = ntohs(hdr.seq);
+        uint16_t id = ntohs(hdr.id);
 
-        auto &res_buf = assembly_map[hdr.id];
+        auto &res_buf = assembly_map[id];
 
         if (!res_buf.data.empty())
         {
@@ -159,7 +160,7 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
                 res_buf.data.clear();
             if (current_seq != (uint16_t)(res_buf.last_seq + 1))
             {
-                logs::tun.error("[{}] Packet loss detected for ID {}. Expected {}, got {}", tun_name, (uint16_t)hdr.id, res_buf.last_seq + 1, current_seq);
+                logs::tun.error("[{}] Packet loss detected for ID {}. Expected {}, got {}", tun_name, (uint16_t)id, res_buf.last_seq + 1, current_seq);
                 res_buf.data.clear();
             }
         }
@@ -189,10 +190,10 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
                 }
                 else
                 {
-                    logs::tun.error("[{}] CRC Failed for assembled packet ID {}", tun_name, (uint16_t)hdr.id);
+                    logs::tun.error("[{}] CRC Failed for assembled packet ID {}", tun_name, (uint16_t)id);
                 }
             }
-            assembly_map.erase(hdr.id);
+            assembly_map.erase(id);
         }
     }
 }
