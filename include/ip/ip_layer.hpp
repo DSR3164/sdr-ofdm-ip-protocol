@@ -8,9 +8,12 @@ struct __attribute__((packed)) FrameHeader
     uint16_t magic;
     uint16_t length;
     uint16_t seq;
+    uint16_t id;
     uint8_t flags;
-    uint8_t id;
 };
+
+constexpr uint8_t FLAG_LAST = 0x01;
+constexpr uint8_t FLAG_FIRST = 0x02;
 
 struct IP
 {
@@ -38,4 +41,4 @@ int run_ip_gui_bridge(SharedData &data, socketData &socket);
 std::vector<uint8_t> byte_to_bits(const std::vector<uint8_t> &bytes, int16_t r);
 std::vector<uint8_t> bits_to_bytes(const std::vector<uint8_t> &bits, int16_t r);
 
-constexpr ssize_t BUF_MTU = 250;
+constexpr ssize_t BUF_MTU = 50;

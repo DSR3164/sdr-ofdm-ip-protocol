@@ -72,18 +72,23 @@ void run_tun_tx(SharedData &data)
 
             size_t total_len = payload.size();
             size_t offset = 0;
-            uint8_t current_packet_id = static_cast<uint8_t>(ip.id++ & 0xFF);
+            uint16_t packet_id = static_cast<uint16_t>(ip.id++ & 0xFF);
+            uint16_t packet_seq = 0;
 
             while (offset < total_len)
             {
                 size_t chunk_size = std::min<size_t>(BUF_MTU, total_len - offset);
-                bool is_last = (offset + chunk_size >= total_len);
+                bool hflag = 0;
+                if (offset == 0)
+                    hflag = FLAG_FIRST;
+                else if (offset + chunk_size >= total_len)
+                    hflag = FLAG_LAST;
 
                 hdr.magic = htons(0x1F35);
                 hdr.length = htons(static_cast<uint16_t>(chunk_size));
-                hdr.seq = htons(ip.seq++);
-                hdr.id = current_packet_id;
-                hdr.flags = is_last ? 1 : 0;
+                hdr.seq = htons(packet_seq++);
+                hdr.id = packet_id;
+                hdr.flags = hflag;
 
                 std::vector<uint8_t> frame;
                 auto *hdr_ptr = reinterpret_cast<uint8_t *>(&hdr);
@@ -117,7 +122,7 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
     std::vector<uint8_t> frame;
     std::vector<uint32_t> block;
 
-    std::unordered_map<uint8_t, ReassemblyBuffer> assembly_map;
+    std::unordered_map<uint16_t, ReassemblyBuffer> assembly_map;
 
     while (!data.stop.load())
     {
@@ -144,12 +149,25 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
 
         uint16_t payload_len = ntohs(hdr.length);
         uint8_t *fragment_data = frame.data() + sizeof(FrameHeader);
+        uint16_t current_seq = ntohs(hdr.seq);
 
         auto &res_buf = assembly_map[hdr.id];
+
+        if (!res_buf.data.empty())
+        {
+            if (hdr.flags & FLAG_FIRST)
+                res_buf.data.clear();
+            if (current_seq != (uint16_t)(res_buf.last_seq + 1))
+            {
+                logs::tun.error("[{}] Packet loss detected for ID {}. Expected {}, got {}", tun_name, (uint16_t)hdr.id, res_buf.last_seq + 1, current_seq);
+                res_buf.data.clear();
+            }
+        }
+
         res_buf.data.insert(res_buf.data.end(), fragment_data, fragment_data + payload_len);
         res_buf.last_seq = ntohs(hdr.seq);
 
-        if (hdr.flags & 1)
+        if (hdr.flags & FLAG_LAST)
         {
             std::vector<uint8_t> &full_packet = res_buf.data;
 
@@ -171,7 +189,7 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
                 }
                 else
                 {
-                    logs::tun.error("[{}] CRC Failed for assembled packet ID {}", tun_name, hdr.id);
+                    logs::tun.error("[{}] CRC Failed for assembled packet ID {}", tun_name, (uint16_t)hdr.id);
                 }
             }
             assembly_map.erase(hdr.id);

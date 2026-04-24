@@ -12,7 +12,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-static void fill_sockaddr(sockaddr &sa, const char *ip) {
+static void fill_sockaddr(sockaddr &sa, const char *ip)
+{
     auto *s = reinterpret_cast<sockaddr_in *>(&sa);
     s->sin_family = AF_INET;
     inet_pton(AF_INET, ip, &s->sin_addr);
@@ -25,7 +26,9 @@ static bool run_cmd(const char *path, const char *const args[])
     {
         execv(path, const_cast<char *const *>(args));
         _exit(1);
-    } if (pid < 0){
+    }
+    if (pid < 0)
+    {
         logs::tun.error("Fork failed");
         return 1;
     }
@@ -70,10 +73,30 @@ bool enable_nat(const std::string &tun_name)
     const char *del[] = { "/sbin/iptables", "-t", "nat", "-D", "POSTROUTING", "-o", iface.c_str(), "-j", "MASQUERADE", nullptr };
     run_cmd("/sbin/iptables", del);
 
+    const char *del_fwd_in[] = { "/sbin/iptables", "-D", "FORWARD", "-i", tun_name.c_str(), "-j", "ACCEPT", nullptr };
+    run_cmd("/sbin/iptables", del_fwd_in);
+
+    const char *del_fwd_out[] = { "/sbin/iptables", "-D", "FORWARD", "-o", tun_name.c_str(), "-m", "state", "--state", "RELATED,ESTABLISHED", "-j", "ACCEPT", nullptr };
+    run_cmd("/sbin/iptables", del_fwd_out);
+
     const char *add[] = { "/sbin/iptables", "-t", "nat", "-A", "POSTROUTING", "-o", iface.c_str(), "-j", "MASQUERADE", nullptr };
     if (!run_cmd("/sbin/iptables", add))
     {
         logs::tun.error("iptables masquerade failed");
+        return false;
+    }
+
+    const char *fwd_in[] = { "/sbin/iptables", "-A", "FORWARD", "-i", tun_name.c_str(), "-j", "ACCEPT", nullptr };
+    if (!run_cmd("/sbin/iptables", fwd_in))
+    {
+        logs::tun.error("iptables FORWARD -i failed");
+        return false;
+    }
+
+    const char *fwd_out[] = { "/sbin/iptables", "-A", "FORWARD", "-o", tun_name.c_str(), "-m", "state", "--state", "RELATED,ESTABLISHED", "-j", "ACCEPT", nullptr };
+    if (!run_cmd("/sbin/iptables", fwd_out))
+    {
+        logs::tun.error("iptables FORWARD -o failed");
         return false;
     }
 
