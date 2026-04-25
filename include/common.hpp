@@ -45,25 +45,40 @@ class DoubleBuffer {
     }
     ~DoubleBuffer() = default;
 
-    int read(std::vector<T> &buffer)
+    int read(std::vector<T> &buffer, bool blocking = false)
     {
-        if (!ready.load(std::memory_order_acquire))
-            return -1;
-        else
+        if (blocking)
         {
-            int ri = read_index.load(std::memory_order_relaxed);
-            buffer = buff[ri];
-            ready.store(false, std::memory_order_relaxed);
-            return 0;
+            while (!ready.load(std::memory_order_acquire) && !stopped.load(std::memory_order_acquire))
+                ready.wait(false, std::memory_order_acquire);
+            if (stopped.load())
+                return -1;
         }
+        else if (!ready.load(std::memory_order_acquire))
+            return -1;
+        int ri = read_index.load(std::memory_order_relaxed);
+        buffer = buff[ri];
+        ready.store(false, std::memory_order_release);
+        if (blocking)
+            ready.notify_one();
+        return 0;
     }
-    int write(std::vector<T> &buffer)
+    int write(std::vector<T> &buffer, bool blocking = false)
     {
+        if (blocking)
+        {
+            while (ready.load(std::memory_order_acquire) && !stopped.load(std::memory_order_acquire))
+                ready.wait(true, std::memory_order_acquire);
+            if (stopped.load())
+                return -1;
+        }
         int wi = write_index.load(std::memory_order_relaxed);
         buff[wi] = buffer;
         read_index.store(wi, std::memory_order_relaxed);
         write_index.store(wi ^ 1, std::memory_order_relaxed);
         ready.store(true, std::memory_order_release);
+        if (blocking)
+            ready.notify_one();
         return 0;
     }
     std::vector<T> &get_write_buffer()
@@ -71,23 +86,38 @@ class DoubleBuffer {
         int index = write_index.load(std::memory_order_relaxed);
         return buff[index];
     }
-    int swap()
+    int swap(bool blocking = false)
     {
+        if (blocking)
+        {
+            while (ready.load(std::memory_order_acquire) && !stopped.load(std::memory_order_acquire))
+                ready.wait(true, std::memory_order_acquire);
+            if (stopped.load())
+                return -1;
+        }
         int wi = write_index.load(std::memory_order_relaxed);
         read_index.store(wi, std::memory_order_relaxed);
         write_index.store(wi ^ 1, std::memory_order_relaxed);
         ready.store(true, std::memory_order_release);
+        if (blocking)
+            ready.notify_one();
         return 0;
     }
     bool is_ready() const
     {
         return ready.load(std::memory_order_relaxed);
     }
+    void stop()
+    {
+        stopped.store(true, std::memory_order_seq_cst);
+        ready.notify_all();
+    }
   private:
     std::vector<T> buff[2];
     std::atomic<int> write_index{ 0 };
     std::atomic<int> read_index{ 1 };
     std::atomic<bool> ready{ false };
+    std::atomic<bool> stopped{ false };
 };
 
 struct SharedData
@@ -106,5 +136,16 @@ struct SharedData
 
     std::atomic<bool> stop{ false };
 
-    SharedData() : sdr(SDRConfig{}), dsp_sockets(SDRConfig{}.buffer_size * 2) {}
+    void stop_all_buffers()
+    {
+        ip_phy.stop();
+        phy_ip.stop();
+        sdr_dsp_tx.stop();
+        sdr_dsp_rx.stop();
+        dsp_sockets.stop();
+        ip_sockets_bytes.stop();
+    }
+
+    SharedData() : sdr(SDRConfig{}),
+                   dsp_sockets(SDRConfig{}.buffer_size * 2) {}
 };
