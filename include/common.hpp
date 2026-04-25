@@ -111,6 +111,9 @@ class DoubleBuffer {
     void stop()
     {
         stopped.store(true, std::memory_order_seq_cst);
+        ready.store(false);
+        ready.notify_all();
+        ready.store(true);
         ready.notify_all();
     }
   private:

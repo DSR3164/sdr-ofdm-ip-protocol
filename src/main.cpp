@@ -11,11 +11,14 @@
 #include <thread>
 
 std::atomic<bool> *stop_ptr = nullptr;
+SharedData *data_ptr = nullptr;
 
 void signal_handler(int signum)
 {
     if (stop_ptr)
         stop_ptr->store(true);
+    if (data_ptr)
+        data_ptr->stop_all_buffers();
     logs::main.info("Signal {} received, stopping threads...", signum);
 }
 
@@ -24,6 +27,7 @@ int main()
     SharedData data;
 
     stop_ptr = &data.stop;
+    data_ptr = &data;
 
     std::signal(SIGINT, signal_handler);
 
