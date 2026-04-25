@@ -5,9 +5,17 @@
 #include <cstdio>
 #include <cstring>
 #include <fcntl.h>
+#include <unistd.h>
 #include <iostream>
+#ifdef __APPLE__
+#include <net/if.h>
+#include <net/if_utun.h>
+#include <sys/kern_control.h>
+#include <sys/sys_domain.h>
+#else
 #include <linux/if.h>
 #include <linux/if_tun.h>
+#endif
 #include <netinet/in.h>
 #include <string>
 #include <sys/ioctl.h>
@@ -29,6 +37,57 @@ uint8_t node_id_prompt()
 
 int allocate_tun(char *dev)
 {
+#ifdef __APPLE__
+    struct sockaddr_ctl addr{};
+    struct ctl_info info{};
+
+    int fd = socket(PF_SYSTEM, SOCK_DGRAM, SYSPROTO_CONTROL);
+    if (fd < 0)
+    {
+        logs::tun.critical("Failed to open utun socket: {} (errno {})", strerror(errno), errno);
+        return fd;
+    }
+
+    memset(&info, 0, sizeof(info));
+    strncpy(info.ctl_name, UTUN_CONTROL_NAME, MAX_KCTL_NAME);
+
+    if (ioctl(fd, CTLIOCGINFO, &info) < 0)
+    {
+        logs::tun.critical("ioctl(CTLIOCGINFO) failed: {}", strerror(errno));
+        close(fd);
+        return -1;
+    }
+
+    addr.sc_len     = sizeof(addr);
+    addr.sc_family  = AF_SYSTEM;
+    addr.ss_sysaddr = AF_SYS_CONTROL;
+    addr.sc_id      = info.ctl_id;
+    addr.sc_unit    = 0;
+
+    if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+    {
+        logs::tun.critical("connect() failed: {}", strerror(errno));
+        close(fd);
+        return -1;
+    }
+
+    char ifname[IFNAMSIZ];
+    socklen_t ifname_len = sizeof(ifname);
+    if (getsockopt(fd, SYSPROTO_CONTROL, UTUN_OPT_IFNAME, ifname, &ifname_len) < 0)
+    {
+        logs::tun.critical("getsockopt(UTUN_OPT_IFNAME) failed: {}", strerror(errno));
+        close(fd);
+        return -1;
+    }
+
+    int flags = fcntl(fd, F_GETFL, 0);
+    fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+
+    logs::tun.info("TUN interface allocated: {}", ifname);
+    strcpy(dev, ifname);
+    return fd;
+
+#else
     struct ifreq ifr;
 
     int fd = open("/dev/net/tun", O_RDWR | O_NONBLOCK);
@@ -43,9 +102,7 @@ int allocate_tun(char *dev)
     memset(&ifr, 0, sizeof(ifr));
     ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
     if (*dev)
-    {
         strncpy(ifr.ifr_name, dev, IFNAMSIZ);
-    }
 
     int err = ioctl(fd, TUNSETIFF, (void *)&ifr);
     if (err < 0)
@@ -56,9 +113,9 @@ int allocate_tun(char *dev)
     }
 
     logs::tun.info("TUN interface allocated: {}", ifr.ifr_name);
-
     strcpy(dev, ifr.ifr_name);
     return fd;
+#endif
 }
 
 std::optional<std::string> set_interface_ip(const char *dev_name, uint8_t node_id)
@@ -89,12 +146,14 @@ std::optional<std::string> set_interface_ip(const char *dev_name, uint8_t node_i
     }
     logs::tun.info("IP {} assigned to {}", ip, dev_name);
 
+    #ifndef __APPLE__
     struct sockaddr_in *netmask = (struct sockaddr_in *)&ifr.ifr_netmask;
     netmask->sin_family = AF_INET;
     inet_pton(AF_INET, "255.255.255.252", &netmask->sin_addr);
 
     if (ioctl(sock, SIOCSIFNETMASK, &ifr) < 0)
         logs::tun.error("SIOCSIFNETMASK failed: {}", strerror(errno));
+    #endif
 
     if (ioctl(sock, SIOCGIFFLAGS, &ifr) < 0)
         logs::tun.error("SIOCGIFFLAGS failed: {}", strerror(errno));

@@ -113,16 +113,14 @@ int main()
     std::vector<std::string> all_sockets;
     found_sockets(all_sockets);
     Buffers bufs(1920 * 2);
-
     socketData sock(false);
 
-    std::thread gui(run_gui, std::ref(bufs), std::ref(all_sockets), std::ref(sock));
     std::thread phy_bridge(run_dsp_bridge, std::ref(bufs), std::ref(sock));
     std::thread ip_bridge(run_ip_brigde, std::ref(bufs), std::ref(sock));
 
-    gui.join();
+    run_gui(bufs, all_sockets, sock);
+
     ip_bridge.join();
     phy_bridge.join();
-
     return 0;
 }

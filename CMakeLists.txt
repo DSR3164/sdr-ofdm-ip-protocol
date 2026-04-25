@@ -195,7 +195,12 @@ target_link_libraries(soip_core
   spdlog::spdlog
   cppzmq
 )
-target_compile_options(soip_core PRIVATE -mavx2 -ffast-math)
+
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64|AMD64")
+    target_compile_options(soip_core PRIVATE -mavx2 -ffast-math)
+else()
+    target_compile_options(soip_core PRIVATE -ffast-math)
+endif()
 
 target_link_libraries(soip_gui
   PUBLIC
@@ -220,8 +225,19 @@ target_link_libraries(main PRIVATE
   soip_core
 )
 
+target_include_directories(main PRIVATE
+  ${FFTW3F_INCLUDE_DIR}
+  ${PROJECT_SOURCE_DIR}/third_party/soapysdr-src/include
+)
+
 target_link_libraries(gui PRIVATE
   soip_gui
+)
+
+target_include_directories(soip_gui
+  PUBLIC
+  ${PROJECT_SOURCE_DIR}/include
+  ${PROJECT_SOURCE_DIR}/third_party/soapysdr-src/include
 )
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")

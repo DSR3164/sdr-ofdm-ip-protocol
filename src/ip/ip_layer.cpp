@@ -8,7 +8,11 @@
 #include <SDL2/SDL_stdinc.h>
 #include <chrono>
 #include <cstdint>
+#ifdef __linux__
 #include <linux/if.h>
+#else
+#include <net/if.h>
+#endif
 #include <netinet/in.h>
 #include <thread>
 #include <vector>

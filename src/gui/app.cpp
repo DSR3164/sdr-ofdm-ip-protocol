@@ -13,6 +13,13 @@
 
 App::App(const std::string &title, int width, int height)
 {
+    #ifdef __APPLE__
+    SDL_SetHint(SDL_HINT_VIDEODRIVER, "cocoa");
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+    #endif
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER);
     window = SDL_CreateWindow(title.c_str(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
     gl_context = SDL_GL_CreateContext(window);
@@ -26,7 +33,11 @@ App::App(const std::string &title, int width, int height)
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
     ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
-    ImGui_ImplOpenGL3_Init("#version 330");
+    #ifdef __APPLE__
+    ImGui_ImplOpenGL3_Init("#version 410");
+    #else
+        ImGui_ImplOpenGL3_Init("#version 330");
+    #endif
 }
 
 App::~App()

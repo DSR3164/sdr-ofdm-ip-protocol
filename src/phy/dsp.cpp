@@ -6,6 +6,10 @@
 #include <spdlog/fmt/bundled/color.h>
 #include <spdlog/spdlog.h>
 
+#ifndef M_PIf
+#define M_PIf (float)M_PI
+#endif
+
 struct FFTWPlan
 {
     std::vector<float> window;
