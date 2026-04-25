@@ -144,10 +144,12 @@ struct SharedData
         phy_ip.stop();
         sdr_dsp_tx.stop();
         sdr_dsp_rx.stop();
-        dsp_sockets.stop();
+        dsp_sockets_raw.stop();
+        dsp_sockets_symbols.stop();
         ip_sockets_bytes.stop();
     }
 
     SharedData() : sdr(SDRConfig{}),
-                   dsp_sockets(SDRConfig{}.buffer_size * 2) {}
+                   dsp_sockets_raw(SDRConfig{}.buffer_size * 2),
+                   dsp_sockets_symbols(SDRConfig{}.buffer_size * 2) {}
 };
