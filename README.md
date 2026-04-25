@@ -72,6 +72,7 @@ the core tunnel runs headless, and the GUI can be attached or detached independe
 | IPC / GUI bridge | ZeroMQ                     |
 | GUI              | Dear ImGui + ImPlot        |
 | Logging          | spdlog                     |
+| CLI options      | cxxopts (header-only)      |
 
 ---
 
@@ -100,17 +101,50 @@ cmake --build . -j$(nproc)
 
 ## Configuration
 
-> ⚠️ At this stage of development, parameters (RX/TX frequencies, gain, OFDM settings)
-> are configured directly in the source code. The node IP address is prompted at runtime.
+```bash
+sudo ./main --help
+```
 
-To change settings:
+```
+Software Defined Radio application
+Usage:
+  sdr_app [OPTION...]
 
-1. Open [`include/phy/sdr.hpp`](include/phy/sdr.hpp)
-2. Modify `tx_freq` and `rx_freq` on lines 71–72 for FDD configuration
-3. Rebuild the project:
+  -m, --modulation arg          Modulation scheme (BPSK, QPSK, QAM16,
+                                QAM64) (default: QAM64)
+  -n, --node arg                Base Node settings (A / B)
+  -r, --rx [=arg(=2203000000)]  Set RX frequency (Hz)
+  -t, --tx [=arg(=2203000000)]  Set TX frequency (Hz)
+  -h, --help                    Print usage
+```
+
+The application operates as a point-to-point FDD link over a `/30` subnet. Each end of the link runs a separate node role:
+
+| Node | IP       |
+| ---- | -------- |
+| A    | 10.0.0.1 |
+| B    | 10.0.0.2 |
+
+On startup, the application prompts for the last octet of the local IP address:
+
+```
+Enter node ID (10.0.0.x, x=):
+```
+
+> **Note:** Interactive IP assignment is a temporary solution and will be replaced with a configuration file or CLI argument in a future release.
+
+### Example
+
+Node A:
 
 ```bash
-cmake --build . -j$(nproc)
+sudo ./main --node A --modulation QAM64
+```
+
+Node B:
+
+```bash
+sudo ./main --node B --modulation QAM64
 ```
 
 ---
@@ -120,14 +154,14 @@ cmake --build . -j$(nproc)
 **Headless (no GUI required):**
 
 ```bash
-sudo ./main
+sudo ./main -n A -m QAM64
 ```
 
 **With GUI (separate process, attaches over ZeroMQ):**
 
 ```bash
 sudo ./gui &
-sudo ./main
+sudo ./main -n A -m QAM64
 ```
 
 > GUI and core can be started in any order.
