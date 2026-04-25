@@ -49,7 +49,12 @@ class DoubleBuffer {
     int read(std::vector<T> &buffer, bool blocking = false)
     {
         if (blocking)
-            ready.wait(false, std::memory_order_acquire);
+        {
+            while (!ready.load(std::memory_order_acquire) && !stopped.load(std::memory_order_acquire))
+                ready.wait(false, std::memory_order_acquire);
+            if (stopped.load())
+                return -1;
+        }
         else if (!ready.load(std::memory_order_acquire))
             return -1;
         int ri = read_index.load(std::memory_order_relaxed);
@@ -62,7 +67,12 @@ class DoubleBuffer {
     int write(std::vector<T> &buffer, bool blocking = false)
     {
         if (blocking)
-            ready.wait(true, std::memory_order_acquire);
+        {
+            while (ready.load(std::memory_order_acquire) && !stopped.load(std::memory_order_acquire))
+                ready.wait(true, std::memory_order_acquire);
+            if (stopped.load())
+                return -1;
+        }
         int wi = write_index.load(std::memory_order_relaxed);
         buff[wi] = buffer;
         read_index.store(wi, std::memory_order_relaxed);
@@ -80,7 +90,12 @@ class DoubleBuffer {
     int swap(bool blocking = false)
     {
         if (blocking)
-            ready.wait(true, std::memory_order_acquire);
+        {
+            while (ready.load(std::memory_order_acquire) && !stopped.load(std::memory_order_acquire))
+                ready.wait(true, std::memory_order_acquire);
+            if (stopped.load())
+                return -1;
+        }
         int wi = write_index.load(std::memory_order_relaxed);
         read_index.store(wi, std::memory_order_relaxed);
         write_index.store(wi ^ 1, std::memory_order_relaxed);
@@ -93,11 +108,17 @@ class DoubleBuffer {
     {
         return ready.load(std::memory_order_relaxed);
     }
+    void stop()
+    {
+        stopped.store(true, std::memory_order_seq_cst);
+        ready.notify_all();
+    }
   private:
     std::vector<T> buff[2];
     std::atomic<int> write_index{ 0 };
     std::atomic<int> read_index{ 1 };
     std::atomic<bool> ready{ false };
+    std::atomic<bool> stopped{ false };
 };
 
 struct SharedData
@@ -117,7 +138,16 @@ struct SharedData
 
     std::atomic<bool> stop{ false };
 
+    void stop_all_buffers()
+    {
+        ip_phy.stop();
+        phy_ip.stop();
+        sdr_dsp_tx.stop();
+        sdr_dsp_rx.stop();
+        dsp_sockets.stop();
+        ip_sockets_bytes.stop();
+    }
+
     SharedData() : sdr(SDRConfig{}),
-                   dsp_sockets_raw(SDRConfig{}.buffer_size * 2),
-                   dsp_sockets_symbols(SDRConfig{}.buffer_size * 2) {}
+                   dsp_sockets(SDRConfig{}.buffer_size * 2) {}
 };
