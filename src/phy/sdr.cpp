@@ -145,7 +145,7 @@ int SDR::writestream(std::vector<int16_t> &send)
         txbuffs,
         cfg.buffer_size,
         sdr_flags,
-        timeNs + (4 * 1000 * 1000),
+        timeNs + timeNSdelay,
         timeoutUs
     );
 
@@ -226,6 +226,7 @@ int SDR::add_args()
     args["loopback"] = "0";
     sdr_flags = SOAPY_SDR_HAS_TIME;
     timeoutUs = 400000;
+    timeNSdelay = 2e6;
     return 0;
 }
 

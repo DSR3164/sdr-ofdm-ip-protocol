@@ -82,7 +82,7 @@ void run_tun_tx(SharedData &data)
 
             ip.raw_bits = byte_to_bits(encoded_bytes, 32);
 
-            data.ip_phy.write(ip.raw_bits);
+            data.ip_phy.write(ip.raw_bits, true);
         }
     }
 
@@ -104,11 +104,7 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
 
     while (!data.stop.load())
     {
-        if (data.phy_ip.read(frame) < 0)
-        {
-            std::this_thread::sleep_for(std::chrono::microseconds(100));
-            continue;
-        }
+        data.phy_ip.read(frame, true);
 
         block = bits_to_bytes<uint32_t>(frame, 32);
 

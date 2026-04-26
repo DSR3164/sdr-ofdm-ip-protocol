@@ -11,7 +11,7 @@
 
 struct Buffers
 {
-    DoubleBuffer<int16_t> sdr_raw;
+    DoubleBuffer<std::complex<float>> sdr_raw;
     DoubleBuffer<std::complex<float>> dsp;
     DoubleBuffer<uint8_t> ip;
     DoubleBuffer<std::string> socket;
@@ -36,7 +36,7 @@ class App {
     bool is_chos_sock() { return choose_socket; }
     void start_frame();
     void stop_frame();
-    void control_wd(const std::vector<std::string> &sockets);
+    void control_wd(std::vector<std::string> &sockets);
     void begin_debug();
     void set_vsync_state(bool vsync_state) { (vsync_state) ? SDL_GL_SetSwapInterval(1) : SDL_GL_SetSwapInterval(0); }
 
@@ -107,4 +107,4 @@ class App {
 
 socketData choose_socket(const std::string &sock);
 
-void run_gui(Buffers &buf, const std::vector<std::string> &sockets, socketData &sock);
+void run_gui(Buffers &buf, std::vector<std::string> &sockets, socketData &sock);

@@ -65,8 +65,10 @@ void App::stop_frame()
     SDL_GL_SwapWindow(window);
 }
 
-void App::control_wd(const std::vector<std::string> &sockets)
+void App::control_wd(std::vector<std::string> &sockets)
 {
+    bool chosen_socket = false;
+
     if (ImGui::BeginMainMenuBar())
     {
         if (ImGui::BeginMenu("Control Panel"))
@@ -84,12 +86,16 @@ void App::control_wd(const std::vector<std::string> &sockets)
             ImGui::SeparatorText("Socket Folders");
             static std::string last_socket_path = "None";
 
+            if (ImGui::Button("Update sockets", ImVec2(ImGui::GetContentRegionAvail().x, 0.0f)))
+                found_sockets(sockets);
+
             if (sockets.empty())
                 ImGui::Text("%s", last_socket_path.c_str());
             else
                 for (int i = 0; i < sockets.size(); ++i)
                 {
-                    if (ImGui::MenuItem(sockets[i].c_str()))
+                    bool is_selected = (selected_socket_idx == i);
+                    if (ImGui::MenuItem(sockets[i].c_str(), nullptr, is_selected))
                     {
                         selected_socket_idx = i;
                         this->choose_socket = true;
@@ -117,7 +123,7 @@ void App::begin_debug()
     ImGui::End();
 }
 
-void run_gui(Buffers &buf, const std::vector<std::string> &sockets, socketData &sock)
+void run_gui(Buffers &buf, std::vector<std::string> &sockets, socketData &sock)
 {
     App app("Development", 1280, 720);
 
