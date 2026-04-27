@@ -226,49 +226,58 @@ void split_to_float(const std::complex<float> *__restrict src, float *__restrict
     }
 }
 
-int zc_sync(const std::vector<std::complex<float>> &for_ofdm, const std::vector<std::complex<float>> &zadoff_chu, const float zc_energy, std::vector<float> &plato, float threshold)
+int zc_sync(const std::vector<std::complex<float>> &for_ofdm, const std::vector<std::complex<float>> &zadoff_chu, const float zc_energy, float threshold, int cp_index, int Lcp)
 {
     auto N = zadoff_chu.size();
     auto L = for_ofdm.size();
+    int sym_len = N + Lcp;
+
     static std::vector<float> r_re(L);
     static std::vector<float> r_im(L);
     static std::vector<float> zc_re(N);
     static std::vector<float> zc_im(N);
 
-    split_to_float(for_ofdm.data(), r_re.data(), r_im.data(), r_im.size());
-    split_to_float(zadoff_chu.data(), zc_re.data(), zc_im.data(), zc_im.size());
+    split_to_float(for_ofdm.data(), r_re.data(), r_im.data(), L);
+    split_to_float(zadoff_chu.data(), zc_re.data(), zc_im.data(), N);
 
     float max_norm = -1.f;
     int best_idx = -1;
 
-    for (size_t n = 0; n <= L - N; ++n)
+    for (int k = 1; k * sym_len <= cp_index; ++k)
     {
-        float sum_re = 0.0f;
-        float sum_im = 0.0f;
-        float sig_energy = 0.0f;
+        int n = cp_index - k * sym_len;
+        int center = cp_index - k * sym_len;
 
-        for (size_t k = 0; k < N; ++k)
+        for (int offset = -1.5 * Lcp; offset <= 1.5 * Lcp; ++offset)
         {
-            float sr = r_re[n + k];
-            float si = r_im[n + k];
-            float zr = zc_re[k];
-            float zi = zc_im[k];
+            int n = center + offset;
+            if (n < 0 || n + (int)N > (int)L)
+                continue;
 
-            sum_re += sr * zr + si * zi;
-            sum_im += si * zr - sr * zi;
+            float sum_re = 0.0f;
+            float sum_im = 0.0f;
+            float sig_energy = 0.0f;
 
-            sig_energy += sr * sr + si * si;
-        }
+            for (size_t i = 0; i < N; ++i)
+            {
+                float sr = r_re[n + i];
+                float si = r_im[n + i];
+                float zr = zc_re[i];
+                float zi = zc_im[i];
 
-        float corr = sum_re * sum_re + sum_im * sum_im;
-        float norm = corr / (sig_energy * zc_energy + 1e-12f);
+                sum_re += sr * zr + si * zi;
+                sum_im += si * zr - sr * zi;
+                sig_energy += sr * sr + si * si;
+            }
 
-        plato[n] = norm;
+            float corr = sum_re * sum_re + sum_im * sum_im;
+            float norm = corr / (sig_energy * zc_energy + 1e-12f);
 
-        if (norm > max_norm and norm > threshold)
-        {
-            max_norm = norm;
-            best_idx = (int)n;
+            if (norm > max_norm && norm > threshold)
+            {
+                max_norm = norm;
+                best_idx = n;
+            }
         }
     }
 
@@ -283,33 +292,27 @@ int ofdm_cp_corr(const std::vector<std::complex<float>> &r, int N, int Lcp, std:
 
     std::complex<float> P = 0.0f;
     float R = 0.0f;
+    float R_cp = 0.0f;
 
     for (int i = 0; i < Lcp; i++)
     {
         P += r[i] * std::conj(r[i + N]);
         R += std::norm(r[i + N]);
+        R_cp += std::norm(r[i]);
     }
-
     for (int d = 0; d < size - N - Lcp; d++)
     {
 
-        float R_cp = 0.0f;
-        float R_tail = 0.0f;
-
-        for (int i = 0; i < Lcp; i++)
-        {
-            R_cp += std::norm(r[d + i]);
-            R_tail += std::norm(r[d + i + N]);
-        }
-
-        float denom = 0.5f * (R_cp + R_tail);
+        float denom = 0.5f * (R_cp + R);
         float metric = std::norm(P) / (denom * denom + 1e-12f);
 
-        if (metric > max_metric and metric > 0.95)
+        if (metric > max_metric and metric > 0.85)
         {
             max_metric = metric;
             max_index = d;
         }
+        else if (max_index != -1 && metric < max_metric * 0.7f)
+            break;
 
         if (d + 1 >= size - N - Lcp)
             break;
@@ -319,6 +322,9 @@ int ofdm_cp_corr(const std::vector<std::complex<float>> &r, int N, int Lcp, std:
 
         R -= std::norm(r[d + N]);
         R += std::norm(r[d + N + Lcp]);
+
+        R_cp -= std::norm(r[d]);
+        R_cp += std::norm(r[d + Lcp]);
         plato[d] = metric;
     }
 
@@ -693,6 +699,7 @@ int run_dsp_rx(SharedData &data)
     float coarse_mean = 0.0f;
     float coarse = 0.0f;
     float alpha = 0.01f;
+    int cp_idx = -4;
     std::chrono::nanoseconds duration{};
 
     const int N = dsp.ofdm_cfg.n_subcarriers;
@@ -742,11 +749,12 @@ int run_dsp_rx(SharedData &data)
         start = std::chrono::steady_clock::now();
         std::atomic_signal_fence(std::memory_order_seq_cst);
 
-        dsp.max_index = ofdm_cp_corr(for_processing, N, CP, plato);
-        coarse = coarse_cfo(for_processing, dsp.max_index, N, CP, data.sdr.get_sample_rate());
+        cp_idx = ofdm_cp_corr(for_processing, N, CP, plato);
+        coarse = coarse_cfo(for_processing, cp_idx, N, CP, data.sdr.get_sample_rate());
         coarse_mean = alpha * coarse + (1.0f - alpha) * coarse_mean;
 
-        int zc_idx = zc_sync(for_processing, zadoff_chu, zc_energy, plato, 0.3) + dsp.offset;
+        int zc_idx = zc_sync(for_processing, zadoff_chu, zc_energy, 0.0, cp_idx, CP) + dsp.offset;
+
         const int zc_end = zc_idx + zc_len;
         const int needed_after_zc = 10 * (N + CP);
         const int total_len = static_cast<int>(for_processing.size());
