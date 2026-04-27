@@ -80,6 +80,7 @@ int run_dsp_gui_bridge(SharedData &data, socketData &socket)
 
     while (!data.stop.load())
     {
+        std::this_thread::sleep_for(std::chrono::milliseconds(6));
         if (data.dsp_sockets_raw.read(raw) == 0)
             server.send_frame(MsgType::Spectrum, raw);
         if (data.dsp_sockets_symbols.read(symbols) == 0)
