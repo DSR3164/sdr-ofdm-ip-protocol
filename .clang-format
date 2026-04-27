@@ -41,7 +41,7 @@ SortIncludes: CaseSensitive
 IncludeBlocks: Regroup
 IncludeIsMainRegex: "$^"
 IncludeCategories:
-  - Regex: '^"(common|sockets|logger)\.'
+  - Regex: '^"(common|sockets|logger|cli)\.'
     Priority: 1
     SortPriority: 1
   - Regex: '^"phy/'

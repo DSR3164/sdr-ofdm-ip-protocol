@@ -1,3 +1,4 @@
+#include "cli.hpp"
 #include "common.hpp"
 #include "sockets.hpp"
 #include "phy/dsp.hpp"
@@ -22,9 +23,14 @@ void signal_handler(int signum)
     logs::main.info("Signal {} received, stopping threads...", signum);
 }
 
-int main()
+int main(int argc, char *argv[])
 {
+    auto cfg = parse_cli(argc, argv);
+    if (!cfg)
+        return 0;
+
     SharedData data;
+    set_cli_opts(data, *cfg);
 
     stop_ptr = &data.stop;
     data_ptr = &data;
