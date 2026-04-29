@@ -24,8 +24,8 @@ std::optional<CliConfig> parse_cli(int argc, char *argv[])
     options.add_options()
     ("m,modulation", "Modulation scheme (BPSK, QPSK, QAM16, QAM64)", cxxopts::value<std::string>()->default_value("QAM64"))
     ("n,node", "Base Node settings (A / B)", cxxopts::value<std::string>())
-    ("r,rx", "Set RX frequency (Hz)", cxxopts::value<double>()->implicit_value("2203000000"))
-    ("t,tx", "Set TX frequency (Hz)", cxxopts::value<double>()->implicit_value("2203000000"))
+    ("r,rx", "Set RX frequency (Hz)", cxxopts::value<double>()->implicit_value("2200000000"))
+    ("t,tx", "Set TX frequency (Hz)", cxxopts::value<double>()->implicit_value("2230000000"))
     ("h,help", "Print usage");
     // clang-format on
 
@@ -91,12 +91,19 @@ void set_cli_opts(SharedData &data, CliConfig &cfg)
 {
     data.dsp.ofdm_cfg.mod = cfg.modulation;
 
+    if (cfg.node == Node::A)
+    {
+        data.sdr.set_rx_freq(2200e6);
+        data.sdr.set_tx_freq(2230e6);
+    }
+    else if (cfg.node == Node::B)
+    {
+        data.sdr.set_rx_freq(2230e6);
+        data.sdr.set_tx_freq(2200e6);
+    }
+
     if (cfg.rx_freq)
         data.sdr.set_rx_freq(*cfg.rx_freq);
-    else if (cfg.tx_freq)
+    if (cfg.tx_freq)
         data.sdr.set_tx_freq(*cfg.tx_freq);
-    else if (cfg.node == Node::A)
-        data.sdr.set_tx_freq(2230e6);
-    else if (cfg.node == Node::B)
-        data.sdr.set_rx_freq(2230e6);
 }
