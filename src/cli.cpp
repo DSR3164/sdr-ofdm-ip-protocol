@@ -96,7 +96,7 @@ void set_cli_opts(SharedData &data, CliConfig &cfg)
     else if (cfg.tx_freq)
         data.sdr.set_tx_freq(*cfg.tx_freq);
     else if (cfg.node == Node::A)
-        data.sdr.set_tx_freq(2203e6);
+        data.sdr.set_tx_freq(2230e6);
     else if (cfg.node == Node::B)
-        data.sdr.set_rx_freq(2203e6);
+        data.sdr.set_rx_freq(2230e6);
 }
