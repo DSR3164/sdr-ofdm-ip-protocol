@@ -71,8 +71,15 @@ void App::control_wd(std::vector<std::string> &sockets)
 
     if (ImGui::BeginMainMenuBar())
     {
-        if (ImGui::BeginMenu("Control Panel"))
+        bool menu_open = ImGui::BeginMenu("Control Panel");
+
+        if (menu_open)
         {
+            if (!control_menu_was_open)
+                found_sockets(sockets);
+
+            control_menu_was_open = true;
+
             ImGui::SeparatorText("Video Settings");
             ImGui::MenuItem("VSYNC", nullptr, &vsync_state);
             this->set_vsync_state(vsync_state);
@@ -107,6 +114,10 @@ void App::control_wd(std::vector<std::string> &sockets)
             ImGui::MenuItem("Open debug panel", nullptr, &debug_run);
 
             ImGui::EndMenu();
+        }
+        else 
+        {
+            control_menu_was_open = false;
         }
         ImGui::EndMainMenuBar();
     }

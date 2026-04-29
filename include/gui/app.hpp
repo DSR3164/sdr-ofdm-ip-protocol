@@ -97,12 +97,13 @@ class App {
   private:
     SDL_Window *window;
     SDL_GLContext gl_context;
+    bool control_menu_was_open = false;
     bool running = true;
     bool debug_run = false;
     bool vsync_state = true;
     bool gui_run = false;
-    bool phy_run = false;
-    bool ip_run = false;
+    bool phy_run = true;
+    bool ip_run = true;
 };
 
 socketData choose_socket(const std::string &sock);
