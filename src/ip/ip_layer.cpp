@@ -78,11 +78,11 @@ void run_tun_tx(SharedData &data)
             while (offset < total_len)
             {
                 size_t chunk_size = std::min<size_t>(BUF_MTU, total_len - offset);
-                bool hflag = 0;
+                uint8_t hflag = 0;
                 if (offset == 0)
-                    hflag = FLAG_FIRST;
-                else if (offset + chunk_size >= total_len)
-                    hflag = FLAG_LAST;
+                    hflag |= FLAG_FIRST;
+                if (offset + chunk_size >= total_len)
+                    hflag |= FLAG_LAST;
 
                 hdr.magic = htons(0x1F35);
                 hdr.length = htons(static_cast<uint16_t>(chunk_size));
@@ -99,7 +99,8 @@ void run_tun_tx(SharedData &data)
                 encoded = interleaving(encoded);
                 auto bits = byte_to_bits(encoded, 32);
 
-                data.ip_phy.write(ip.raw_bits, true);
+                data.ip_phy.write(bits, true);
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
                 offset += chunk_size;
             }
@@ -143,26 +144,21 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
             continue;
         }
 
+        
         uint16_t payload_len = ntohs(hdr.length);
         uint8_t *fragment_data = frame.data() + sizeof(FrameHeader);
         uint16_t current_seq = ntohs(hdr.seq);
         uint16_t id = ntohs(hdr.id);
-
+        
         auto &res_buf = assembly_map[id];
 
-        if (!res_buf.data.empty())
+        if (hdr.flags & FLAG_FIRST)
         {
-            if (hdr.flags & FLAG_FIRST)
-                res_buf.data.clear();
-            if (current_seq != (uint16_t)(res_buf.last_seq + 1))
-            {
-                logs::tun.error("[{}] Packet loss detected for ID {}. Expected {}, got {}", tun_name, (uint16_t)id, res_buf.last_seq + 1, current_seq);
-                res_buf.data.clear();
-            }
+            res_buf.data.clear();
+            res_buf.last_seq = current_seq;
         }
 
         res_buf.data.insert(res_buf.data.end(), fragment_data, fragment_data + payload_len);
-        res_buf.last_seq = ntohs(hdr.seq);
 
         if (hdr.flags & FLAG_LAST)
         {
