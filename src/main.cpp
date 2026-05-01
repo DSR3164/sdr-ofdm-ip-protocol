@@ -13,6 +13,8 @@
 
 std::atomic<bool> *stop_ptr = nullptr;
 SharedData *data_ptr = nullptr;
+StatsHistory<60000> history;
+StatsSnapshot snap;
 
 void signal_handler(int signum)
 {

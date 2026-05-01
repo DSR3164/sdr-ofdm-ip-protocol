@@ -6,6 +6,9 @@
 #include <spdlog/fmt/bundled/color.h>
 #include <spdlog/spdlog.h>
 
+extern StatsHistory<60'000> history;
+extern StatsSnapshot snap;
+
 struct FFTWPlan
 {
     std::vector<float> window;
@@ -693,6 +696,7 @@ int run_dsp_rx(SharedData &data)
     FFTWPlan fft(dsp.ofdm_cfg.n_subcarriers, true);
     std::chrono::steady_clock::time_point start;
     std::chrono::steady_clock::time_point end;
+    std::chrono::steady_clock::time_point clock;
     std::vector<float> plato(buff_size * 2);
     std::vector<uint8_t> bits(4000);
 
@@ -755,6 +759,12 @@ int run_dsp_rx(SharedData &data)
 
         int zc_idx = zc_sync(for_processing, zadoff_chu, zc_energy, 0.0, cp_idx, CP) + dsp.offset;
 
+        snap.cp_found = cp_idx > 0;
+        snap.zc_found = zc_idx > 0;
+        snap.cp_pos = cp_idx;
+        snap.zc_pos = zc_idx;
+        snap.cfo = coarse;
+
         const int zc_end = zc_idx + zc_len;
         const int needed_after_zc = 10 * (N + CP);
         const int total_len = static_cast<int>(for_processing.size());
@@ -814,6 +824,23 @@ int run_dsp_rx(SharedData &data)
         std::atomic_signal_fence(std::memory_order_seq_cst);
         duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
 
+        if ((std::chrono::steady_clock::now().time_since_epoch().count() - clock.time_since_epoch().count()) > 1e9)
+        {
+            clock = std::chrono::steady_clock::now();
+            StatsSnapshot log;
+            history.get_last(log);
+            auto hist = history.get_summary();
+            logs::dsp.debug(
+                "{} packet: CP: {}; ZC: {}; CFO: {:.0f}; ZC_F: {}; CP_F: {}, CP_F: {}; ZC_F: {}; CFO_J: {}; TIME: {:.2f}", fmt::format(fg(fmt::color::beige), "Current"),
+                snap.cp_pos, snap.zc_pos, snap.cfo, snap.zc_found, snap.cp_found,
+                hist.cp_not_found, hist.zc_not_found, hist.cfo_jumped, hist.mean_time_us
+            );
+            logs::tun.debug(
+                "{}: {}%, packets found: {}, packets lost: {}", fmt::format(fg(fmt::color::red), "PL"),
+                hist.packet_loss, hist.packet_found, hist.packet_lost
+            );
+        }
+        snap.processing_time_us = duration.count() / 1e3;
         raw_a = std::move(raw_b);
         raw_b.resize(buff_size);
     }

@@ -13,6 +13,9 @@
 #include <thread>
 #include <vector>
 
+extern StatsHistory<60000> history;
+extern StatsSnapshot snap;
+
 void run_tun_tx(SharedData &data)
 {
     char tun_name[IFNAMSIZ] = "";
@@ -101,6 +104,8 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
 {
     std::vector<uint8_t> frame;
     std::vector<uint32_t> block;
+    uint16_t last_seq = 0;
+    bool last_seq_valid = false;
 
     while (!data.stop.load())
     {
@@ -127,6 +132,23 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
             logs::tun.debug("[{}] Bad magic: 0x{:04X}", tun_name, ntohs(hdr.magic));
             continue;
         }
+        uint16_t current_seq = ntohs(hdr.seq);
+        int16_t diff = (int16_t)(current_seq - last_seq);
+        if (diff > 1 && last_seq_valid)
+        {
+            StatsSnapshot log;
+            history.get_last(log);
+            logs::tun.warn("Missing sequence: current - {}\tlast - {}", static_cast<uint16_t>(current_seq), last_seq);
+            logs::tun.debug(
+                "{} packet: CP: {}\tZC: {}\t CFO: {:.0f}\tZC_F: {}\tCP_F: {}", fmt::format(fg(fmt::color::beige), "Current"),
+                snap.cp_pos, snap.zc_pos, snap.cfo, snap.zc_found, snap.cp_found
+            );
+            logs::tun.debug(
+                "{} packet: CP: {}\tZC: {}\t CFO: {:.0f}\tZC_F: {}\tCP_F: {}", fmt::format(fg(fmt::color::beige), "Previous"),
+                log.cp_pos, log.zc_pos, log.cfo, log.zc_found, log.cp_found
+            );
+            snap.is_previous_packet_lost = true;
+        }
 
         std::vector<uint8_t> crc_received(frame.end() - 2, frame.end());
 
@@ -143,6 +165,11 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
         const uint8_t *payload = frame.data() + sizeof(FrameHeader);
         ssize_t written = write(tun_fd, payload, payload_len);
 
+        last_seq = current_seq;
+        last_seq_valid = true;
+        snap.is_packet = true;
+        history.push(snap);
+        snap.reset();
         std::vector<uint8_t> payload_vec(frame.data(), frame.data() + sizeof(FrameHeader) + payload_len);
 
         data.ip_sockets_bytes.write(payload_vec);
