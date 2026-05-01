@@ -100,7 +100,7 @@ void run_tun_tx(SharedData &data)
                 auto bits = byte_to_bits(encoded, 32);
 
                 data.ip_phy.write(bits, true);
-                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                std::this_thread::sleep_for(std::chrono::milliseconds(3));
 
                 offset += chunk_size;
             }
@@ -144,12 +144,11 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
             continue;
         }
 
-        
         uint16_t payload_len = ntohs(hdr.length);
         uint8_t *fragment_data = frame.data() + sizeof(FrameHeader);
         uint16_t current_seq = ntohs(hdr.seq);
         uint16_t id = ntohs(hdr.id);
-        
+
         auto &res_buf = assembly_map[id];
 
         if (hdr.flags & FLAG_FIRST)
@@ -174,13 +173,17 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
                 if (crc_calc[0] == crc_received[0] && crc_calc[1] == crc_received[1])
                 {
                     ssize_t written = write(tun_fd, full_packet.data(), full_packet.size());
-
+                    
                     if (written < 0)
                         logs::tun.error("[{}] Write error: {}", tun_name, strerror(errno));
                 }
                 else
                 {
-                    data.ip_sockets_bytes.write(full_packet);
+                    std::vector<uint8_t> gui_frame;
+                    gui_frame.insert(gui_frame.end(), (uint8_t *)&hdr, (uint8_t *)&hdr + sizeof(FrameHeader));
+                    gui_frame.insert(gui_frame.end(), full_packet.begin(), full_packet.end());
+                    data.ip_sockets_bytes.write(gui_frame);
+
                     logs::tun.error("[{}] CRC Failed for assembled packet ID {}", tun_name, (uint16_t)id);
                 }
             }
