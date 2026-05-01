@@ -99,7 +99,7 @@ void run_tun_tx(SharedData &data)
                 encoded = interleaving(encoded);
                 auto bits = byte_to_bits(encoded, 32);
 
-                data.ip_phy.write(bits);
+                data.ip_phy.write(ip.raw_bits, true);
 
                 offset += chunk_size;
             }
@@ -126,11 +126,7 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
 
     while (!data.stop.load())
     {
-        if (data.phy_ip.read(frame) < 0)
-        {
-            std::this_thread::sleep_for(std::chrono::microseconds(100));
-            continue;
-        }
+        data.phy_ip.read(frame, true);
 
         block = bits_to_bytes<uint32_t>(frame, 32);
         block = deinterleaving(block);

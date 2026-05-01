@@ -7,7 +7,8 @@ extern float lat;
 
 void phy_dev(App &app, Buffers &data) // Phy layer
 {
-    static std::vector<std::complex<float>> buffer(1920);
+    static std::vector<std::complex<float>> symbols(1920);
+    static std::vector<std::complex<float>> raw(1920);
     static ImGuiIO &io = ImGui::GetIO();
     static ImPlotSpec specs;
     static ImPlotSpec specs2;
@@ -24,18 +25,18 @@ void phy_dev(App &app, Buffers &data) // Phy layer
         init = true;
     }
 
-    data.dsp.read(buffer);
-    auto size = buffer.size() / 2;
-    const float *raw_ptr = reinterpret_cast<const float *>(buffer.data());
+    data.dsp.read(symbols);
+    data.sdr_raw.read(raw);
+    const float *raw_ptr = reinterpret_cast<const float *>(symbols.data());
 
-    if (ImGui::Begin("Phy"))
+    if (ImGui::Begin("Constellation"))
     {
         ImGui::Text("Latency  %.2f mcs | %.2f ms", lat / 1e3, lat / 1e6);
         ImGui::Text("FPS: %.1f (%.3f ms)", io.Framerate, 1000.0f / io.Framerate);
-        app.begin_scatter<float, std::complex<float>>(label, buffer);
+        app.begin_scatter<float, std::complex<float>>(label, symbols);
     }
     ImGui::End();
-    if (ImGui::Begin("Line"))
-        app.begin_plot_2d<float, std::complex<float>>(label, "I", "Q", buffer);
+    if (ImGui::Begin("Time domain raw"))
+        app.begin_plot_2d<float, std::complex<float>>(label, "I", "Q", raw);
     ImGui::End();
 }

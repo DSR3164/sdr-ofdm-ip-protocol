@@ -65,8 +65,7 @@ int run_dsp_bridge(Buffers &bufs, socketData &socket)
     std::string last_connected_path = "";
     ipc_header h;
     bool init = false;
-    std::vector<int16_t> raw(1920 * 2, 0);
-    std::vector<std::complex<float>> symbols;
+    std::vector<std::complex<float>> temp(1920 * 2, 0);
 
     while (true)
     {
@@ -97,12 +96,14 @@ int run_dsp_bridge(Buffers &bufs, socketData &socket)
             continue;
         }
 
-        if (client.recv_frame(h, symbols))
+        if (client.recv_frame(h, temp))
         {
-            logs::gui.trace("RECIEVED frame from SDR, size: {}", symbols.size());
+            logs::gui.trace("RECIEVED frame from SDR, size: {}", temp.size());
             lat = 0.001 * (client.now_ns() - h.timestamp_ns) + 0.999 * lat;
-            bufs.sdr_raw.write(raw);
-            bufs.dsp.write(symbols);
+            if (h.type == MsgType::Spectrum)
+                bufs.sdr_raw.write(temp);
+            else if (h.type == MsgType::Vector)
+                bufs.dsp.write(temp);
         }
     }
     return 0;

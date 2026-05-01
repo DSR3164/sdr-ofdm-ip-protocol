@@ -81,6 +81,14 @@ fetchcontent_declare(
 
 fetchcontent_makeavailable(spdlog)
 
+# ---------- cxxopts ----------
+fetchcontent_declare(
+  cxxopts
+  GIT_REPOSITORY https://github.com/jarro2783/cxxopts
+  GIT_TAG v3.3.1
+)
+fetchcontent_makeavailable(cxxopts)
+
 add_library(imgui STATIC
   ${imgui_SOURCE_DIR}/imgui.cpp
   ${imgui_SOURCE_DIR}/imgui_draw.cpp
@@ -168,6 +176,7 @@ add_library(soip_core STATIC
 
   ${PROJECT_SOURCE_DIR}/src/sockets.cpp
   ${PROJECT_SOURCE_DIR}/src/logger.cpp
+  ${PROJECT_SOURCE_DIR}/src/cli.cpp
 )
 
 add_library(soip_gui STATIC
@@ -194,6 +203,7 @@ target_link_libraries(soip_core
   PUBLIC
   Threads::Threads
   spdlog::spdlog
+  cxxopts::cxxopts
   cppzmq
 )
 target_compile_options(soip_core PRIVATE -mavx2 -ffast-math)

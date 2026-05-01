@@ -13,7 +13,7 @@ int run_sdr(SharedData &data)
     Flags apply = Flags::APPLY_BANDWIDTH | Flags::APPLY_FREQUENCY | Flags::APPLY_GAIN | Flags::APPLY_SAMPLE_RATE;
     while (!has_flag(sdr.get_flags(), Flags::IS_ACTIVE))
     {
-        if (!data.stop.load())
+        if (data.stop.load())
         {
             logs::sdr.info("Closing SDR thread");
             return 0;
@@ -36,7 +36,7 @@ int run_sdr(SharedData &data)
             ret_tx = sdr.writestream(writebuffer);
 
         if (ret_rx > 0)
-            data.sdr_dsp_rx.swap();
+            data.sdr_dsp_rx.swap(true);
         else if (ret_rx == SOAPY_SDR_OVERFLOW)
             logs::sdr.error("OVERFLOW");
         else
@@ -59,7 +59,8 @@ int run_dsp_gui_bridge(SharedData &data, socketData &socket)
 {
     IPC server;
     bool init = false;
-    std::vector<std::complex<float>> temp;
+    std::vector<std::complex<float>> raw;
+    std::vector<std::complex<float>> symbols;
 
     while (!init && !data.stop.load())
     {
@@ -79,11 +80,10 @@ int run_dsp_gui_bridge(SharedData &data, socketData &socket)
 
     while (!data.stop.load())
     {
-        if (data.dsp_sockets.read(temp) == 0)
-        {
-            server.send_frame(MsgType::Vector, temp);
-            logs::dsp.trace("Sent frame to GUI, size: {}", temp.size());
-        }
+        if (data.dsp_sockets_raw.read(raw) == 0)
+            server.send_frame(MsgType::Spectrum, raw);
+        if (data.dsp_sockets_symbols.read(symbols) == 0)
+            server.send_frame(MsgType::Vector, symbols);
     }
 
     return 0;
