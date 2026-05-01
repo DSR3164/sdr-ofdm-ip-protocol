@@ -183,13 +183,12 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
                 {
                     ssize_t written = write(tun_fd, full_packet.data(), full_packet.size());
 
-                    data.ip_sockets_bytes.write(full_packet);
-
                     if (written < 0)
                         logs::tun.error("[{}] Write error: {}", tun_name, strerror(errno));
                 }
                 else
                 {
+                    data.ip_sockets_bytes.write(full_packet);
                     logs::tun.error("[{}] CRC Failed for assembled packet ID {}", tun_name, (uint16_t)id);
                 }
             }
