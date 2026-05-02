@@ -3,10 +3,12 @@
 !/**/
 !*.hpp
 !*.cpp
+!*.png
 
 !.gitignore
 !README.md
 !CMakeLists.txt
+!.clang-format
 
 third_party
 build

@@ -1,8 +1,9 @@
+#include "cli.hpp"
 #include "common.hpp"
-#include "ip/ip_layer.hpp"
+#include "sockets.hpp"
 #include "phy/dsp.hpp"
 #include "phy/phy_layer.hpp"
-#include "sockets.hpp"
+#include "ip/ip_layer.hpp"
 
 #include <atomic>
 #include <csignal>
@@ -11,19 +12,30 @@
 #include <thread>
 
 std::atomic<bool> *stop_ptr = nullptr;
+SharedData *data_ptr = nullptr;
+StatsHistory<60000> history;
+StatsSnapshot snap;
 
 void signal_handler(int signum)
 {
     if (stop_ptr)
         stop_ptr->store(true);
+    if (data_ptr)
+        data_ptr->stop_all_buffers();
     logs::main.info("Signal {} received, stopping threads...", signum);
 }
 
-int main()
+int main(int argc, char *argv[])
 {
+    auto cfg = parse_cli(argc, argv);
+    if (!cfg)
+        return 0;
+
     SharedData data;
+    set_cli_opts(data, *cfg);
 
     stop_ptr = &data.stop;
+    data_ptr = &data;
 
     std::signal(SIGINT, signal_handler);
 

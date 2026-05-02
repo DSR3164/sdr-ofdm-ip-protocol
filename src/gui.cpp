@@ -1,5 +1,5 @@
-#include "gui/app.hpp"
 #include "sockets.hpp"
+#include "gui/app.hpp"
 
 #include <functional>
 #include <string>
@@ -79,7 +79,7 @@ int run_dsp_bridge(Buffers &bufs, socketData &socket)
     std::string last_connected_path = "";
     ipc_header h;
     bool init = false;
-    std::vector<int16_t> raw(1920 * 2, 0);
+    std::vector<std::complex<float>> raw(1920 * 2);
     std::vector<std::complex<float>> symbols;
 
     while (true)

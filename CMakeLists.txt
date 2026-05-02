@@ -81,6 +81,14 @@ fetchcontent_declare(
 
 fetchcontent_makeavailable(spdlog)
 
+# ---------- cxxopts ----------
+fetchcontent_declare(
+  cxxopts
+  GIT_REPOSITORY https://github.com/jarro2783/cxxopts
+  GIT_TAG v3.3.1
+)
+fetchcontent_makeavailable(cxxopts)
+
 add_library(imgui STATIC
   ${imgui_SOURCE_DIR}/imgui.cpp
   ${imgui_SOURCE_DIR}/imgui_draw.cpp
@@ -159,7 +167,7 @@ set(ZMQ_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(WITH_PERF_TOOL OFF CACHE BOOL "" FORCE)
 set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(ENABLE_CPACK OFF CACHE BOOL "" FORCE)
-set(CPPZMQ_BUILD_TESTS OFF)
+set(CPPZMQ_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 
 fetchcontent_declare(
   libzmq
@@ -180,8 +188,8 @@ fetchcontent_makeavailable(cppzmq)
 add_library(soip_core STATIC
   ${PROJECT_SOURCE_DIR}/src/ip/ip_layer.cpp
   ${PROJECT_SOURCE_DIR}/src/ip/tun_layer.cpp
-  ${PROJECT_SOURCE_DIR}/src/ip/bit_utils.cpp
   ${PROJECT_SOURCE_DIR}/src/ip/crc.cpp
+  ${PROJECT_SOURCE_DIR}/src/ip/fec_codec.cpp
 
   ${PROJECT_SOURCE_DIR}/src/phy/phy_layer.cpp
   ${PROJECT_SOURCE_DIR}/src/phy/sdr.cpp
@@ -189,6 +197,7 @@ add_library(soip_core STATIC
 
   ${PROJECT_SOURCE_DIR}/src/sockets.cpp
   ${PROJECT_SOURCE_DIR}/src/logger.cpp
+  ${PROJECT_SOURCE_DIR}/src/cli.cpp
 )
 
 add_library(soip_gui STATIC
@@ -215,6 +224,7 @@ target_link_libraries(soip_core
   PUBLIC
   Threads::Threads
   spdlog::spdlog
+  cxxopts::cxxopts
   cppzmq
 )
 target_compile_options(soip_core PRIVATE -mavx2 -ffast-math)

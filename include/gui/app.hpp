@@ -5,26 +5,26 @@
 
 #include <SDL2/SDL.h>
 #include <cstdint>
-#include <string>
+#include <implot.h>
 #include <span>
-#include "implot.h"
+#include <string>
 
 struct Buffers
 {
-    DoubleBuffer<int16_t> sdr_raw;
+    DoubleBuffer<std::complex<float>> sdr_raw;
     DoubleBuffer<std::complex<float>> dsp;
     DoubleBuffer<uint8_t> ip;
     DoubleBuffer<std::string> socket;
 
     Buffers(int size1 = 3840, int size2 = 3840)
         : sdr_raw(size1),
-        dsp(size2)
+          dsp(size2)
     {
     }
 };
 
 class App {
-    public:
+  public:
     App(const std::string &title, int width, int height);
     ~App();
 
@@ -83,9 +83,8 @@ class App {
     }
 
     template <typename T>
-    class PlotSpec
-    {
-        public:
+    class PlotSpec {
+      public:
         ImPlotSpec spec;
         PlotSpec(int stride_elements = 1, ImPlotMarker marker = ImPlotMarker_None, float marker_size = 2.0f)
         {
@@ -95,16 +94,16 @@ class App {
             spec.Offset = 0;
         }
     };
-
-    private:
+  private:
     SDL_Window *window;
     SDL_GLContext gl_context;
+    bool control_menu_was_open = false;
     bool running = true;
     bool debug_run = false;
     bool vsync_state = true;
     bool gui_run = false;
-    bool phy_run = false;
-    bool ip_run = false;
+    bool phy_run = true;
+    bool ip_run = true;
 };
 
 socketData choose_socket(const std::string &sock);
