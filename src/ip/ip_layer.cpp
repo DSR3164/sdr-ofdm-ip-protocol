@@ -204,14 +204,16 @@ int run_ip_gui_bridge(SharedData &data, socketData &socket)
     while (!data.stop.load())
     {
         std::vector<uint8_t> bytes;
+        StatsSummary summary = history.get_summary();
+        Stats s = {summary.zc_not_found, summary.cp_not_found, summary.cfo_jumped,
+                summary.packet_found, summary.packet_lost, summary.packet_loss, summary.mean_time_us};
 
         if (data.ip_sockets_bytes.read(bytes) == 0)
         {
             if (!server.send_frame(MsgType::Vector, bytes))
                 logs::socket.error("Frame send failed");
-
-            if (!server.send_value(MsgType::var, 1440))
-                logs::socket.error("Var send failed");
+            if (!server.send_value(MsgType::stats, s))
+                logs::socket.error("Failed to send Stats");
         }
         else
             std::this_thread::sleep_for(std::chrono::milliseconds(10));

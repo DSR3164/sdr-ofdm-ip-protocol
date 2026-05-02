@@ -128,13 +128,27 @@ void App::control_wd(std::vector<std::string> &sockets)
     }
 }
 
-void App::begin_debug()
+void App::begin_debug(Buffers &buf)
 {
     ImGuiIO &io = ImGui::GetIO();
+    static Stats s_last{};
+    std::vector<Stats> s_vec;
+
+    buf.stats.read(s_vec);
+    if (!s_vec.empty())
+        s_last = s_vec.back();
+
     if (ImGui::Begin("Debug Panel"))
     {
         ImGui::SeparatorText("Statistics");
         ImGui::Text("FPS: %.f (%0.3f ms)", io.Framerate, 1000.0f / io.Framerate);
+        ImGui::Text("ZC Not Found: %u", s_last.zc_not_found);
+        ImGui::Text("CP Not Found: %u", s_last.cp_not_found);
+        ImGui::Text("CFO Jumped: %u", s_last.cfo_jumped);
+        ImGui::Text("Packet Found: %u", s_last.packet_found);
+        ImGui::Text("Packet Lost: %u", s_last.packet_lost);
+        ImGui::Text("Packet Loss: %.2f%%", s_last.packet_loss);
+        ImGui::Text("Mean Time: %.2f us", s_last.mean_time_us);
     }
     ImGui::End();
 }
@@ -159,7 +173,7 @@ void run_gui(Buffers &buf, std::vector<std::string> &sockets, socketData &sock)
         }
 
         if (app.is_debug_run())
-            app.begin_debug();
+            app.begin_debug(buf);
 
         if (app.is_gui_run())
             gui_dev(app);

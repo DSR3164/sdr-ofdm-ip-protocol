@@ -15,6 +15,7 @@ struct Buffers
     DoubleBuffer<std::complex<float>> dsp;
     DoubleBuffer<uint8_t> ip;
     DoubleBuffer<std::string> socket;
+    DoubleBuffer<Stats> stats;
 
     Buffers(int size1 = 3840, int size2 = 3840)
         : sdr_raw(size1),
@@ -37,7 +38,7 @@ class App {
     void start_frame();
     void stop_frame();
     void control_wd(std::vector<std::string> &sockets);
-    void begin_debug();
+    void begin_debug(Buffers &buf);
     void set_vsync_state(bool vsync_state) { (vsync_state) ? SDL_GL_SetSwapInterval(1) : SDL_GL_SetSwapInterval(0); }
 
     bool choose_socket = false;

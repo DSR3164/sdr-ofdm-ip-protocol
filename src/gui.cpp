@@ -57,12 +57,16 @@ int run_ip_brigde(Buffers &data, socketData &socket)
                 if (has_more && client.recv_payload_vector(bytes))
                     data.ip.write(bytes);
 
-
-            if (header.type == MsgType::var)
+            if (header.type == MsgType::stats)
             {
-                int chet_vosem_vosem = 0;
-                if (has_more && client.recv_payload_value(chet_vosem_vosem))
-                    logs::gui.trace("Received var: ", chet_vosem_vosem);
+                Stats s{};
+                std::vector<Stats> s_vec;
+
+                if (has_more && client.recv_payload_value(s, has_more))
+                {
+                    s_vec.push_back(s);
+                    data.stats.write(s_vec);
+                }
             }
         }
     }

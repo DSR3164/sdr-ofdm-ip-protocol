@@ -11,6 +11,17 @@
 #include <vector>
 #include <zmq.hpp>
 
+struct Stats
+{
+    uint32_t zc_not_found = 0;
+    uint32_t cp_not_found = 0;
+    uint32_t cfo_jumped = 0;
+    uint32_t packet_found = 0;
+    uint32_t packet_lost = 0;
+    float packet_loss = 0;
+    float mean_time_us = 0.0f;
+}; 
+
 struct socketData
 {
     std::string socketPath;
@@ -36,6 +47,7 @@ enum class MsgType : uint32_t
     Vector,
     pid,
     var,
+    stats,
 };
 
 struct ipc_header
@@ -84,7 +96,8 @@ class IPC {
         }
     }
 
-    template <typename T> bool send_value(MsgType type, const T &data)
+    template <typename T>
+    bool send_value(MsgType type, const T &data)
     {
         ipc_header hdr;
         hdr.type = type;
@@ -118,12 +131,13 @@ class IPC {
     }
 
     template <typename T>
-    bool recv_payload_value(T &data) {
+    bool recv_payload_value(T &data, bool &has_more) {
         zmq::message_t msg_p;
         auto res = _socket.recv(msg_p, zmq::recv_flags::none);
         if (!res || msg_p.size() != sizeof(T)) return false;
 
         std::memcpy(&data, msg_p.data(), sizeof(T));
+        has_more = _socket.get(zmq::sockopt::rcvmore);
         return true;
     }
 
