@@ -55,6 +55,17 @@ int allocate_tun(char *dev)
         return err;
     }
 
+    struct ifreq mtu_req{};
+    strncpy(mtu_req.ifr_name, ifr.ifr_name, IFNAMSIZ - 1);
+    mtu_req.ifr_name[IFNAMSIZ - 1] = '\0';
+    mtu_req.ifr_mtu = 240;
+
+    if (ioctl(fd, SIOCSIFMTU, &mtu_req) < 0) {
+        logs::tun.warn("Failed to set MTU: {} (non-critical)", strerror(errno));
+    } else {
+        logs::tun.info("MTU set to 1300 for {}", ifr.ifr_name);
+    }
+
     logs::tun.info("TUN interface allocated: {}", ifr.ifr_name);
 
     strcpy(dev, ifr.ifr_name);
