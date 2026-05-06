@@ -244,10 +244,9 @@ int zc_sync(const std::vector<std::complex<float>> &for_ofdm, const std::vector<
 
     for (int k = 1; k * sym_len <= cp_index; ++k)
     {
-        int n = cp_index - k * sym_len;
         int center = cp_index - k * sym_len;
 
-        for (int offset = -1.5 * Lcp; offset <= 1.5 * Lcp; ++offset)
+        for (int offset = -1.1 * Lcp; offset <= 1.1 * Lcp; ++offset)
         {
             int n = center + offset;
             if (n < 0 || n + (int)N > (int)L)
@@ -277,6 +276,8 @@ int zc_sync(const std::vector<std::complex<float>> &for_ofdm, const std::vector<
                 max_norm = norm;
                 best_idx = n;
             }
+            else if (best_idx > 0 && norm < threshold)
+                return best_idx;
         }
     }
 
@@ -752,7 +753,7 @@ int run_dsp_rx(SharedData &data)
         coarse = coarse_cfo(for_processing, cp_idx, N, CP, data.sdr.get_sample_rate());
         coarse_mean = alpha * coarse + (1.0f - alpha) * coarse_mean;
 
-        int zc_idx = zc_sync(for_processing, zadoff_chu, zc_energy, 0.0, cp_idx, CP) + dsp.offset;
+        int zc_idx = zc_sync(for_processing, zadoff_chu, zc_energy, 0.3f, cp_idx, CP) + dsp.offset;
 
         const int zc_end = zc_idx + zc_len;
         const int needed_after_zc = 10 * (N + CP);
