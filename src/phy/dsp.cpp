@@ -362,7 +362,7 @@ namespace
         }
     };
 
-    void ofdm_equalize(std::vector<std::complex<float>> &input, std::vector<std::complex<float>> &output, DSP::OFDMConfig ofdm_config)
+    void ofdm_equalize(std::vector<std::complex<float>> &input, std::vector<std::complex<float>> &output, DSP::OFDMConfig &ofdm_config)
     {
         int N = ofdm_config.n_subcarriers;
         float accumulated_phase = 0;
@@ -479,7 +479,7 @@ namespace
 
     std::vector<std::complex<float>> ofdm_zadoff_chu_symbol(DSP &data)
     {
-        FFTWPlan ifft(data.ofdm_cfg.n_subcarriers, false);
+        static FFTWPlan ifft(data.ofdm_cfg.n_subcarriers, false);
         std::vector<std::complex<float>> zadoff_chu;
         auto zc = generate_zc(127, 5);
         zadoff_chu.reserve(data.ofdm_cfg.n_subcarriers);
@@ -607,7 +607,7 @@ namespace
         }
         }
 
-        FFTWPlan ifft(N, false);
+        static FFTWPlan ifft(N, false);
 
         int total_symbols = (int)symbols.size();
         std::vector<int> data;
