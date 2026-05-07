@@ -9,6 +9,7 @@
 !README.md
 !CMakeLists.txt
 !.clang-format
+!config/sdr.conf
 
 third_party
 build
