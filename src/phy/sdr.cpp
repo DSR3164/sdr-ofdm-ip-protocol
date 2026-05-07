@@ -78,10 +78,10 @@ bool SDR::init()
     // sdr->setGainMode(TX, 0, false);
     // sdr->setBandwidth(TX, 0, tx_bandwidth);
 
-    // sdr->setDCOffsetMode(RX, 0, true);
-    // sdr->setDCOffsetMode(TX, 0, true);
-    // sdr->setIQBalanceMode(RX, 0, true);
-    // sdr->setIQBalanceMode(TX, 0, true);
+    sdr->setDCOffsetMode(RX, 0, true);
+    sdr->setDCOffsetMode(TX, 0, true);
+    sdr->setIQBalanceMode(RX, 0, true);
+    sdr->setIQBalanceMode(TX, 0, true);
 
     // Stream parameters
     std::vector<size_t> channels = { 0 };
