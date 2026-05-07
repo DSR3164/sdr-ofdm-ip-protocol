@@ -65,6 +65,7 @@ void run_tun_tx(SharedData &data)
         if (nbytes > 0)
         {
 
+            logs::tun.trace("Get packet {} bytes, id: {}", nbytes, ip.id);
             std::vector<uint8_t> payload(buffer, buffer + nbytes);
 
             auto crc = calculateCRC16(payload);
