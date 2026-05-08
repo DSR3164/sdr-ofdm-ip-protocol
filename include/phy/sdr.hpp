@@ -1,5 +1,7 @@
 #pragma once
 
+#include "logger.hpp"
+
 #include <SoapySDR/Device.hpp>
 #include <cstdint>
 #include <fftw3.h>
@@ -102,21 +104,25 @@ class SDR {
 
     void set_rx_freq(double f)
     {
+        logs::sdr.info("RX carrier: {:.3f} GHz", f / 1e9);
         cfg.rx_freq = f;
         flags |= Flags::APPLY_FREQUENCY;
     }
     void set_tx_freq(double f)
     {
+        logs::sdr.info("TX carrier: {:.3f} GHz", f / 1e9);
         cfg.tx_freq = f;
         flags |= Flags::APPLY_FREQUENCY;
     }
     void set_rx_gain(float g)
     {
+        logs::sdr.info("RX gain: {:.2f} dB", g);
         cfg.rx_gain = g;
         flags |= Flags::APPLY_GAIN;
     }
     void set_tx_gain(float g)
     {
+        logs::sdr.info("TX gain: {:.2f} dB", g);
         cfg.tx_gain = g;
         flags |= Flags::APPLY_GAIN;
     }

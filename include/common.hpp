@@ -22,6 +22,23 @@ enum class Modulation
     QAM64,
 };
 
+inline const std::string mod_to_string(Modulation mod)
+{
+    switch (mod)
+    {
+    case Modulation::BPSK:
+        return "BPSK";
+    case Modulation::QPSK:
+        return "QPSK";
+    case Modulation::QAM16:
+        return "QAM16";
+    case Modulation::QAM64:
+        return "QAM64";
+    default:
+        return "ERROR";
+    }
+}
+
 struct DSP {
     float cfo = 0.0f;
     int max_index = 0;
