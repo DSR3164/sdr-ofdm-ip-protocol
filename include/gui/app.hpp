@@ -39,6 +39,8 @@ class App {
     void stop_frame();
     void control_wd(std::vector<std::string> &sockets);
     void begin_debug(Buffers &buf);
+    void run_mean_time_graph(const std::vector<Stats> &stats_vec);
+    void run_packet_loss_graph(const std::vector<Stats> &stats_vec);
     void set_vsync_state(bool vsync_state) { (vsync_state) ? SDL_GL_SetSwapInterval(1) : SDL_GL_SetSwapInterval(0); }
 
     bool choose_socket = false;
@@ -101,6 +103,8 @@ class App {
     bool control_menu_was_open = false;
     bool running = true;
     bool debug_run = false;
+    bool g_mean_time = false;
+    bool g_packet_loss = false;
     bool vsync_state = true;
     bool gui_run = false;
     bool phy_run = true;

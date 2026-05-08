@@ -132,23 +132,105 @@ void App::begin_debug(Buffers &buf)
 {
     ImGuiIO &io = ImGui::GetIO();
     static Stats s_last{};
-    std::vector<Stats> s_vec;
+    static std::vector<Stats> s_vec;
+    std::vector<Stats> s_vec_last;
 
-    buf.stats.read(s_vec);
-    if (!s_vec.empty())
-        s_last = s_vec.back();
-
-    if (ImGui::Begin("Debug Panel"))
+    buf.stats.read(s_vec_last);
+    if (!s_vec_last.empty())
     {
-        ImGui::SeparatorText("Statistics");
-        ImGui::Text("FPS: %.f (%0.3f ms)", io.Framerate, 1000.0f / io.Framerate);
-        ImGui::Text("ZC Not Found: %u", s_last.zc_not_found);
-        ImGui::Text("CP Not Found: %u", s_last.cp_not_found);
-        ImGui::Text("CFO Jumped: %u", s_last.cfo_jumped);
-        ImGui::Text("Packet Found: %u", s_last.packet_found);
-        ImGui::Text("Packet Lost: %u", s_last.packet_lost);
-        ImGui::Text("Packet Loss: %.2f%%", s_last.packet_loss);
-        ImGui::Text("Mean Time: %.2f us", s_last.mean_time_us);
+        s_last = s_vec_last.back();
+        s_vec.push_back(s_vec_last.back());
+    }
+
+    if (s_vec.size() > 10000)
+        s_vec.erase(s_vec.begin(), s_vec.begin() + (s_vec.size() - 10000)); 
+
+    if (ImGui::BeginMainMenuBar())
+    {
+        if (ImGui::Begin("Debug Panel", &debug_run))
+        {
+            ImGui::SeparatorText("Statistics");
+            ImGui::Text("FPS: %.f (%0.3f ms)", io.Framerate, 1000.0f / io.Framerate);
+            ImGui::Text("ZC Not Found: %u", s_last.zc_not_found);
+            ImGui::Text("CP Not Found: %u", s_last.cp_not_found);
+            ImGui::Text("CFO Jumped: %u", s_last.cfo_jumped);
+            ImGui::Text("Packet Found: %u", s_last.packet_found);
+            ImGui::Text("Packet Lost: %u", s_last.packet_lost);
+
+            ImGui::Text("Packet Loss: %.2f%%", s_last.packet_loss);
+            ImGui::SameLine();
+            if (ImGui::SmallButton("PacketLoss Graph"))                                                                                                                                                                                 
+                g_packet_loss = !g_packet_loss;
+
+            ImGui::Text("Mean Time: %.2f us", s_last.mean_time_us);
+            ImGui::SameLine();                                     
+            if (ImGui::SmallButton("Mean Time Graph"))                                                                                                                                                                                 
+                g_mean_time = !g_mean_time;
+        }
+        ImGui::End();
+
+        if (g_packet_loss)
+            run_packet_loss_graph(s_vec);
+
+        if (g_mean_time)
+            run_mean_time_graph(s_vec);
+
+        ImGui::EndMainMenuBar();
+    }
+}
+
+void App::run_mean_time_graph(const std::vector<Stats> &stats_vec)
+{
+    std::vector<float> mean_time_ns(stats_vec.size());
+    for (size_t i = 0; i < mean_time_ns.size(); ++i)
+        mean_time_ns[i] = stats_vec[i].mean_time_us;
+
+    static int x_size = 100;
+
+    if (ImGui::Begin("Mean Time Graph", &g_mean_time))
+    {
+        int max_size = mean_time_ns.size();                                                                                                                                                                      
+        ImGui::InputInt("X scale", &x_size, 1, 100);                                                                                                                                                             
+                                                                                                                                                                                                                   
+        if (x_size < 1)                                                                                                                                                                                          
+            x_size = 1;                                                                                                                                                                                          
+        if (x_size > max_size)                                                                                                                                                                                   
+            x_size = max_size;    
+
+        if (ImPlot::BeginPlot("Mean Time", ImVec2(ImGui::GetContentRegionAvail())))
+        {
+            int start_idx = max_size - x_size;                                                                                                                                                                   
+            ImPlot::PlotLine("Time(ns)", mean_time_ns.data() + start_idx, x_size); 
+            ImPlot::EndPlot();
+        }
+    }
+    ImGui::End();
+}
+
+void App::run_packet_loss_graph(const std::vector<Stats> &stats_vec)
+{
+    std::vector<float> packet_loss(stats_vec.size());
+    for (size_t i = 0; i < packet_loss.size(); ++i)
+        packet_loss[i] = stats_vec[i].packet_loss;
+
+    static int x_size = 100;
+
+    if (ImGui::Begin("Packet Loss Graph", &g_packet_loss))
+    {
+        int max_size = packet_loss.size();                                                                                                                                                                      
+        ImGui::InputInt("X scale", &x_size, 1, 100);                                                                                                                                                             
+                                                                                                                                                                                                                   
+        if (x_size < 1)                                                                                                                                                                                          
+            x_size = 1;                                                                                                                                                                                          
+        if (x_size > max_size)                                                                                                                                                                                   
+            x_size = max_size;    
+
+        if (ImPlot::BeginPlot("Packet Loss", ImVec2(ImGui::GetContentRegionAvail())))
+        {
+            int start_idx = max_size - x_size;                                                                                                                                                                   
+            ImPlot::PlotLine("Packet Loss(%)", packet_loss.data() + start_idx, x_size);
+            ImPlot::EndPlot();
+        }
     }
     ImGui::End();
 }
