@@ -2,8 +2,8 @@
 #include "logger.hpp"
 #include "config.hpp"
 
-#include <fstream>
 #include <iostream>
+#include <string>
 
 static Modulation stringToModulation(const std::string &str)
 {
@@ -37,6 +37,7 @@ std::optional<CliConfig> parse_cli(int argc, char *argv[])
     ("n,node", "Base Node settings (A / B)", cxxopts::value<std::string>())
     ("r,rx", "Set RX frequency (Hz)", cxxopts::value<double>()->implicit_value("2200000000"))
     ("t,tx", "Set TX frequency (Hz)", cxxopts::value<double>()->implicit_value("2230000000"))
+    ("i,ip", "Set IP Adress", cxxopts::value<std::string>()->default_value("10.0.0.2"))
     ("log-level", "Log level for all (trace/debug/info/warn/error/critical)", cxxopts::value<std::string>()->default_value("info"))
     ("log-sdr", "Log level for SDR", cxxopts::value<std::string>())
     ("log-tun", "Log level for TUN", cxxopts::value<std::string>())
@@ -152,6 +153,9 @@ std::optional<CliConfig> parse_cli(int argc, char *argv[])
     if (result.count("tx") && !result.count("n"))
         cfg.tx_freq = result["tx"].as<double>();
 
+    if (result.count("ip") && !result.count("n"))
+        cfg.ip = result["ip"].as<std::string>();
+
     return cfg;
 }
 
@@ -170,15 +174,20 @@ void set_cli_opts(SharedData &data, CliConfig &cfg)
     {
         data.sdr.set_rx_freq(2200e6);
         data.sdr.set_tx_freq(2230e6);
+        data.ip_addr = "10.0.0.1";
     }
     else if (cfg.node == Node::B)
     {
         data.sdr.set_rx_freq(2230e6);
         data.sdr.set_tx_freq(2200e6);
+        data.ip_addr = "10.0.0.2";
     }
 
     if (cfg.rx_freq)
         data.sdr.set_rx_freq(*cfg.rx_freq);
     if (cfg.tx_freq)
         data.sdr.set_tx_freq(*cfg.tx_freq);
+
+    if (cfg.ip)
+        data.ip_addr = *cfg.ip;
 }
