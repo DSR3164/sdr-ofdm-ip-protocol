@@ -1,6 +1,7 @@
 name: SDR Wireless Tunnel CI
 
 on:
+  workflow_dispatch:
   pull_request:
     branches:
       - main
