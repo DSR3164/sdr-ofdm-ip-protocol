@@ -66,9 +66,11 @@ std::optional<CliConfig> parse_cli(int argc, char *argv[])
         return std::nullopt;
     }
 
-    if (result.count("config"))
+    const std::string config_path = result["config"].as<std::string>();
+    const bool config_explicit = result.count("config") > 0;
+
+    if (config_explicit || std::filesystem::exists(config_path))
     {
-        const std::string config_path = result["config"].as<std::string>();
         auto file_cfg = load_config(config_path);
         auto file_args = config_to_args(file_cfg);
         std::vector<const char *> merged_argv;
