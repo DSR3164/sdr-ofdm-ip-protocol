@@ -7,6 +7,8 @@ PointerAlignment: Right
 ReferenceAlignment: Right
 
 BreakBeforeBinaryOperators: All
+PackConstructorInitializers: Never
+SpaceBeforeCpp11BracedList: false
 AlignOperands: true
 
 AccessModifierOffset: -2
@@ -14,7 +16,7 @@ AccessModifierOffset: -2
 BreakBeforeBraces: Custom
 BraceWrapping:
   AfterClass: false
-  AfterStruct: true
+  AfterStruct: false
   AfterNamespace: true
   AfterFunction: true
   AfterUnion: true

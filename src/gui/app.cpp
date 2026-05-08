@@ -115,7 +115,7 @@ void App::control_wd(std::vector<std::string> &sockets)
 
             ImGui::EndMenu();
         }
-        else 
+        else
         {
             control_menu_was_open = false;
         }

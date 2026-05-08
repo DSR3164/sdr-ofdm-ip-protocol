@@ -33,10 +33,15 @@ int run_sdr(SharedData &data)
     {
         auto ret_rx = sdr.readstream(data.sdr_dsp_rx.get_write_buffer());
         if (data.sdr_dsp_tx.read(writebuffer) == 0)
+        {
             ret_tx = sdr.writestream(writebuffer);
+            logs::sdr.trace("[{}] sent {} samples", fmt::format(fmt::fg(fmt::color::cyan), "TX"), ret_tx);
+        }
 
-        if (ret_rx > 0)
+        if (ret_rx == data.sdr.get_buffer_size())
             data.sdr_dsp_rx.swap(true);
+        else if (ret_rx > 0)
+            logs::sdr.warn("[{}] read only {} samples", fmt::format(fmt::fg(fmt::color::orange_red), "RX"), ret_rx);
         else if (ret_rx == SOAPY_SDR_OVERFLOW)
             logs::sdr.error("OVERFLOW");
         else
@@ -76,7 +81,7 @@ int run_dsp_gui_bridge(SharedData &data, socketData &socket)
         }
     }
 
-    logs::dsp.info("Socket created succsesfully {}", socket.phy_socket);
+    logs::dsp.info("Socket created successfully {}", socket.phy_socket);
 
     while (!data.stop.load())
     {

@@ -11,14 +11,14 @@ extern StatsSnapshot snap;
 
 namespace
 {
-    struct FFTWPlan
-    {
+    struct FFTWPlan {
         std::vector<float> window;
         fftwf_complex *in = nullptr;
         fftwf_complex *out = nullptr;
         fftwf_plan plan = nullptr;
 
-        FFTWPlan(int size, bool direction = true) : window(size)
+        FFTWPlan(int size, bool direction = true)
+            : window(size)
         {
             for (int i = 0; i < size; ++i)
                 window[i] = 0.5f - 0.5f * std::cos(2.0f * float(M_PI) * float(i) / float(size - 1));
@@ -172,8 +172,7 @@ namespace
             std::vector<std::complex<float>> s(1);
             std::vector<uint8_t> b(6);
 
-            struct Point
-            {
+            struct Point {
                 float I, Q;
                 uint8_t bits[6];
             };
@@ -862,9 +861,8 @@ int run_dsp_tx(SharedData &data)
     {
         data.ip_phy.read(bits, true);
 
-        logs::dsp.trace("[{}] Read {} bits", fmt::format(fmt::fg(fmt::color::cyan), "TX"), bits.size());
         ofdm(bits, buffer, data.dsp);
-        logs::dsp.trace("[{}] Modulate {} samples", fmt::format(fmt::fg(fmt::color::cyan), "OFDM"), buffer.size());
+        logs::dsp.trace("[{}] modulate {} samples", fmt::format(fmt::fg(fmt::color::cyan), "OFDM"), buffer.size());
         data.sdr_dsp_tx.write(buffer);
     }
 

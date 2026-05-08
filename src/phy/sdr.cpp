@@ -97,6 +97,16 @@ bool SDR::init()
         if (sdr->activateStream(txStream, 0, 0, 0) == 0)
             logs::sdr.info("{} stream is active", fmt::format(fg(fmt::color::cyan), "TX"));
     }
+    auto rx_gain_range = sdr->getGainRange(SOAPY_SDR_RX, 0);
+    auto tx_gain_range = sdr->getGainRange(SOAPY_SDR_TX, 0);
+    auto rx_carrier_range = sdr->getFrequencyRange(SOAPY_SDR_RX, 0);
+    auto tx_carrier_range = sdr->getFrequencyRange(SOAPY_SDR_TX, 0);
+
+    logs::sdr.debug("SDR RX Gain range: {:.2f} dB -> {:.2f} dB", rx_gain_range.minimum(), rx_gain_range.maximum());
+    logs::sdr.debug("SDR TX Gain range: {:.2f} dB -> {:.2f} dB", tx_gain_range.minimum(), tx_gain_range.maximum());
+    logs::sdr.debug("SDR RX Carrier range: {:.2f} MHz -> {:.2f} GHz", rx_carrier_range[0].minimum() / 1e6, rx_carrier_range[0].maximum() / 1e9);
+    logs::sdr.debug("SDR TX Carrier range: {:.2f} MHz -> {:.2f} GHz", tx_carrier_range[0].minimum() / 1e6, tx_carrier_range[0].maximum() / 1e9);
+
     logs::sdr.info("Create SDR: {}", args["uri"]);
 
     return true;

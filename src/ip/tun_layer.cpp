@@ -1,31 +1,14 @@
 #include "logger.hpp"
 
 #include <arpa/inet.h>
-#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <fcntl.h>
-#include <iostream>
 #include <linux/if.h>
 #include <linux/if_tun.h>
 #include <netinet/in.h>
 #include <string>
 #include <sys/ioctl.h>
-
-uint8_t node_id_prompt()
-{
-    std::cout << "Enter node ID (10.0.0.x, x=): ";
-    std::string input;
-    std::getline(std::cin, input);
-
-    uint8_t id = 1;
-    if (!input.empty())
-        id = static_cast<uint8_t>(std::stoi(input));
-
-    logs::tun.info("Using IP: 10.0.0.{}", static_cast<int>(id));
-
-    return id;
-}
 
 int allocate_tun(char *dev)
 {
@@ -55,24 +38,13 @@ int allocate_tun(char *dev)
         return err;
     }
 
-    struct ifreq mtu_req{};
-    strncpy(mtu_req.ifr_name, ifr.ifr_name, IFNAMSIZ - 1);
-    mtu_req.ifr_name[IFNAMSIZ - 1] = '\0';
-    mtu_req.ifr_mtu = 240;
-
-    if (ioctl(fd, SIOCSIFMTU, &mtu_req) < 0) {
-        logs::tun.warn("Failed to set MTU: {} (non-critical)", strerror(errno));
-    } else {
-        logs::tun.info("MTU set to 1300 for {}", ifr.ifr_name);
-    }
-
     logs::tun.info("TUN interface allocated: {}", ifr.ifr_name);
 
     strcpy(dev, ifr.ifr_name);
     return fd;
 }
 
-std::optional<std::string> set_interface_ip(const char *dev_name, uint8_t node_id)
+std::optional<std::string> set_interface_ip(const char *dev_name, std::string ip_addr)
 {
     int sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0)
@@ -81,12 +53,12 @@ std::optional<std::string> set_interface_ip(const char *dev_name, uint8_t node_i
         return std::nullopt;
     }
 
-    struct ifreq ifr{};
+    struct ifreq ifr = {};
     memset(&ifr, 0, sizeof(ifr));
     strncpy(ifr.ifr_name, dev_name, IFNAMSIZ - 1);
 
     char ip[INET_ADDRSTRLEN];
-    snprintf(ip, sizeof(ip), "10.0.0.%d", node_id);
+    snprintf(ip, sizeof(ip), "%s", ip_addr.c_str());
 
     struct sockaddr_in *addr = (struct sockaddr_in *)&ifr.ifr_addr;
     addr->sin_family = AF_INET;
