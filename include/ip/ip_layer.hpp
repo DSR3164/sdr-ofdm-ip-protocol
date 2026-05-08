@@ -3,8 +3,7 @@
 #include "common.hpp"
 #include "sockets.hpp"
 
-struct __attribute__((packed)) FrameHeader
-{
+struct __attribute__((packed)) FrameHeader {
     uint16_t magic;
     uint16_t length;
     uint16_t seq;
@@ -15,8 +14,7 @@ struct __attribute__((packed)) FrameHeader
 constexpr uint8_t FLAG_LAST = 0x01;
 constexpr uint8_t FLAG_FIRST = 0x02;
 
-struct IP
-{
+struct IP {
     std::atomic<bool> back_running = true;
     std::atomic<bool> ready_buf = false;
     std::atomic<ssize_t> nbytes = 0;
@@ -28,8 +26,7 @@ struct IP
     size_t id = 0;
 };
 
-struct ReassemblyBuffer
-{
+struct ReassemblyBuffer {
     std::vector<uint8_t> data;
     uint16_t last_seq = 0;
 

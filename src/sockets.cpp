@@ -10,7 +10,8 @@
 #include <vector>
 #include <zmq.hpp>
 
-socketData::socketData(const bool setup_dir, const std::string &base_folder) : is_owner(setup_dir)
+socketData::socketData(const bool setup_dir, const std::string &base_folder)
+    : is_owner(setup_dir)
 {
     namespace fs = std::filesystem;
 

@@ -66,8 +66,7 @@ inline bool has_any_except(Flags flags, Flags excluded)
     return (flags & ~excluded) != Flags::None;
 }
 
-struct SDRConfig
-{
+struct SDRConfig {
     int buffer_size = 1920;
     double sample_rate = 1.92e6;
     double tx_freq = 2200e6; // FDD: set rx_freq to tx_freq + 3MHz on the other node

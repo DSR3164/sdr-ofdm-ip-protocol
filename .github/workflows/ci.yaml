@@ -1,0 +1,118 @@
+name: SDR Wireless Tunnel CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BUILD_DIR: build
+
+jobs:
+  build-gcc:
+    name: Build (GCC Release)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+
+          sudo apt install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            gcc-14 \
+            g++-14 \
+            libfftw3-dev \
+            libsdl2-dev \
+            libglew-dev \
+            libsoapysdr-dev \
+            libopengl-dev
+
+      - name: Configure
+        env:
+          CC: gcc-14
+          CXX: g++-14
+        run: |
+          cmake -B $BUILD_DIR \
+                -G Ninja \
+                -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: |
+          cmake --build $BUILD_DIR -j$(nproc)
+
+  build-clang:
+    name: Build (Clang Debug) + clang-tidy
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+
+          sudo apt install -y \
+            clang-18 \
+            clang-tidy-18 \
+            cmake \
+            ninja-build \
+            libfftw3-dev \
+            libsdl2-dev \
+            libglew-dev \
+            libsoapysdr-dev \
+            libopengl-dev
+
+      - name: Configure
+        env:
+          CC: clang-18
+          CXX: clang++-18
+        run: |
+          cmake -B $BUILD_DIR \
+                -G Ninja \
+                -DCMAKE_BUILD_TYPE=Debug \
+                -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: Build
+        run: |
+          cmake --build $BUILD_DIR -j$(nproc)
+
+      - name: Run clang-tidy
+        run: |
+          find src include \
+            \( -name "*.cpp" -o -name "*.hpp" \) \
+            | xargs clang-tidy-18 \
+                -p $BUILD_DIR
+
+  clang-format:
+    name: clang-format
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: |
+          sudo apt update
+          sudo apt install -y clang-format-18
+
+      - name: Check formatting
+        run: |
+          find . \
+            \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" -o -name "*.cc" \) \
+            -not -path "./build/*" \
+            -not -path "./third_party/*" \
+            | xargs clang-format-18 -i
+          git diff --exit-code

@@ -11,8 +11,7 @@
 #include <vector>
 #include <zmq.hpp>
 
-struct socketData
-{
+struct socketData {
     std::string socketPath;
     std::string socketPid;
     std::string ip_socket;
@@ -37,8 +36,7 @@ enum class MsgType : uint32_t
     pid,
 };
 
-struct ipc_header
-{
+struct ipc_header {
     MsgType type;
     uint32_t size;
     uint64_t timestamp_ns;
@@ -49,7 +47,11 @@ class IPC {
     zmq::context_t _context;
     zmq::socket_t _socket;
   public:
-    IPC() : _context(1), _socket(_context, zmq::socket_type::pub) {}
+    IPC()
+        : _context(1),
+          _socket(_context, zmq::socket_type::pub)
+    {
+    }
 
     bool start_server(const std::string &path);
     bool connect_to(const std::string &path);

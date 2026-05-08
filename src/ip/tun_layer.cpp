@@ -53,7 +53,7 @@ std::optional<std::string> set_interface_ip(const char *dev_name, std::string ip
         return std::nullopt;
     }
 
-    struct ifreq ifr{};
+    struct ifreq ifr = {};
     memset(&ifr, 0, sizeof(ifr));
     strncpy(ifr.ifr_name, dev_name, IFNAMSIZ - 1);
 
