@@ -104,7 +104,9 @@ jobs:
           find . \
             \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" -o -name "*.cc" \) \
             -not -path "./build/*" \
-            | xargs clang-format-18 --dry-run --Werror
+            -not -path "./third_party/*" \
+            | xargs clang-format-18 -i
+          git diff --exit-code
 
   clang-tidy:
     name: clang-tidy
