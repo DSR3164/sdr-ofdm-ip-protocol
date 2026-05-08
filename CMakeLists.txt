@@ -177,6 +177,7 @@ add_library(soip_core STATIC
   ${PROJECT_SOURCE_DIR}/src/sockets.cpp
   ${PROJECT_SOURCE_DIR}/src/logger.cpp
   ${PROJECT_SOURCE_DIR}/src/cli.cpp
+  ${PROJECT_SOURCE_DIR}/src/config.cpp
 )
 
 add_library(soip_gui STATIC
@@ -219,7 +220,7 @@ target_link_libraries(soip_gui
 )
 
 # ---------- GUI executable ----------
-add_executable(main
+add_executable(soip
   src/main.cpp
 )
 
@@ -227,7 +228,7 @@ add_executable(gui
   src/gui.cpp
 )
 
-target_link_libraries(main PRIVATE
+target_link_libraries(soip PRIVATE
   soip_core
 )
 
@@ -236,7 +237,7 @@ target_link_libraries(gui PRIVATE
 )
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-  foreach(target main gui)
+  foreach(target soip gui)
     target_compile_options(${target} PRIVATE
       -fsanitize=address,undefined
       -fno-omit-frame-pointer

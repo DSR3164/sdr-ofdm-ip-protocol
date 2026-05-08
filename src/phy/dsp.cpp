@@ -823,9 +823,8 @@ int run_dsp_tx(SharedData &data)
     {
         data.ip_phy.read(bits, true);
 
-        logs::dsp.trace("[{}] Read {} bits", fmt::format(fmt::fg(fmt::color::cyan), "TX"), bits.size());
         ofdm(bits, buffer, data.dsp);
-        logs::dsp.trace("[{}] Modulate {} samples", fmt::format(fmt::fg(fmt::color::cyan), "OFDM"), buffer.size());
+        logs::dsp.trace("[{}] modulate {} samples", fmt::format(fmt::fg(fmt::color::cyan), "OFDM"), buffer.size());
         data.sdr_dsp_tx.write(buffer);
     }
 
