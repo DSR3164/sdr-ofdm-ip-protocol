@@ -9,8 +9,7 @@
 #include <span>
 #include <string>
 
-struct Buffers
-{
+struct Buffers {
     DoubleBuffer<std::complex<float>> sdr_raw;
     DoubleBuffer<std::complex<float>> dsp;
     DoubleBuffer<uint8_t> ip;

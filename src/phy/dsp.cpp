@@ -6,14 +6,14 @@
 #include <spdlog/fmt/bundled/color.h>
 #include <spdlog/spdlog.h>
 
-struct FFTWPlan
-{
+struct FFTWPlan {
     std::vector<float> window;
     fftwf_complex *in = nullptr;
     fftwf_complex *out = nullptr;
     fftwf_plan plan = nullptr;
 
-    FFTWPlan(int size, bool direction = true) : window(size)
+    FFTWPlan(int size, bool direction = true)
+        : window(size)
     {
         for (int i = 0; i < size; ++i)
             window[i] = 0.5f - 0.5f * std::cos(2.0f * float(M_PI) * float(i) / float(size - 1));
@@ -167,8 +167,7 @@ void demodulate(Modulation mod, const std::vector<std::complex<float>> &symbols,
         std::vector<std::complex<float>> s(1);
         std::vector<uint8_t> b(6);
 
-        struct Point
-        {
+        struct Point {
             float I, Q;
             uint8_t bits[6];
         };

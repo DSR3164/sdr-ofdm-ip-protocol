@@ -22,14 +22,12 @@ enum class Modulation
     QAM64,
 };
 
-struct DSP
-{
+struct DSP {
     float cfo = 0.0f;
     int max_index = 0;
     int offset = -2;
     float sample_rate = 1.92e6;
-    struct OFDMConfig
-    {
+    struct OFDMConfig {
         Modulation mod = Modulation::QAM16;
         int n_subcarriers = 128;
         int pilot_spacing = 19;
@@ -125,8 +123,7 @@ class DoubleBuffer {
     std::atomic<bool> stopped{ false };
 };
 
-struct SharedData
-{
+struct SharedData {
     SDR sdr;
     DSP dsp;
 
@@ -155,7 +152,10 @@ struct SharedData
         ip_sockets_bytes.stop();
     }
 
-    SharedData() : sdr(SDRConfig{}),
-                   dsp_sockets_raw(SDRConfig{}.buffer_size * 2),
-                   dsp_sockets_symbols(SDRConfig{}.buffer_size * 2) {}
+    SharedData()
+        : sdr(SDRConfig{}),
+          dsp_sockets_raw(SDRConfig{}.buffer_size * 2),
+          dsp_sockets_symbols(SDRConfig{}.buffer_size * 2)
+    {
+    }
 };

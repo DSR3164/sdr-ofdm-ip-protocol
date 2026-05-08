@@ -6,10 +6,13 @@
 #include <optional>
 #include <spdlog/spdlog.h>
 
-enum class Node { A, B };
-
-struct LogConfig
+enum class Node
 {
+    A,
+    B
+};
+
+struct LogConfig {
     spdlog::level::level_enum sdr = spdlog::level::info;
     spdlog::level::level_enum tun = spdlog::level::info;
     spdlog::level::level_enum gui = spdlog::level::info;
@@ -27,13 +30,12 @@ struct LogConfig
     }
 };
 
-struct CliConfig
-{
+struct CliConfig {
     Modulation modulation = Modulation::QAM64;
     std::optional<Node> node;
     std::optional<double> rx_freq;
     std::optional<double> tx_freq;
-    std::optional<std::string> ip; 
+    std::optional<std::string> ip;
     LogConfig log;
 };
 
