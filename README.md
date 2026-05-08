@@ -102,7 +102,7 @@ cmake --build . -j$(nproc)
 ## Configuration
 
 ```bash
-sudo ./main --help
+sudo ./soip --help
 ```
 
 ```
@@ -138,13 +138,13 @@ Enter node ID (10.0.0.x, x=):
 Node A:
 
 ```bash
-sudo ./main --node A --modulation QAM64
+sudo ./soip --node A --modulation QAM64
 ```
 
 Node B:
 
 ```bash
-sudo ./main --node B --modulation QAM64
+sudo ./soip --node B --modulation QAM64
 ```
 
 ---
@@ -154,14 +154,14 @@ sudo ./main --node B --modulation QAM64
 **Headless (no GUI required):**
 
 ```bash
-sudo ./main -n A -m QAM64
+sudo ./soip -n A -m QAM64
 ```
 
 **With GUI (separate process, attaches over ZeroMQ):**
 
 ```bash
 sudo ./gui &
-sudo ./main -n A -m QAM64
+sudo ./soip -n A -m QAM64
 ```
 
 > GUI and core can be started in any order.
