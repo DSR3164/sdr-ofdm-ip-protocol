@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <string>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -138,6 +139,8 @@ struct SharedData
     DoubleBuffer<std::complex<float>> dsp_sockets_raw;
     DoubleBuffer<std::complex<float>> dsp_sockets_symbols;
     DoubleBuffer<uint8_t> ip_sockets_bytes;
+
+    std::string ip_addr;
 
     std::atomic<bool> stop{ false };
 

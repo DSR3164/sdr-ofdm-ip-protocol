@@ -32,6 +32,8 @@ struct ReassemblyBuffer
 {
     std::vector<uint8_t> data;
     uint16_t last_seq = 0;
+
+    std::chrono::steady_clock::time_point last_update;
 };
 
 void run_tun_tx(SharedData &data);

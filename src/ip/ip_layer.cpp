@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <linux/if.h>
 #include <netinet/in.h>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -24,17 +25,16 @@ void run_tun_tx(SharedData &data)
     if (tun_fd < 0)
         return;
 
-    uint8_t node_id = node_id_prompt();
+    std::string ip_address = data.ip_addr;
 
-    auto ip_addr = set_interface_ip(tun_name, node_id);
-
+    auto ip_addr = set_interface_ip(tun_name, ip_address);
     if (ip_addr)
     {
         logs::tun.info("Interface {} started with IP {}", tun_name, *ip_addr);
 
-        if (node_id == 1)
+        if (ip_addr->ends_with(".1"))
             enable_nat(tun_name);
-        else if (node_id == 2)
+        else if (!ip_addr->ends_with(".1"))
             enable_client(tun_name);
     }
     else
@@ -113,7 +113,7 @@ void run_tun_tx(SharedData &data)
 
     if (rx_thread.joinable())
     {
-        logs::tun.info("Waiting for TX thread to join...");
+        logs::tun.info("Waiting for RX thread to join...");
         rx_thread.join();
     }
     logs::tun.info("TUN RX and TX threads finished");
@@ -125,6 +125,7 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
     std::vector<uint32_t> block;
 
     std::unordered_map<uint16_t, ReassemblyBuffer> assembly_map;
+    auto last_cleanup = std::chrono::steady_clock::now();
 
     while (!data.stop.load())
     {
@@ -146,11 +147,14 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
         }
 
         uint16_t payload_len = ntohs(hdr.length);
+        if (payload_len > frame.size() - sizeof(FrameHeader))
+            continue;
         uint8_t *fragment_data = frame.data() + sizeof(FrameHeader);
         uint16_t current_seq = ntohs(hdr.seq);
         uint16_t id = ntohs(hdr.id);
 
         auto &res_buf = assembly_map[id];
+        res_buf.last_update = std::chrono::steady_clock::now();
 
         if (hdr.flags & FLAG_FIRST)
         {
@@ -174,7 +178,7 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
                 if (crc_calc[0] == crc_received[0] && crc_calc[1] == crc_received[1])
                 {
                     ssize_t written = write(tun_fd, full_packet.data(), full_packet.size());
-                    
+
                     if (written < 0)
                         logs::tun.error("[{}] Write error: {}", tun_name, strerror(errno));
                 }
@@ -189,6 +193,23 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
                 }
             }
             assembly_map.erase(id);
+        }
+
+        auto now = std::chrono::steady_clock::now();
+
+        if (now - last_cleanup > std::chrono::seconds(1))
+        {
+            last_cleanup = now;
+            for (auto it = assembly_map.begin(); it != assembly_map.end();)
+            {
+                if (now - it->second.last_update > std::chrono::seconds(2))
+                {
+                    logs::tun.debug("[{}] Packet ID {} timed out, dropping", tun_name, it->first);
+                    it = assembly_map.erase(it);
+                }
+                else
+                    ++it;
+            }
         }
     }
 }
