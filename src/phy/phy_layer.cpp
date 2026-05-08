@@ -81,7 +81,7 @@ int run_dsp_gui_bridge(SharedData &data, socketData &socket)
         }
     }
 
-    logs::dsp.info("Socket created succsesfully {}", socket.phy_socket);
+    logs::dsp.info("Socket created successfully {}", socket.phy_socket);
 
     while (!data.stop.load())
     {

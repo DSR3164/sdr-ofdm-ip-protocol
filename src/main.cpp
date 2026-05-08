@@ -16,6 +16,7 @@ SharedData *data_ptr = nullptr;
 
 void signal_handler(int signum)
 {
+    std::printf("\n");
     if (stop_ptr)
         stop_ptr->store(true);
     if (data_ptr)
