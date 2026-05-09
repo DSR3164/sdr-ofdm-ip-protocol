@@ -8,6 +8,14 @@
 #include <implot.h>
 #include <span>
 #include <string>
+#include <type_traits>
+#include <complex>
+
+template <typename T>
+struct is_complex : std::false_type {};
+
+template <typename T>
+struct is_complex<std::complex<T>> : std::true_type {};
 
 struct Buffers
 {
