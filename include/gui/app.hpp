@@ -4,18 +4,45 @@
 #include "sockets.hpp"
 
 #include <SDL2/SDL.h>
+#include <chrono>
+#include <cmath>
+#include <complex>
 #include <cstdint>
+#include <fftw3.h>
 #include <implot.h>
 #include <span>
 #include <string>
 #include <type_traits>
-#include <complex>
 
 template <typename T>
-struct is_complex : std::false_type {};
+struct is_complex : std::false_type
+{
+};
 
 template <typename T>
-struct is_complex<std::complex<T>> : std::true_type {};
+struct is_complex<std::complex<T>> : std::true_type
+{
+};
+
+struct WaterfallData
+{
+    int fft_size;
+    int history_rows;
+    std::vector<float> data;
+
+    fftwf_complex *fft_in;
+    fftwf_complex *fft_out;
+    fftwf_plan fft_plan;
+    std::vector<float> window;
+
+    std::chrono::steady_clock::time_point last_update;
+    int update_interval_ms;
+
+    WaterfallData(int fft_sz = 512, int rows = 300);
+    ~WaterfallData();
+
+    void process_samples(const std::vector<std::complex<float>> &samples);
+};
 
 struct Buffers
 {
@@ -49,6 +76,8 @@ class App {
     void begin_debug(Buffers &buf);
     void run_mean_time_graph(const std::vector<Stats> &stats_vec);
     void run_packet_loss_graph(const std::vector<Stats> &stats_vec);
+    void run_heatmap(const std::string &label, const float *data, int rows, int cols, float scale_min, float scale_max);
+    void run_waterfall(const std::string &label, WaterfallData &waterfall, const std::vector<std::complex<float>> &data);
     void set_vsync_state(bool vsync_state) { (vsync_state) ? SDL_GL_SetSwapInterval(1) : SDL_GL_SetSwapInterval(0); }
 
     bool choose_socket = false;

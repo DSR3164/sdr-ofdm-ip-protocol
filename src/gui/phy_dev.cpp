@@ -10,6 +10,7 @@ extern float lat;
 
 void phy_dev(App &app, Buffers &data) // Phy layer
 {
+    static WaterfallData waterfall(512, 300);
     static std::vector<std::complex<float>> symbols(1920);
     static std::vector<std::complex<float>> raw(1920);
     static ImGuiIO &io = ImGui::GetIO();
@@ -32,6 +33,10 @@ void phy_dev(App &app, Buffers &data) // Phy layer
     data.sdr_raw.read(raw);
     const float *raw_ptr = reinterpret_cast<const float *>(symbols.data());
 
+    if (ImGui::Begin("Waterfall"))
+        app.run_waterfall("##Waterfall", waterfall, raw);
+    ImGui::End();
+
     if (ImGui::Begin("Constellation"))
     {
         ImGui::Text("Latency  %.2f mcs | %.2f ms", lat / 1e3, lat / 1e6);
@@ -40,7 +45,7 @@ void phy_dev(App &app, Buffers &data) // Phy layer
     }
     ImGui::End();
     if (ImGui::Begin("Time domain raw"))
-        app.begin_plot_2d<float, std::complex<float>>(label, "I", "Q", raw);
+        app.begin_plot_2d<float, std::complex<float>>(label, "I", "Q", symbols);
     ImGui::End();
 
     struct Point3D

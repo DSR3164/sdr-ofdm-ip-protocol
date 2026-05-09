@@ -127,8 +127,15 @@ int run_dsp_bridge(Buffers &bufs, socketData &socket)
                     bufs.dsp.write(symbols);
                 }
             }
+            else if (h.type == MsgType::Spectrum)
+            {
+                if (has_more && client.recv_payload_vector(raw))
+                {
+                    logs::gui.trace("RECIEVED raw, size: {}", raw.size());
+                    bufs.sdr_raw.write(raw);
+                }
+            }
             lat = 0.001 * (client.now_ns() - h.timestamp_ns) + 0.999 * lat;
-            bufs.sdr_raw.write(raw);
         }
     }
     return 0;
