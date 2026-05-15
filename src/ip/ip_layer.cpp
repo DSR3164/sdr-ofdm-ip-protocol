@@ -8,12 +8,15 @@
 
 #include <SDL2/SDL_stdinc.h>
 #include <algorithm>
+#include <cerrno>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <linux/if.h>
 #include <netinet/in.h>
+#include <poll.h>
 #include <string>
+#include <sys/poll.h>
 #include <thread>
 #include <vector>
 
@@ -44,66 +47,80 @@ void run_tun_tx(SharedData &data)
 
     struct IP ip;
 
-    uint8_t buffer[1500];
+    uint8_t buffer[1460];
     std::vector<uint8_t> frame;
     std::vector<uint32_t> encoded_bytes;
     FrameHeader hdr;
 
     while (!data.stop.load())
     {
-        ssize_t nbytes = read(tun_fd, buffer, sizeof(buffer));
+        struct pollfd pfd = { tun_fd, POLLIN, 0 };
+        int ret = poll(&pfd, 1, 1000);
 
-        if (nbytes < 0)
+        if (ret < 0)
         {
-            if (errno == EAGAIN || errno == EWOULDBLOCK)
+            if (errno == EINTR)
                 continue;
-            logs::tun.error("[{}] Read error {}: {}", tun_name, errno, strerror(errno));
-            nbytes = 0;
-            continue;
+            break;
         }
 
-        if (nbytes > 0)
+        if (ret == 0)
+            continue;
+
+        if (pfd.revents & POLLIN)
         {
-
-            logs::tun.trace("Get packet {} bytes, id: {}", nbytes, ip.id);
-            std::vector<uint8_t> payload(buffer, buffer + nbytes);
-
-            auto crc = calculateCRC16(payload);
-            payload.insert(payload.end(), crc.begin(), crc.end());
-
-            size_t total_len = payload.size();
-            size_t offset = 0;
-            uint16_t packet_id = static_cast<uint16_t>(ip.id++ & 0xFFFF);
-            uint16_t packet_seq = 0;
-
-            while (offset < total_len)
+            ssize_t nbytes = read(tun_fd, buffer, sizeof(buffer));
+            if (nbytes < 0)
             {
-                size_t chunk_size = std::min<size_t>(BUF_MTU, total_len - offset);
-                uint8_t hflag = 0;
-                if (offset == 0)
-                    hflag |= FLAG_FIRST;
-                if (offset + chunk_size >= total_len)
-                    hflag |= FLAG_LAST;
+                if (errno == EAGAIN || errno == EWOULDBLOCK)
+                    continue;
+                logs::tun.error("[{}] Read error {}: {}", tun_name, errno, strerror(errno));
+                nbytes = 0;
+                continue;
+            }
 
-                hdr.magic = htons(0x1F35);
-                hdr.length = htons(static_cast<uint16_t>(chunk_size));
-                hdr.seq = htons(packet_seq++);
-                hdr.id = htons(packet_id);
-                hdr.flags = hflag;
+            if (nbytes > 0)
+            {
 
-                std::vector<uint8_t> frame;
-                auto *hdr_ptr = reinterpret_cast<uint8_t *>(&hdr);
-                frame.insert(frame.end(), hdr_ptr, hdr_ptr + sizeof(FrameHeader));
-                frame.insert(frame.end(), payload.begin() + offset, payload.begin() + offset + chunk_size);
+                logs::tun.trace("Get packet {} bytes, id: {}", nbytes, ip.id);
+                std::vector<uint8_t> payload(buffer, buffer + nbytes);
 
-                auto encoded = hamming_encoder(frame);
-                encoded = interleaving(encoded);
-                auto bits = byte_to_bits(encoded, 32);
+                auto crc = calculateCRC16(payload);
+                payload.insert(payload.end(), crc.begin(), crc.end());
 
-                data.ip_phy.write(bits, true);
-                std::this_thread::sleep_for(std::chrono::milliseconds(3));
+                size_t total_len = payload.size();
+                size_t offset = 0;
+                uint16_t packet_id = static_cast<uint16_t>(ip.id++ & 0xFFFF);
+                uint16_t packet_seq = 0;
 
-                offset += chunk_size;
+                while (offset < total_len)
+                {
+                    size_t chunk_size = std::min<size_t>(BUF_MTU, total_len - offset);
+                    uint8_t hflag = 0;
+                    if (offset == 0)
+                        hflag |= FLAG_FIRST;
+                    if (offset + chunk_size >= total_len)
+                        hflag |= FLAG_LAST;
+
+                    hdr.magic = htons(0x1F35);
+                    hdr.length = htons(static_cast<uint16_t>(chunk_size));
+                    hdr.seq = htons(packet_seq++);
+                    hdr.id = htons(packet_id);
+                    hdr.flags = hflag;
+
+                    std::vector<uint8_t> frame;
+                    auto *hdr_ptr = reinterpret_cast<uint8_t *>(&hdr);
+                    frame.insert(frame.end(), hdr_ptr, hdr_ptr + sizeof(FrameHeader));
+                    frame.insert(frame.end(), payload.begin() + offset, payload.begin() + offset + chunk_size);
+
+                    auto encoded = hamming_encoder(frame);
+                    encoded = interleaving(encoded);
+                    auto bits = byte_to_bits(encoded, 32);
+
+                    data.ip_phy.write(bits, true);
+
+                    offset += chunk_size;
+                }
             }
         }
     }
