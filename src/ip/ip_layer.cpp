@@ -47,7 +47,7 @@ void run_tun_tx(SharedData &data)
 
     struct IP ip;
 
-    uint8_t buffer[1500];
+    uint8_t buffer[1460];
     std::vector<uint8_t> frame;
     std::vector<uint32_t> encoded_bytes;
     FrameHeader hdr;
