@@ -1,3 +1,4 @@
+#include "ip/ip_layer.hpp"
 #include "logger.hpp"
 
 #include <arpa/inet.h>
@@ -89,6 +90,10 @@ std::optional<std::string> set_interface_ip(const char *dev_name, std::string ip
         else
             logs::tun.info("Interface {} is UP", dev_name);
     }
+
+    ifr.ifr_mtu = 250 + sizeof(FrameHeader) + 20;   
+    if(ioctl(sock, SIOCSIFMTU, &ifr) < 0)
+        logs::tun.error("SIOCSIFMTU failed: {}", strerror(errno));
 
     close(sock);
     return std::string(ip);
