@@ -55,7 +55,7 @@ void run_tun_tx(SharedData &data)
     while (!data.stop.load())
     {
         struct pollfd pfd = { tun_fd, POLLIN, 0 };
-        int ret = poll(&pfd, 1, -1);
+        int ret = poll(&pfd, 1, 1000);
 
         if (ret < 0)
         {
@@ -63,6 +63,9 @@ void run_tun_tx(SharedData &data)
                 continue;
             break;
         }
+
+        if (ret == 0)
+            continue;
 
         if (pfd.revents & POLLIN)
         {
@@ -115,7 +118,7 @@ void run_tun_tx(SharedData &data)
                     auto bits = byte_to_bits(encoded, 32);
 
                     data.ip_phy.write(bits, true);
-                    std::this_thread::sleep_for(std::chrono::milliseconds(3));
+                    // std::this_thread::sleep_for(std::chrono::milliseconds(3));
 
                     offset += chunk_size;
                 }
