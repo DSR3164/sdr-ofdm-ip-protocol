@@ -118,7 +118,6 @@ void run_tun_tx(SharedData &data)
                     auto bits = byte_to_bits(encoded, 32);
 
                     data.ip_phy.write(bits, true);
-                    // std::this_thread::sleep_for(std::chrono::milliseconds(3));
 
                     offset += chunk_size;
                 }
