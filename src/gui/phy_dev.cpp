@@ -10,9 +10,9 @@ extern float lat;
 
 void phy_dev(App &app, Buffers &data) // Phy layer
 {
-    static WaterfallData waterfall(512, 300);
+    static WaterfallData waterfall(3840, 125);
     static std::vector<std::complex<float>> symbols(1920);
-    static std::vector<std::complex<float>> raw(1920);
+    static std::vector<std::complex<float>> raw(3840);
     static ImGuiIO &io = ImGui::GetIO();
     static ImPlotSpec specs;
     static ImPlotSpec specs2;
@@ -31,7 +31,6 @@ void phy_dev(App &app, Buffers &data) // Phy layer
 
     data.dsp.read(symbols);
     data.sdr_raw.read(raw);
-    const float *raw_ptr = reinterpret_cast<const float *>(symbols.data());
 
     if (ImGui::Begin("Waterfall"))
         app.run_waterfall("##Waterfall", waterfall, raw);
@@ -45,7 +44,7 @@ void phy_dev(App &app, Buffers &data) // Phy layer
     }
     ImGui::End();
     if (ImGui::Begin("Time domain raw"))
-        app.begin_plot_2d<float, std::complex<float>>(label, "I", "Q", symbols);
+        app.begin_plot_2d<float, std::complex<float>>(label, "I", "Q", raw);
     ImGui::End();
 
     struct Point3D

@@ -254,8 +254,8 @@ void App::run_waterfall(const std::string &label, WaterfallData &waterfall, cons
     ImGui::Text("History: %d rows", waterfall.history_rows);
     ImGui::SliderInt("Update Rate(ms)", &waterfall.update_interval_ms, 5, 100);
 
-    static float min_db = -100.0f;
-    static float max_db = -40.0f;
+    static float min_db = -40.0f;
+    static float max_db = -10.0f;
     ImGui::SliderFloat("Min dB", &min_db, -200.0f, -40.0f);
     ImGui::SliderFloat("Max dB", &max_db, -40.0f, -0.0f);
 
@@ -300,51 +300,47 @@ WaterfallData::~WaterfallData()
 }
 
 void WaterfallData::process_samples(const std::vector<std::complex<float>> &samples)
-{
-    auto now = std::chrono::steady_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_update);
+  {
+      auto now = std::chrono::steady_clock::now();
+      auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_update);
 
-    if (elapsed.count() < update_interval_ms)
-        return;
+      if (elapsed.count() < update_interval_ms)
+          return;
 
-    last_update = now;
+      last_update = now;
 
-    if (samples.size() < fft_size)
-        return;
+      if (samples.size() < fft_size)
+          return;
 
-    for (int i = 0; i < fft_size; ++i)
-    {
-        std::complex<float> windowed = samples[i] * window[i];
-        fft_in[i][0] = windowed.real();
-        fft_in[i][1] = windowed.imag();
-    }
+      for (int i = 0; i < fft_size; ++i)
+      {
+          std::complex<float> windowed = samples[i] * window[i];
+          fft_in[i][0] = windowed.real();
+          fft_in[i][1] = windowed.imag();
+      }
 
-    fftwf_execute(fft_plan);
+      fftwf_execute(fft_plan);
 
-    for (int i = 0; i < fft_size; ++i)
-    {
-        fft_out[i][0] /= fft_size;
-        fft_out[i][1] /= fft_size;
-    }
+      const float norm = 1.0f / fft_size;
+      const float norm_sq = norm * norm;
+      const int half = fft_size / 2;
 
-    std::vector<float> power_db(fft_size);
-    int half = fft_size / 2;
+      static std::vector<float> power_db;
+      if (power_db.size() != fft_size)
+          power_db.resize(fft_size);
 
-    for (int i = 0; i < fft_size; ++i)
-    {
-        int idx = (i + half) % fft_size;
-        float re = fft_out[idx][0];
-        float im = fft_out[idx][1];
-        power_db[i] = 10 * std::log10(re * re + im * im + 1e-12);
-    }
+      for (int i = 0; i < fft_size; ++i)
+      {
+          int idx = (i + half) % fft_size;
+          float re = fft_out[idx][0];
+          float im = fft_out[idx][1];
+          power_db[i] = 10.0f * std::log10f(norm_sq * (re * re + im * im) + 1e-12f);
+      }
 
-    for (int row = history_rows - 1; row > 0; --row)
-        for (int col = 0; col < fft_size; ++col)
-            data[row * fft_size + col] = data[(row - 1) * fft_size + col];
+      std::memmove(data.data() + fft_size, data.data(), (history_rows - 1) * fft_size * sizeof(float));
 
-    for (int col = 0; col < fft_size; ++col)
-        data[col] = power_db[col];
-}
+      std::memcpy(data.data(), power_db.data(), fft_size * sizeof(float));
+  }
 
 void run_gui(Buffers &buf, std::vector<std::string> &sockets, socketData &sock)
 {
