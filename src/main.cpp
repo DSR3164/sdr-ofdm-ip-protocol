@@ -18,6 +18,7 @@ StatsSnapshot snap;
 
 void signal_handler(int signum)
 {
+    std::printf("\n");
     if (stop_ptr)
         stop_ptr->store(true);
     if (data_ptr)
@@ -58,6 +59,9 @@ int main(int argc, char *argv[])
         std::thread tun_tx_thread(run_tun_tx, std::ref(data));
         std::thread dsp_gui_bridge_thread(run_dsp_gui_bridge, std::ref(data), std::ref(socket));
         std::thread ip_gui_bridge_thread(run_ip_gui_bridge, std::ref(data), std::ref(socket));
+
+        while (!data.stop.load())
+            std::this_thread::sleep_for(std::chrono::seconds(1));
 
         logs::main.info("Joining dsp_rx...");
         if (dsp_rx_thread.joinable())

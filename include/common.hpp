@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <string>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -21,14 +22,29 @@ enum class Modulation
     QAM64,
 };
 
-struct DSP
+inline const std::string mod_to_string(Modulation mod)
 {
+    switch (mod)
+    {
+    case Modulation::BPSK:
+        return "BPSK";
+    case Modulation::QPSK:
+        return "QPSK";
+    case Modulation::QAM16:
+        return "QAM16";
+    case Modulation::QAM64:
+        return "QAM64";
+    default:
+        return "ERROR";
+    }
+}
+
+struct DSP {
     float cfo = 0.0f;
     int max_index = 0;
     int offset = -2;
     float sample_rate = 1.92e6;
-    struct OFDMConfig
-    {
+    struct OFDMConfig {
         Modulation mod = Modulation::QAM16;
         int n_subcarriers = 128;
         int pilot_spacing = 19;
@@ -124,8 +140,7 @@ class DoubleBuffer {
     std::atomic<bool> stopped{ false };
 };
 
-struct StatsSummary
-{
+struct StatsSummary {
     uint32_t zc_not_found = 0;
     uint32_t cp_not_found = 0;
     uint32_t cfo_jumped = 0;
@@ -135,8 +150,7 @@ struct StatsSummary
     float mean_time_us = 0.0f;
 };
 
-struct StatsSnapshot
-{
+struct StatsSnapshot {
     int16_t cp_pos;
     int16_t zc_pos;
     bool cp_found;
@@ -153,8 +167,7 @@ struct StatsSnapshot
 };
 
 template <size_t N>
-struct StatsHistory
-{
+struct StatsHistory {
     std::atomic<size_t> zc_not_found{ 0 };
     std::atomic<size_t> cp_not_found{ 0 };
     std::atomic<size_t> packet_found{ 0 };
@@ -228,8 +241,7 @@ struct StatsHistory
     }
 };
 
-struct SharedData
-{
+struct SharedData {
     SDR sdr;
     DSP dsp;
 
@@ -242,6 +254,8 @@ struct SharedData
     DoubleBuffer<std::complex<float>> dsp_sockets_raw;
     DoubleBuffer<std::complex<float>> dsp_sockets_symbols;
     DoubleBuffer<uint8_t> ip_sockets_bytes;
+
+    std::string ip_addr;
 
     std::atomic<bool> stop{ false };
 
@@ -256,7 +270,10 @@ struct SharedData
         ip_sockets_bytes.stop();
     }
 
-    SharedData() : sdr(SDRConfig{}),
-                   dsp_sockets_raw(SDRConfig{}.buffer_size * 2),
-                   dsp_sockets_symbols(SDRConfig{}.buffer_size * 2) {}
+    SharedData()
+        : sdr(SDRConfig{}),
+          dsp_sockets_raw(SDRConfig{}.buffer_size * 2),
+          dsp_sockets_symbols(SDRConfig{}.buffer_size * 2)
+    {
+    }
 };

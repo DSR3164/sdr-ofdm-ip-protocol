@@ -9,6 +9,8 @@
 !README.md
 !CMakeLists.txt
 !.clang-format
+!config/sdr.conf
+!.github/workflows/ci.yaml
 
 third_party
 build

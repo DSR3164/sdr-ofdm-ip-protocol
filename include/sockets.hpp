@@ -20,7 +20,7 @@ struct Stats
     uint32_t packet_lost = 0;
     float packet_loss = 0;
     float mean_time_us = 0.0f;
-}; 
+};
 
 struct socketData
 {
@@ -50,8 +50,7 @@ enum class MsgType : uint32_t
     stats,
 };
 
-struct ipc_header
-{
+struct ipc_header {
     MsgType type;
     uint32_t size;
     uint64_t timestamp_ns;
@@ -62,7 +61,11 @@ class IPC {
     zmq::context_t _context;
     zmq::socket_t _socket;
   public:
-    IPC() : _context(1), _socket(_context, zmq::socket_type::pub) {}
+    IPC()
+        : _context(1),
+          _socket(_context, zmq::socket_type::pub)
+    {
+    }
 
     bool start_server(const std::string &path);
     bool connect_to(const std::string &path);

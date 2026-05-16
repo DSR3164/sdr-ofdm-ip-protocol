@@ -44,8 +44,7 @@ struct WaterfallData
     void process_samples(const std::vector<std::complex<float>> &samples);
 };
 
-struct Buffers
-{
+struct Buffers {
     DoubleBuffer<std::complex<float>> sdr_raw;
     DoubleBuffer<std::complex<float>> dsp;
     DoubleBuffer<uint8_t> ip;
