@@ -340,7 +340,7 @@ void WaterfallData::process_samples(const std::vector<std::complex<float>> &samp
       std::memmove(data.data() + fft_size, data.data(), (history_rows - 1) * fft_size * sizeof(float));
 
       std::memcpy(data.data(), power_db.data(), fft_size * sizeof(float));
-  }
+}
 
 void run_gui(Buffers &buf, std::vector<std::string> &sockets, socketData &sock)
 {
