@@ -48,7 +48,9 @@ int run_sdr(SharedData &data)
         else
         {
             logs::sdr.warn("ERR read {}", ret_rx);
+#ifdef HAS_DYNAMIC_ENUMERATE
             if (!sdr.check_connection(data.stop))
+#endif
             {
                 data.stop.store(true);
                 data.stop_all_buffers();
