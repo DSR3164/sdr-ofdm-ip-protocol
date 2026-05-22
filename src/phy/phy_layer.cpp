@@ -11,14 +11,15 @@ int run_sdr(SharedData &data)
     int ret_tx = data.sdr.get_buffer_size();
     std::vector<int16_t> writebuffer(data.sdr.get_buffer_size() * 2);
     Flags apply = Flags::APPLY_BANDWIDTH | Flags::APPLY_FREQUENCY | Flags::APPLY_GAIN | Flags::APPLY_SAMPLE_RATE;
-    while (!has_flag(sdr.get_flags(), Flags::IS_ACTIVE))
+
+    if (!has_flag(sdr.get_flags(), Flags::IS_ACTIVE) && sdr.get_wait_flag())
+        sdr.wait_connection(data.stop);
+    else if (!has_flag(sdr.get_flags(), Flags::IS_ACTIVE) && !sdr.get_wait_flag())
     {
-        if (data.stop.load())
-        {
-            logs::sdr.info("Closing SDR thread");
-            return 0;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        logs::sdr.critical("No SDR devices detected, closing application");
+        data.stop.store(true);
+        data.stop_all_buffers();
+        return 1;
     }
 
     if (!sdr.init())
@@ -45,7 +46,17 @@ int run_sdr(SharedData &data)
         else if (ret_rx == SOAPY_SDR_OVERFLOW)
             logs::sdr.error("OVERFLOW");
         else
+        {
             logs::sdr.warn("ERR read {}", ret_rx);
+#ifdef HAS_DYNAMIC_ENUMERATE
+            if (!sdr.check_connection(data.stop))
+#endif
+            {
+                data.stop.store(true);
+                data.stop_all_buffers();
+                return 1;
+            }
+        }
         if (ret_tx < sdr.get_buffer_size())
             logs::sdr.warn("ERR send {}", ret_tx);
 
