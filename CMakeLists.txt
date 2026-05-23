@@ -255,3 +255,29 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     )
   endforeach()
 endif()
+
+# ---------- INSTALLATION & SYSTEMD SERVICE GENERATION ----------
+include(GNUInstallDirs)
+
+set(BIN_PATH "${CMAKE_INSTALL_FULL_BINDIR}/soip")
+set(ARGS "--config ${CMAKE_INSTALL_FULL_SYSCONFDIR}/soip/sdr.conf")
+set(INSTALL_DIR "${CMAKE_INSTALL_FULL_DATADIR}/soip")
+set(SERVICE_USER "soip")
+
+configure_file(
+    ${CMAKE_SOURCE_DIR}/config/soip.service.in
+    ${CMAKE_BINARY_DIR}/soip.service
+    @ONLY
+)
+
+install(TARGETS soip gui
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+
+install(FILES ${CMAKE_BINARY_DIR}/soip.service
+    DESTINATION ${CMAKE_INSTALL_SYSTEMDUNITDIR}
+)
+
+install(FILES ${CMAKE_SOURCE_DIR}/config/sdr.conf
+    DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/soip
+)
