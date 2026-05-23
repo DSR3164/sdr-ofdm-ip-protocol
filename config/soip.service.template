@@ -1,0 +1,18 @@
+[Unit]
+Description=SDR OFDM IP Tunnel - Wireless point-to-point link
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStart=@BIN_PATH@ @ARGS@
+WorkingDirectory=@INSTALL_DIR@
+User=@SERVICE_USER@
+Group=@SERVICE_USER@
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
