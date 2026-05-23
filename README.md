@@ -84,7 +84,7 @@ the core tunnel runs headless, and the GUI can be attached or detached independe
 sudo apt install \
   build-essential cmake pkg-config \
   libfftw3-dev libsdl2-dev libglew-dev libsoapysdr-dev \
-  libopengl-dev libzmq3-dev
+  libopengl-dev libzmq3-dev libcap-dev
 ```
 
 ### Build .deb package

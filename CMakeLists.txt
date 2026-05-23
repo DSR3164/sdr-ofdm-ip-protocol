@@ -95,7 +95,7 @@ add_library(soip_core STATIC
 target_include_directories(soip_core PUBLIC ${PROJECT_SOURCE_DIR}/include PRIVATE ${FFTW3F_INCLUDE_DIRS})
 target_link_libraries(soip_core
     PRIVATE ${SOAPY_TARGET} ${FFTW3F_THREADS_LIB} ${FFTW3F_LIBRARIES}
-    PUBLIC Threads::Threads spdlog::spdlog cxxopts::cxxopts cppzmq
+    PUBLIC Threads::Threads spdlog::spdlog cxxopts::cxxopts cppzmq cap
 )
 target_compile_options(soip_core PRIVATE -mavx2 -ffast-math)
 
