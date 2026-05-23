@@ -11,6 +11,7 @@
 !.clang-format
 !config/sdr.conf
 !config/soip.service.in
+!packaging/postinst
 !.github/workflows/ci.yaml
 
 third_party
