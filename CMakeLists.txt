@@ -148,5 +148,6 @@ set(CPACK_DEBIAN_PACKAGE_MAINTAINER "SOIP Team <soip@example.com>")
 set(CPACK_DEBIAN_PACKAGE_DEPENDS "libzmq5 (>=4.3.0), libfftw3-single3, libsdl2-2.0-0, libglew2.2, soapysdr0.8")
 set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${CMAKE_SOURCE_DIR}/packaging/postinst")
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 
 include(CPack)
