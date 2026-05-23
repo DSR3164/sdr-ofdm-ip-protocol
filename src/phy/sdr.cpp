@@ -31,14 +31,7 @@ SDR::SDR(const SDRConfig &config)
 {
     SoapySDR::registerLogHandler(soapy_log_handler);
     cfg = config;
-    auto list = SoapySDR::Device::enumerate();
-    if (!list.empty() and (list[0]["uri"] != "ip:pluto.local"))
-    {
-        args = list[0];
-        logs::sdr.info("Found SDR: {}", args["uri"]);
-        if (cfg.init_on_start)
-            flags |= Flags::IS_ACTIVE;
-    }
+    scan();
 }
 
 /*!
@@ -193,6 +186,7 @@ bool SDR::deinit()
         }
         logs::sdr.info("Delete SDR: {}", args["uri"]);
         SoapySDR::Device::unmake(sdr);
+        flags &= ~Flags::IS_ACTIVE;
         sdr = nullptr;
     }
     return true;
@@ -218,6 +212,67 @@ bool SDR::reinit()
             return true;
         }
     return false;
+}
+
+void SDR::scan()
+{
+    auto list = SoapySDR::Device::enumerate();
+    if (!list.empty() and (list[0]["uri"] != "ip:pluto.local"))
+    {
+        args = list[0];
+        logs::sdr.info("Found SDR: {}", args["uri"]);
+        if (cfg.init_on_start)
+            flags |= Flags::IS_ACTIVE;
+    }
+}
+
+void SDR::wait_connection(std::atomic<bool> &condition)
+{
+    while (!has_flag(flags, Flags::IS_ACTIVE))
+    {
+        if (connection_retries == 1)
+            logs::sdr.warn("No SDR devices detected. Waiting for any available connection...");
+        if (condition.load())
+        {
+            logs::sdr.info("Closing SDR thread");
+            return;
+        }
+        scan();
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        connection_retries++;
+    }
+    connection_retries = 0;
+}
+
+bool SDR::check_connection(std::atomic<bool> &condition)
+{
+    if (!sdr || !has_flag(flags, Flags::IS_ACTIVE))
+        return false;
+
+    SoapySDR::Kwargs filter;
+    filter["uri"] = args["uri"];
+    filter["driver"] = args["driver"];
+    auto msg = fmt::format(fg(fmt::color::green), "waiting for connection...");
+    logs::sdr.warn("SDR {} seems to be disconnected, trying to find it", args["uri"]);
+    auto found = SoapySDR::Device::enumerate(filter);
+
+    if (found.empty())
+    {
+        if (cfg.exit_on_error)
+        {
+            msg = fmt::format(fg(fmt::color::red), "closing application");
+            logs::sdr.critical("SDR {} was disconnected, {}", args["uri"], msg);
+            return false;
+        }
+        if (deinit())
+        {
+            logs::sdr.critical("SDR {} was disconnected, {}", args["uri"], msg);
+            wait_connection(condition);
+            if (!init())
+                return false;
+        }
+    }
+    return true;
 }
 
 /*!

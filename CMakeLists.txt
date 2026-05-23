@@ -184,6 +184,13 @@ fetchcontent_declare(
 )
 fetchcontent_makeavailable(cppzmq)
 
+# ---------- Core SDR OPTIONS ----------
+option(HAS_DYNAMIC_ENUMERATE "Build with dynamic SDR enumeration support" OFF)
+
+if(HAS_DYNAMIC_ENUMERATE)
+  add_compile_definitions(HAS_DYNAMIC_ENUMERATE)
+endif()
+
 # ---------- Core SDR library ----------
 add_library(soip_core STATIC
   ${PROJECT_SOURCE_DIR}/src/ip/ip_layer.cpp

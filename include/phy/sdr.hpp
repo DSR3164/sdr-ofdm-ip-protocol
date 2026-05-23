@@ -78,6 +78,7 @@ struct SDRConfig {
     float tx_bandwidth = 1e6;
     float rx_bandwidth = 10e6;
     bool init_on_start = true;
+    bool exit_on_error = true;
 };
 
 class SDR {
@@ -96,6 +97,9 @@ class SDR {
     [[nodiscard]] bool init();
     [[nodiscard]] bool reinit();
     [[nodiscard]] bool deinit();
+    [[nodiscard]] bool check_connection(std::atomic<bool> &condition);
+    void scan();
+    void wait_connection(std::atomic<bool> &condition);
     int add_args();
     void apply_runtime();
 
@@ -127,6 +131,8 @@ class SDR {
         flags |= Flags::APPLY_GAIN;
     }
 
+    bool get_wait_flag() const { return cfg.init_on_start; };
+    bool get_exit_flag() const { return cfg.exit_on_error; };
     int get_buffer_size() const { return cfg.buffer_size; }
     double get_sample_rate() const { return cfg.sample_rate; }
     Flags get_flags() const { return flags; }
@@ -148,6 +154,7 @@ class SDR {
     SoapySDR::Stream *txStream = nullptr;
     SoapySDR::Kwargs args;
 
+    size_t connection_retries = 0;
     int sdr_flags = 0;
     long long timeNs = 0;
     long long timeNSdelay = 2e6;

@@ -270,10 +270,10 @@ struct SharedData {
         ip_sockets_bytes.stop();
     }
 
-    SharedData()
-        : sdr(SDRConfig{}),
-          dsp_sockets_raw(SDRConfig{}.buffer_size * 2),
-          dsp_sockets_symbols(SDRConfig{}.buffer_size * 2)
+    SharedData(SDRConfig cfg = SDRConfig{})
+        : sdr(cfg),
+          dsp_sockets_raw(cfg.buffer_size * 2),
+          dsp_sockets_symbols(cfg.buffer_size * 2)
     {
     }
 };

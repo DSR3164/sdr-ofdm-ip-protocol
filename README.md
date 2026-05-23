@@ -102,49 +102,53 @@ cmake --build . -j$(nproc)
 ## Configuration
 
 ```bash
-sudo ./main --help
+sudo ./soip --help
 ```
 
 ```
 Software Defined Radio application
 Usage:
-  sdr_app [OPTION...]
+  soip [OPTION...]
 
+  -c, --config arg              Path to config file (default:
+                                ../config/sdr.conf)
   -m, --modulation arg          Modulation scheme (BPSK, QPSK, QAM16,
                                 QAM64) (default: QAM64)
   -n, --node arg                Base Node settings (A / B)
-  -r, --rx [=arg(=2203000000)]  Set RX frequency (Hz)
-  -t, --tx [=arg(=2203000000)]  Set TX frequency (Hz)
+  -r, --rx [=arg(=2200000000)]  Set RX frequency (Hz)
+  -t, --tx [=arg(=2230000000)]  Set TX frequency (Hz)
+  -i, --ip arg                  Set IP Adress (default: 10.0.0.2)
+      --log-level arg           Log level for all
+                                (trace/debug/info/warn/error/critical)
+                                (default: info)
+      --log-sdr arg             Log level for SDR
+      --log-tun arg             Log level for TUN
+      --log-gui arg             Log level for GUI
+      --log-dsp arg             Log level for DSP
+      --log-main arg            Log level for MAIN
+      --log-socket arg          Log level for SOCKET
   -h, --help                    Print usage
 ```
 
 The application operates as a point-to-point FDD link over a `/30` subnet. Each end of the link runs a separate node role:
 
-| Node | IP       |
-| ---- | -------- |
-| A    | 10.0.0.1 |
-| B    | 10.0.0.2 |
-
-On startup, the application prompts for the last octet of the local IP address:
-
-```
-Enter node ID (10.0.0.x, x=):
-```
-
-> **Note:** Interactive IP assignment is a temporary solution and will be replaced with a configuration file or CLI argument in a future release.
+| Node | IP       | RX Carrier | TX Carrier |
+| ---- | -------- | ---------- | ---------- |
+| A    | 10.0.0.1 | 2.20 GHz   | 2.23 GHz   |
+| B    | 10.0.0.2 | 2.23 GHz   | 2.20 GHz   |
 
 ### Example
 
 Node A:
 
 ```bash
-sudo ./main --node A --modulation QAM64
+sudo ./soip --node A --modulation QAM64
 ```
 
 Node B:
 
 ```bash
-sudo ./main --node B --modulation QAM64
+sudo ./soip --node B --modulation QAM64
 ```
 
 ---
@@ -154,19 +158,18 @@ sudo ./main --node B --modulation QAM64
 **Headless (no GUI required):**
 
 ```bash
-sudo ./main -n A -m QAM64
+sudo ./soip -n A -m QAM64
 ```
 
 **With GUI (separate process, attaches over ZeroMQ):**
 
 ```bash
 sudo ./gui &
-sudo ./main -n A -m QAM64
+sudo ./soip -n A -m QAM64
 ```
 
 > GUI and core can be started in any order.
 
-> Configure your TUN interface and routing before starting.
 > Both ends must run the same build against compatible hardware.
 
 ---
@@ -179,7 +182,7 @@ The GUI is optional and attaches to the core process over ZeroMQ.
 
 - Constellation diagram - received symbols after full DSP pipeline:
   `coarse CP sync -> coarse CFO -> ZC sync -> fine CFO -> equalization`
-- Time-domain symbol buffer (post-FFT)
+- Time-domain raw signal
 
 **IP / MAC view:**
 
