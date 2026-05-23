@@ -12,6 +12,7 @@
 !config/sdr.conf
 !config/soip.service.in
 !packaging/postinst
+!packaging/99-plutosdr.rules
 !.github/workflows/ci.yaml
 
 third_party

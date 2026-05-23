@@ -140,6 +140,8 @@ configure_file(
 
 install(TARGETS soip gui RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES ${CMAKE_BINARY_DIR}/soip.service DESTINATION ${CMAKE_INSTALL_SYSTEMDUNITDIR})
+install(FILES ${CMAKE_SOURCE_DIR}/packaging/99-plutosdr.rules
+        DESTINATION /etc/udev/rules.d/)
 install(FILES ${CMAKE_SOURCE_DIR}/config/sdr.conf
         DESTINATION /etc/soip
         RENAME sdr.conf.default)
