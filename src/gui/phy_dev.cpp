@@ -38,13 +38,17 @@ void phy_dev(App &app, Buffers &data) // Phy layer
 
     if (ImGui::Begin("Constellation"))
     {
+        ImPlot::SetNextAxesLimits(-1.5f, 1.3f, -1.3f, 1.3f);
         ImGui::Text("Latency  %.2f mcs | %.2f ms", lat / 1e3, lat / 1e6);
         ImGui::Text("FPS: %.1f (%.3f ms)", io.Framerate, 1000.0f / io.Framerate);
         app.begin_scatter<float, std::complex<float>>(label, symbols);
     }
     ImGui::End();
     if (ImGui::Begin("Time domain raw"))
+    {
+        ImPlot::SetNextAxesLimits(0.0f, 1920.0f * 2.0f, -1000.0f, 1000.0f);
         app.begin_plot_2d<float, std::complex<float>>(label, "I", "Q", raw);
+    }
     ImGui::End();
 
     struct Point3D
