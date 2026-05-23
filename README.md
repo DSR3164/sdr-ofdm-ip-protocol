@@ -78,23 +78,27 @@ the core tunnel runs headless, and the GUI can be attached or detached independe
 
 ## Building
 
-```bash
-# Dependencies Ubuntu / Debian
-sudo apt install \
-  libfftw3-dev \
-  libsdl2-dev \
-  libglew-dev \
-  libsoapysdr-dev \
-  libopengl-dev \
-  cmake \
-  build-essential
+### Dependencies (Ubuntu / Debian)
 
-# Clone & build
+```bash
+sudo apt install \
+  build-essential cmake pkg-config \
+  libfftw3-dev libsdl2-dev libglew-dev libsoapysdr-dev \
+  libopengl-dev libzmq3-dev
+```
+
+### Build .deb package
+```bash
 git clone https://github.com/DSR3164/sdr-ofdm-ip-protocol
 cd sdr-ofdm-ip-protocol
 cmake -B build -DCMAKE_BUILD_TYPE=Release
-cd build
-cmake --build . -j$(nproc)
+cmake --build build -j$(nproc)
+cd build && cpack
+```
+
+### Install
+```bash
+sudo apt install ./soip_*.deb
 ```
 
 ---

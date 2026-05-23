@@ -107,7 +107,7 @@ target_link_libraries(soip_gui PUBLIC soip_core imgui implot implot3d GLEW::GLEW
 add_executable(soip src/main.cpp)
 target_link_libraries(soip PRIVATE soip_core)
 
-add_executable(gui src/gui/main.cpp) # ← ИСПРАВЛЕНО: был src/gui
+add_executable(gui src/gui.cpp)
 target_link_libraries(gui PRIVATE soip_gui)
 
 # Debug sanitizers
