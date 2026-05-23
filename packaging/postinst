@@ -1,7 +1,15 @@
 #!/bin/bash
 set -e
+
 if ! getent passwd soip >/dev/null 2>&1; then
     useradd -r -s /usr/sbin/nologin -d /var/lib/soip soip
 fi
+
 mkdir -p /var/lib/soip
 chown soip:soip /var/lib/soip
+
+if [ ! -f /etc/soip/sdr.conf ]; then
+    cp /etc/soip/sdr.conf.default /etc/soip/sdr.conf
+    chown soip:soip /etc/soip/sdr.conf
+    chmod 640 /etc/soip/sdr.conf
+fi

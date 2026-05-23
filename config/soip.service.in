@@ -5,7 +5,7 @@ Wants=network.target
 
 [Service]
 Type=simple
-ExecStart=@BIN_PATH@ @ARGS@
+ExecStart=@SOIP_BIN_PATH@ --config @SOIP_CONFIG_PATH@
 WorkingDirectory=@INSTALL_DIR@
 User=@SERVICE_USER@
 Group=@SERVICE_USER@
@@ -13,6 +13,8 @@ Restart=on-failure
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
 
 [Install]
 WantedBy=multi-user.target

@@ -125,20 +125,22 @@ if(NOT DEFINED CMAKE_INSTALL_SYSTEMDUNITDIR)
   set(CMAKE_INSTALL_SYSTEMDUNITDIR "${CMAKE_INSTALL_LIBDIR}/systemd/system" CACHE PATH "Systemd unit files")
 endif()
 
-set(BIN_PATH "${CMAKE_INSTALL_FULL_BINDIR}/soip")
-set(ARGS "--config ${CMAKE_INSTALL_FULL_SYSCONFDIR}/soip/sdr.conf")
-set(INSTALL_DIR "/var/lib/soip")
+set(SOIP_BIN_PATH "${CMAKE_INSTALL_FULL_BINDIR}/soip")
+set(SOIP_CONFIG_PATH "${CMAKE_INSTALL_FULL_SYSCONFDIR}/soip/sdr.conf")
+set(INSTALL_DIR "${CMAKE_INSTALL_FULL_LOCALSTATEDIR}/lib/soip")
 set(SERVICE_USER "soip")
 
 configure_file(
-    ${CMAKE_SOURCE_DIR}/config/soip.service.in
+    ${CMAKE_SOURCE_DIR}/packaging/soip.service.in
     ${CMAKE_BINARY_DIR}/soip.service
     @ONLY
 )
 
 install(TARGETS soip gui RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES ${CMAKE_BINARY_DIR}/soip.service DESTINATION ${CMAKE_INSTALL_SYSTEMDUNITDIR})
-install(FILES ${CMAKE_SOURCE_DIR}/config/sdr.conf DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/soip)
+install(FILES ${CMAKE_SOURCE_DIR}/config/sdr.conf
+        DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/soip
+        RENAME sdr.conf.default)
 
 # Cpack
 set(CPACK_GENERATOR "DEB")
