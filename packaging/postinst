@@ -9,6 +9,7 @@ mkdir -p /var/lib/soip
 chown soip:soip /var/lib/soip
 
 if [ ! -f /etc/soip/sdr.conf ]; then
+    mkdir -p /etc/soip
     cp /etc/soip/sdr.conf.default /etc/soip/sdr.conf
     chown soip:soip /etc/soip/sdr.conf
     chmod 640 /etc/soip/sdr.conf

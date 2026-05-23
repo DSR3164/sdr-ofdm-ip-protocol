@@ -121,8 +121,9 @@ endif()
 # Install and systemd
 include(GNUInstallDirs)
 
-if(NOT DEFINED CMAKE_INSTALL_SYSTEMDUNITDIR)
-  set(CMAKE_INSTALL_SYSTEMDUNITDIR "${CMAKE_INSTALL_LIBDIR}/systemd/system" CACHE PATH "Systemd unit files")
+pkg_get_variable(CMAKE_INSTALL_SYSTEMDUNITDIR systemd systemdsystemunitdir)
+if(NOT CMAKE_INSTALL_SYSTEMDUNITDIR)
+  set(CMAKE_INSTALL_SYSTEMDUNITDIR "/lib/systemd/system")
 endif()
 
 set(SOIP_BIN_PATH "${CMAKE_INSTALL_FULL_BINDIR}/soip")
