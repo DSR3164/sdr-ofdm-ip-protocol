@@ -131,7 +131,7 @@ set(INSTALL_DIR "${CMAKE_INSTALL_FULL_LOCALSTATEDIR}/lib/soip")
 set(SERVICE_USER "soip")
 
 configure_file(
-    ${CMAKE_SOURCE_DIR}/packaging/soip.service.in
+    ${CMAKE_SOURCE_DIR}/config/soip.service.in
     ${CMAKE_BINARY_DIR}/soip.service
     @ONLY
 )
