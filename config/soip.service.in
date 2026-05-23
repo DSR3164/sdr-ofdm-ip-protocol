@@ -15,6 +15,8 @@ StandardOutput=journal
 StandardError=journal
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+DeviceAllow=/dev/net/tun rw
+SupplementaryGroups=netdev
 
 [Install]
 WantedBy=multi-user.target
