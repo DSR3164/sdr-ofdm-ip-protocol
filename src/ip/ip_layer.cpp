@@ -141,6 +141,8 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
     std::vector<uint8_t> frame;
     std::vector<uint32_t> block;
 
+    uint16_t last_id = 0;
+    bool last_id_valid = false;
     std::unordered_map<uint16_t, ReassemblyBuffer> assembly_map;
     auto last_cleanup = std::chrono::steady_clock::now();
 
@@ -161,6 +163,23 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
         {
             logs::tun.debug("[{}] Bad magic: 0x{:04X}", tun_name, ntohs(hdr.magic));
             continue;
+        }
+        uint16_t current_id = ntohs(hdr.id);
+        int16_t diff = (int16_t)(current_id - last_id);
+        if (diff > 1 && last_id_valid)
+        {
+            StatsSnapshot log;
+            data.history.get_last(log);
+            logs::tun.debug("Missing sequence: {}...{}", last_id, static_cast<uint16_t>(current_id));
+            logs::tun.debug(
+                "{} packet: CP: {}\tZC: {}\t CFO: {}\tZC_F: {}\tCP_F: {}", fmt::format(fg(fmt::color::beige), "Current"),
+                data.snap.cp_pos, data.snap.zc_pos, static_cast<int>(data.snap.cfo), data.snap.zc_found, data.snap.cp_found
+            );
+            logs::tun.debug(
+                "{} packet: CP: {}\tZC: {}\t CFO: {}\tZC_F: {}\tCP_F: {}", fmt::format(fg(fmt::color::beige), "Previous"),
+                log.cp_pos, log.zc_pos, static_cast<int>(log.cfo), log.zc_found, log.cp_found
+            );
+            data.snap.is_previous_packet_lost = true;
         }
 
         uint16_t payload_len = ntohs(hdr.length);
@@ -198,6 +217,14 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
 
                     if (written < 0)
                         logs::tun.error("[{}] Write error: {}", tun_name, strerror(errno));
+                    else
+                    {
+                        last_id = current_id;
+                        last_id_valid = true;
+                        data.snap.is_packet = true;
+                        data.history.push(data.snap);
+                        data.snap.reset();
+                    }
                 }
                 else
                 {
