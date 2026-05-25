@@ -535,7 +535,7 @@ namespace
         int symbol_len = N + CP;
         for (size_t i = 0; i < 10; ++i)
         {
-            int sym_start = start + i * symbol_len;
+            size_t sym_start = start + i * symbol_len;
             if (signal.size() < sym_start + N + CP)
                 break;
 
@@ -643,7 +643,7 @@ namespace
                 ifft.in[k][1] = 0.0f;
             }
 
-            for (int i = 0; i < data.size(); ++i)
+            for (size_t i = 0; i < data.size(); ++i)
             {
                 int idx = sym * symbols_per_ofdm + i;
                 int k = data[i];
