@@ -143,6 +143,7 @@ target_include_directories(implot PUBLIC
 )
 
 target_link_libraries(implot PUBLIC imgui)
+target_compile_options(implot PRIVATE -Wno-deprecated-enum-enum-conversion)
 
 # ---------- ZeroMQ (Core) ----------
 set(ZMQ_BUILD_TESTS OFF CACHE BOOL "" FORCE)

@@ -140,6 +140,106 @@ class DoubleBuffer {
     std::atomic<bool> stopped{ false };
 };
 
+struct StatsSummary {
+    uint32_t zc_not_found = 0;
+    uint32_t cp_not_found = 0;
+    uint32_t cfo_jumped = 0;
+    uint32_t packet_found = 0;
+    uint32_t packet_lost = 0;
+    float packet_loss = 0;
+    float mean_time_us = 0.0f;
+};
+
+struct StatsSnapshot {
+    int16_t cp_pos = -1;
+    int16_t zc_pos = -1;
+    bool cp_found = false;
+    bool zc_found = false;
+    bool is_packet = false;
+    bool is_previous_packet_lost = false;
+    float processing_time_us = 0.0f;
+    float cfo = 0.0f;
+
+    void reset()
+    {
+        *this = {};
+    }
+};
+
+template <size_t N>
+struct StatsHistory {
+    std::atomic<size_t> zc_not_found{ 0 };
+    std::atomic<size_t> cp_not_found{ 0 };
+    std::atomic<size_t> packet_found{ 0 };
+    std::atomic<size_t> packet_lost{ 0 };
+
+    std::array<StatsSnapshot, N> buffer;
+    std::atomic<size_t> head = 0;
+    std::atomic<StatsSnapshot *> latest = nullptr;
+
+    void push(StatsSnapshot s)
+    {
+        if (!s.zc_found && s.cp_found)
+            zc_not_found.fetch_add(1, std::memory_order_relaxed);
+        if (!s.cp_found)
+            cp_not_found.fetch_add(1, std::memory_order_relaxed);
+        if (s.is_packet)
+            packet_found.fetch_add(1, std::memory_order_relaxed);
+        if (s.is_previous_packet_lost)
+            packet_lost.fetch_add(1, std::memory_order_relaxed);
+
+        size_t idx = head.fetch_add(1, std::memory_order_relaxed) % N;
+        buffer[idx] = s;
+        latest.store(&buffer[idx], std::memory_order_release);
+    }
+
+    bool get_last(StatsSnapshot &out)
+    {
+        auto *p = latest.load(std::memory_order_acquire);
+        if (!p)
+            return false;
+        out = *p;
+        return true;
+    }
+
+    StatsSummary get_summary() const
+    {
+        StatsSummary res;
+        size_t current_head = head.load(std::memory_order_relaxed);
+        size_t count = std::min(current_head, N);
+
+        res.zc_not_found = zc_not_found.load(std::memory_order_relaxed);
+        res.cp_not_found = cp_not_found.load(std::memory_order_relaxed);
+        res.packet_found = packet_found.load(std::memory_order_relaxed);
+        res.packet_lost = packet_lost.load(std::memory_order_relaxed);
+
+        if (count == 0)
+            return res;
+
+        size_t start = (current_head > N) ? (current_head % N) : 0;
+        for (size_t i = 0; i < count; ++i)
+        {
+            size_t idx = (start + i) % N;
+            const auto &current = buffer[idx];
+            res.mean_time_us += current.processing_time_us;
+            if (i > 0)
+            {
+                size_t prev_idx = (start + i - 1) % N;
+                const auto &prev = buffer[prev_idx];
+
+                if (current.cp_found && prev.cp_found)
+                    if (std::abs(current.cfo - prev.cfo) > 500.0f)
+                        res.cfo_jumped++;
+            }
+        }
+        if ((res.packet_lost + res.packet_found) != 0)
+            res.packet_loss = (res.packet_lost * 100.0f) / (res.packet_lost + res.packet_found);
+        res.mean_time_us /= count;
+
+        return res;
+    }
+};
+
 struct SharedData {
     SDR sdr;
     DSP dsp;
@@ -153,6 +253,9 @@ struct SharedData {
     DoubleBuffer<std::complex<float>> dsp_sockets_raw;
     DoubleBuffer<std::complex<float>> dsp_sockets_symbols;
     DoubleBuffer<uint8_t> ip_sockets_bytes;
+
+    StatsHistory<60000> history;
+    StatsSnapshot snap;
 
     std::string ip_addr;
 
