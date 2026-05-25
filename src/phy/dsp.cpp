@@ -761,9 +761,9 @@ int run_dsp_rx(SharedData &data)
 
         int zc_idx = zc_sync(for_processing, zadoff_chu, zc_energy, 0.3f, cp_idx, CP) + dsp.offset;
 
-        data.snap.cp_found = dsp.max_index > 0;
+        data.snap.cp_found = cp_idx > 0;
         data.snap.zc_found = zc_idx > 0;
-        data.snap.cp_pos = dsp.max_index;
+        data.snap.cp_pos = cp_idx;
         data.snap.zc_pos = zc_idx;
         data.snap.cfo = coarse;
 
