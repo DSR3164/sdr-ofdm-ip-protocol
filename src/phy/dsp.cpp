@@ -747,7 +747,7 @@ int run_dsp_rx(SharedData &data)
         for_processing.insert(for_processing.end(), raw_b.begin(), raw_b.end());
         data.dsp_sockets_raw.write(for_processing);
 
-        const int boundary = static_cast<int>(raw_a.size());
+        const int boundary = static_cast<int>(raw_a.size()) + CP;
 
         plato.resize(for_processing.size());
 
