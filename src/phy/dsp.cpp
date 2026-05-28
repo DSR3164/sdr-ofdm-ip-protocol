@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <fftw3.h>
+#include <mutex>
 #include <spdlog/fmt/bundled/color.h>
 #include <spdlog/spdlog.h>
 
@@ -25,7 +26,15 @@ namespace
             if (!in || !out)
                 throw std::bad_alloc{};
 
-            plan = fftwf_plan_dft_1d(size, in, out, direction ? FFTW_FORWARD : FFTW_BACKWARD, FFTW_MEASURE);
+            static std::mutex fftw_planner_mutex;
+
+            fftwf_plan local_plan = nullptr;
+            {
+                std::lock_guard<std::mutex> lock(fftw_planner_mutex);
+                local_plan = fftwf_plan_dft_1d(size, in, out, direction ? FFTW_FORWARD : FFTW_BACKWARD, FFTW_MEASURE);
+            }
+            plan = local_plan;
+
             if (!plan)
                 throw std::runtime_error("fftwf_plan_dft_1d failed");
         }
