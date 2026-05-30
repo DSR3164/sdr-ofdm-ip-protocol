@@ -10,6 +10,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <utility>
 #include <vector>
 
 extern std::atomic<bool> *stop_ptr;
@@ -258,6 +259,8 @@ struct SharedData {
     StatsSnapshot snap;
 
     std::string ip_addr;
+    int tun_fd;
+    char tun_name[16] = "";
 
     std::atomic<bool> stop{ false };
 
@@ -278,4 +281,15 @@ struct SharedData {
           dsp_sockets_symbols(cfg.buffer_size * 2)
     {
     }
+};
+
+struct ThreadJoiner {
+    std::string m_name;
+    std::jthread m_thread;
+    ThreadJoiner(std::string name, std::jthread thread)
+        : m_name(std::move(name)),
+          m_thread(std::move(thread))
+    {
+    }
+    ~ThreadJoiner() { logs::main.info("Joining thread: {}", m_name.c_str()); }
 };

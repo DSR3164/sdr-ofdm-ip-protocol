@@ -22,8 +22,9 @@
 
 void run_tun_tx(SharedData &data)
 {
-    char tun_name[IFNAMSIZ] = "";
-    int tun_fd = allocate_tun(tun_name);
+    auto &tun_fd = data.tun_fd;
+    auto &tun_name = data.tun_name;
+    data.tun_fd = allocate_tun(tun_name);
 
     if (tun_fd < 0)
         return;
@@ -42,8 +43,6 @@ void run_tun_tx(SharedData &data)
     }
     else
         logs::tun.error("Failed to assign IP to {}", tun_name);
-
-    std::thread rx_thread(run_tun_rx, std::ref(data), tun_fd, tun_name);
 
     struct IP ip;
 
@@ -126,18 +125,13 @@ void run_tun_tx(SharedData &data)
     }
 
     close(tun_fd);
-    logs::tun.info("TUN FD {} Closed", tun_fd);
-
-    if (rx_thread.joinable())
-    {
-        logs::tun.info("Waiting for RX thread to join...");
-        rx_thread.join();
-    }
-    logs::tun.info("TUN RX and TX threads finished");
+    logs::tun.info("TUN device {} (fd {}) closed", tun_name, tun_fd);
 }
 
-void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
+void run_tun_rx(SharedData &data)
 {
+    auto &tun_name = data.tun_name;
+    auto &tun_fd = data.tun_fd;
     std::vector<uint8_t> frame;
     std::vector<uint32_t> block;
 
