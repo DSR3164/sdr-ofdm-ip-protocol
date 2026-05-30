@@ -283,10 +283,13 @@ struct SharedData {
     }
 };
 
-struct ThreadJoiner
-{
+struct ThreadJoiner {
     std::string m_name;
     std::jthread m_thread;
-    ThreadJoiner(std::string name, std::jthread thread) : m_name(std::move(name)), m_thread(std::move(thread)) {}
+    ThreadJoiner(std::string name, std::jthread thread)
+        : m_name(std::move(name)),
+          m_thread(std::move(thread))
+    {
+    }
     ~ThreadJoiner() { logs::main.info("Joining thread: {}", m_name.c_str()); }
 };

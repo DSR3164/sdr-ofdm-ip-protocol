@@ -50,14 +50,14 @@ int main(int argc, char *argv[])
     else
     {
         socketData socket;
-        
-        ThreadJoiner ip_gui_bridge{"ip_gui_bridge", std::jthread(run_ip_gui_bridge, std::ref(data), std::ref(socket))};
-        ThreadJoiner dsp_gui_bridge{"dsp_gui_bridge", std::jthread(run_dsp_gui_bridge, std::ref(data), std::ref(socket))};
-        ThreadJoiner tun_tx{"tun_tx", std::jthread(run_tun_tx, std::ref(data))};
-        ThreadJoiner rx_thread{"tun_rx", std::jthread(run_tun_rx, std::ref(data))};
-        ThreadJoiner sdr{"sdr", std::jthread(run_sdr, std::ref(data))};
-        ThreadJoiner dsp_tx{"dsp_tx", std::jthread(run_dsp_tx, std::ref(data))};
-        ThreadJoiner dsp_rx{"dsp_rx", std::jthread(run_dsp_rx, std::ref(data))};
+
+        ThreadJoiner ip_gui_bridge{ "ip_gui_bridge", std::jthread(run_ip_gui_bridge, std::ref(data), std::ref(socket)) };
+        ThreadJoiner dsp_gui_bridge{ "dsp_gui_bridge", std::jthread(run_dsp_gui_bridge, std::ref(data), std::ref(socket)) };
+        ThreadJoiner tun_tx{ "tun_tx", std::jthread(run_tun_tx, std::ref(data)) };
+        ThreadJoiner rx_thread{ "tun_rx", std::jthread(run_tun_rx, std::ref(data)) };
+        ThreadJoiner sdr{ "sdr", std::jthread(run_sdr, std::ref(data)) };
+        ThreadJoiner dsp_tx{ "dsp_tx", std::jthread(run_dsp_tx, std::ref(data)) };
+        ThreadJoiner dsp_rx{ "dsp_rx", std::jthread(run_dsp_rx, std::ref(data)) };
 
         while (!data.stop.load())
             std::this_thread::sleep_for(std::chrono::seconds(1));
