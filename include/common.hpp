@@ -258,6 +258,8 @@ struct SharedData {
     StatsSnapshot snap;
 
     std::string ip_addr;
+    int tun_fd;
+    char tun_name[16] = "";
 
     std::atomic<bool> stop{ false };
 
@@ -278,4 +280,11 @@ struct SharedData {
           dsp_sockets_symbols(cfg.buffer_size * 2)
     {
     }
+};
+
+struct ThreadJoiner
+{
+    std::string name;
+    std::jthread thread;
+    ~ThreadJoiner() { logs::main.info("Joining thread: {}", name.c_str()); }
 };
