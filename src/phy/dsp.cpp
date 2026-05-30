@@ -856,7 +856,7 @@ int run_dsp_rx(SharedData &data)
             next = zc_idx + zc_len + dsp.offset;
         else
         {
-            raw_a = raw_b;
+            raw_a = std::move(raw_b);
             continue;
         }
 
