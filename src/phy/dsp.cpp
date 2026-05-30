@@ -827,7 +827,7 @@ int run_dsp_rx(SharedData &data)
         coarse = coarse_cfo(for_processing, cp_idx, N, CP, data.sdr.get_sample_rate());
         coarse_mean = alpha * coarse + (1.0f - alpha) * coarse_mean;
 
-        int zc_idx = zc_sync(for_processing, zadoff_chu, zc_energy, 0.3f, cp_idx, CP) + dsp.offset;
+        int zc_idx = zc_sync(for_processing, zadoff_chu, zc_energy, 0.3f, cp_idx, CP);
 
         data.snap.cp_found = cp_idx > 0;
         data.snap.zc_found = zc_idx > 0;
@@ -853,7 +853,7 @@ int run_dsp_rx(SharedData &data)
         int last = 0;
 
         if (static_cast<int>(for_processing.size()) > zc_idx + zc_len + N)
-            next = zc_idx + zc_len;
+            next = zc_idx + zc_len + dsp.offset;
         else
         {
             raw_a = raw_b;
