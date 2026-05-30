@@ -236,6 +236,55 @@ namespace
         }
     }
 
+    int zc_sync_full(const std::vector<std::complex<float>> &for_ofdm, const std::vector<std::complex<float>> &zadoff_chu, const float zc_energy, std::vector<float> &plato, float threshold)
+    {
+        auto N = zadoff_chu.size();
+        auto L = for_ofdm.size();
+        static std::vector<float> r_re(L);
+        static std::vector<float> r_im(L);
+        static std::vector<float> zc_re(N);
+        static std::vector<float> zc_im(N);
+
+        split_to_float(for_ofdm.data(), r_re.data(), r_im.data(), r_im.size());
+        split_to_float(zadoff_chu.data(), zc_re.data(), zc_im.data(), zc_im.size());
+
+        float max_norm = -1.f;
+        int best_idx = -1;
+
+        for (size_t n = 0; n <= L - N; ++n)
+        {
+            float sum_re = 0.0f;
+            float sum_im = 0.0f;
+            float sig_energy = 0.0f;
+
+            for (size_t k = 0; k < N; ++k)
+            {
+                float sr = r_re[n + k];
+                float si = r_im[n + k];
+                float zr = zc_re[k];
+                float zi = zc_im[k];
+
+                sum_re += sr * zr + si * zi;
+                sum_im += si * zr - sr * zi;
+
+                sig_energy += sr * sr + si * si;
+            }
+
+            float corr = sum_re * sum_re + sum_im * sum_im;
+            float norm = corr / (sig_energy * zc_energy + 1e-12f);
+
+            plato[n] = norm;
+
+            if (norm > max_norm and norm > threshold)
+            {
+                max_norm = norm;
+                best_idx = (int)n;
+            }
+        }
+
+        return best_idx;
+    }
+
     int zc_sync(const std::vector<std::complex<float>> &for_ofdm, const std::vector<std::complex<float>> &zadoff_chu, const float zc_energy, float threshold, int cp_index, int Lcp)
     {
         auto N = zadoff_chu.size();
@@ -765,6 +814,16 @@ int run_dsp_rx(SharedData &data)
         std::atomic_signal_fence(std::memory_order_seq_cst);
 
         cp_idx = ofdm_cp_corr(for_processing, N, CP, plato);
+        if (cp_idx < 0)
+        {
+            dsp.max_index = zc_sync_full(for_processing, zadoff_chu, zc_energy, plato, 0.3f);
+            if (dsp.max_index < 0)
+            {
+                raw_a = std::move(raw_b);
+                continue;
+            }
+            cp_idx = dsp.max_index + zc_len + CP;
+        }
         coarse = coarse_cfo(for_processing, cp_idx, N, CP, data.sdr.get_sample_rate());
         coarse_mean = alpha * coarse + (1.0f - alpha) * coarse_mean;
 
