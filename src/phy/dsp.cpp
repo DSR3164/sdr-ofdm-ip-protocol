@@ -2,10 +2,12 @@
 #include "phy/dsp.hpp"
 
 #include <cstddef>
+#include <cstdint>
 #include <fftw3.h>
 #include <mutex>
 #include <spdlog/fmt/bundled/color.h>
 #include <spdlog/spdlog.h>
+#include <vector>
 
 namespace
 {
