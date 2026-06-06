@@ -906,7 +906,7 @@ int run_dsp_rx(SharedData &data)
                 hist.cp_not_found, hist.zc_not_found, hist.cfo_jumped, hist.mean_time_us
             );
             logs::tun.debug(
-                "{}: {}%, packets found: {}, packets lost: {}", fmt::format(fg(fmt::color::red), "PL"),
+                "{}: {:.4f}%, packets found: {}, packets lost: {}", fmt::format(fg(fmt::color::red), "PL"),
                 hist.packet_loss, hist.packet_found, hist.packet_lost
             );
         }
