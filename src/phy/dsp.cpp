@@ -9,6 +9,61 @@
 
 namespace
 {
+    constexpr float dac_max_value = 16384.0f;
+
+    constexpr float bpsk_scale = dac_max_value / 20.9f;
+    constexpr float qpsk_scale = dac_max_value / 26.9f;
+    constexpr float qam16_scale = dac_max_value / 26.9f;
+    constexpr float qam64_scale = dac_max_value / 26.9f;
+
+    [[nodiscard]] constexpr size_t get_bits_per_symbol(Modulation mod) noexcept
+    {
+        switch (mod)
+        {
+        case Modulation::BPSK:
+            return 1;
+        case Modulation::QPSK:
+            return 2;
+        case Modulation::QAM16:
+            return 4;
+        case Modulation::QAM64:
+            return 6;
+        }
+        return 0;
+    }
+
+    [[nodiscard]] constexpr float get_scale(Modulation mod) noexcept
+    {
+        switch (mod)
+        {
+        case Modulation::BPSK:
+            return bpsk_scale;
+        case Modulation::QPSK:
+            return qpsk_scale;
+        case Modulation::QAM16:
+            return qam16_scale;
+        case Modulation::QAM64:
+            return qam64_scale;
+        }
+        return 1.0f;
+    }
+
+    [[nodiscard]] constexpr std::complex<float> get_pilot(Modulation mod) noexcept
+    {
+        switch (mod)
+        {
+        case Modulation::BPSK:
+            [[fallthrough]];
+        case Modulation::QPSK:
+            return std::complex(0.707106781f, 0.707106781f) / std::sqrt(2.0f);
+        case Modulation::QAM16:
+            return std::complex(0.948683260f, 0.948683260f) / std::sqrt(2.0f);
+        case Modulation::QAM64:
+            return std::complex(1.080123500f, 1.080123500f) / std::sqrt(2.0f);
+        }
+        return 1.0f;
+    }
+
     struct FFTWPlan {
         std::vector<float> window;
         fftwf_complex *in = nullptr;
@@ -431,7 +486,7 @@ namespace
     {
         int N = ofdm_config.n_subcarriers;
         float accumulated_phase = 0;
-        const std::complex<float> known_pilot = { 1.0f, 0.0f };
+        const std::complex<float> pilot = get_pilot(ofdm_config.mod);
         std::vector<std::complex<float>> temp = input;
         output.clear();
 
@@ -452,7 +507,7 @@ namespace
             std::vector<std::complex<float>> equalized(N);
 
             for (auto k : pilots)
-                H[k] = sym[k] / known_pilot;
+                H[k] = sym[k] / pilot;
 
             for (size_t p = 0; p < pilots.size() - 1; ++p)
             {
@@ -504,7 +559,7 @@ namespace
 
             float cpe = 0;
             for (auto k : pilots)
-                cpe += std::arg(equalized[k] / known_pilot);
+                cpe += std::arg(equalized[k] / pilot);
             cpe /= pilots.size();
 
             accumulated_phase += cpe;
@@ -623,6 +678,11 @@ namespace
         }
     }
 
+    int16_t clip(float x)
+    {
+        return static_cast<int16_t>(std::clamp(x, -16384.0f, 16384.0f));
+    }
+
     void ofdm(std::vector<uint8_t> &bits, std::vector<int16_t> &buffer, DSP &dsp_config)
     {
         auto &ofdm_config = dsp_config.ofdm_cfg;
@@ -686,6 +746,8 @@ namespace
         int symbols_per_ofdm = static_cast<int>(data.size());
         int num_ofdm_symbols = (total_symbols + symbols_per_ofdm - 1) / symbols_per_ofdm;
 
+        const float scale = get_scale(modulation_type);
+        const std::complex<float> pilot = get_pilot(modulation_type);
         buffer.reserve((num_ofdm_symbols + Ncp) * (N + 2));
 
         auto ofdm_zc_symbol = ofdm_zadoff_chu_symbol(dsp_config);
@@ -706,8 +768,8 @@ namespace
 
             for (int k : pilots)
             {
-                ifft.in[k][0] = 1.0f;
-                ifft.in[k][1] = 0.0f;
+                ifft.in[k][0] = pilot.real();
+                ifft.in[k][1] = pilot.imag();
             }
 
             for (size_t i = 0; i < data.size(); ++i)
@@ -732,22 +794,22 @@ namespace
             // Norm
             for (int n = 0; n < N; ++n)
             {
-                ifft.out[n][0] /= (float)(N / (3.0 * 16000.0f));
-                ifft.out[n][1] /= (float)(N / (3.0 * 16000.0f));
+                ifft.out[n][0] *= scale;
+                ifft.out[n][1] *= scale;
             }
 
             // Cyclic Prefix
             for (int n = N - Ncp; n < N; ++n)
             {
-                buffer.push_back((int16_t)ifft.out[n][0]);
-                buffer.push_back((int16_t)ifft.out[n][1]);
+                buffer.push_back(clip(ifft.out[n][0]));
+                buffer.push_back(clip(ifft.out[n][1]));
             }
 
             // Data
             for (int n = 0; n < N; ++n)
             {
-                buffer.push_back((int16_t)ifft.out[n][0]);
-                buffer.push_back((int16_t)ifft.out[n][1]);
+                buffer.push_back(clip(ifft.out[n][0]));
+                buffer.push_back(clip(ifft.out[n][1]));
             }
         }
     }
