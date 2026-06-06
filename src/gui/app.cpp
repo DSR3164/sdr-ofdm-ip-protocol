@@ -68,7 +68,7 @@ void App::stop_frame()
     SDL_GL_SwapWindow(window);
 }
 
-void App::control_wd(std::vector<std::string> &sockets)
+void App::control_wd(std::vector<std::string> &sockets, socketData &sock)
 {
     bool chosen_socket = false;
 
@@ -98,6 +98,9 @@ void App::control_wd(std::vector<std::string> &sockets)
 
             if (ImGui::Button("Update sockets", ImVec2(ImGui::GetContentRegionAvail().x, 0.0f)))
                 found_sockets(sockets);
+
+            if (ImGui::Button("Clear stole sockets", ImVec2(ImGui::GetContentRegionAvail().x, 0.0f)))
+                sock.cleanup_old_sockets();
 
             if (sockets.empty())
                 ImGui::Text("%s", last_socket_path.c_str());
@@ -144,7 +147,7 @@ void run_gui(Buffers &buf, std::vector<std::string> &sockets, socketData &sock)
     while (app.is_open())
     {
         app.start_frame();
-        app.control_wd(sockets);
+        app.control_wd(sockets, sock);
 
         if (app.is_chos_sock())
         {
