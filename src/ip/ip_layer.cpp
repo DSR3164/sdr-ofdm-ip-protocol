@@ -47,7 +47,6 @@ void run_tun_tx(SharedData &data)
     struct IP ip;
 
     uint8_t buffer[1460];
-    std::vector<uint8_t> frame;
     std::vector<uint32_t> encoded_bytes;
     FrameHeader hdr;
 
@@ -112,11 +111,12 @@ void run_tun_tx(SharedData &data)
                     frame.insert(frame.end(), hdr_ptr, hdr_ptr + sizeof(FrameHeader));
                     frame.insert(frame.end(), payload.begin() + offset, payload.begin() + offset + chunk_size);
 
-                    auto encoded = hamming_encoder(frame);
-                    encoded = interleaving(encoded);
-                    auto bits = byte_to_bits(encoded, 32);
+                    auto encoded = conv_encoder(frame);
+                    // encoded = interleaving(encoded);
+                    auto bits = byte_to_bits(encoded, 8);
 
                     data.ip_phy.write(bits, true);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(3));
 
                     offset += chunk_size;
                 }
@@ -133,7 +133,7 @@ void run_tun_rx(SharedData &data)
     auto &tun_name = data.tun_name;
     auto &tun_fd = data.tun_fd;
     std::vector<uint8_t> frame;
-    std::vector<uint32_t> block;
+    std::vector<uint8_t> block;
 
     uint16_t last_id = 0;
     bool last_id_valid = false;
@@ -144,9 +144,10 @@ void run_tun_rx(SharedData &data)
     {
         data.phy_ip.read(frame, true);
 
-        block = bits_to_bytes<uint32_t>(frame, 32);
-        block = deinterleaving(block);
-        frame = hamming_decoder(block);
+        block = bits_to_bytes<uint8_t>(frame, 8);
+        // block = deinterleaving(block);
+        frame = viterbi_decoder(block);
+        // frame = block;
 
         if (frame.size() < sizeof(FrameHeader) + 2)
             continue;
@@ -175,6 +176,9 @@ void run_tun_rx(SharedData &data)
             );
             data.snap.is_previous_packet_lost = true;
         }
+
+        last_id = current_id;
+        last_id_valid = true;
 
         uint16_t payload_len = ntohs(hdr.length);
         if (payload_len > frame.size() - sizeof(FrameHeader))
@@ -209,16 +213,14 @@ void run_tun_rx(SharedData &data)
                 {
                     ssize_t written = write(tun_fd, full_packet.data(), full_packet.size());
 
-                    if (written < 0)
-                        logs::tun.error("[{}] Write error: {}", tun_name, strerror(errno));
-                    else
+                    if (written >= 0)
                     {
-                        last_id = current_id;
-                        last_id_valid = true;
                         data.snap.is_packet = true;
                         data.history.push(data.snap);
                         data.snap.reset();
                     }
+                    else
+                        logs::tun.error("[{}] Write error: {}", tun_name, strerror(errno));
                 }
                 else
                 {
