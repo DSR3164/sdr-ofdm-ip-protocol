@@ -87,6 +87,29 @@ namespace
         FFTWPlan &operator=(const FFTWPlan &) = delete;
     };
 
+    void scramble(std::vector<uint8_t> &bits, uint8_t seed = 0x5B)
+    {
+        if (seed == 0 || seed > 0x7F)
+        {
+            logs::dsp.warn("Scramble seed must be in range [0x01, 0x7F]");
+            return;
+        }
+
+        uint8_t lfsr = seed;
+
+        for (uint8_t &bit : bits)
+        {
+            uint8_t feedback = ((lfsr >> 6) ^ (lfsr >> 3)) & 1;
+            lfsr = ((lfsr << 1) | feedback) & 0x7F;
+            bit ^= feedback;
+        }
+    }
+
+    void descramble(std::vector<uint8_t> &bits, uint8_t seed = 0x5B)
+    {
+        scramble(bits, seed);
+    }
+
     void bpsk_mapper_3gpp(const std::vector<uint8_t> &bits, std::vector<std::complex<float>> &symbols)
     {
         for (size_t i = 0; i < symbols.size(); ++i)
@@ -872,6 +895,7 @@ int run_dsp_rx(SharedData &data)
 
         data.dsp_sockets_symbols.write(equalized);
         demodulate(dsp.ofdm_cfg.mod, equalized, bits, llr);
+        descramble(bits);
         data.phy_ip.write(bits, true);
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
@@ -913,6 +937,7 @@ int run_dsp_tx(SharedData &data)
     {
         data.ip_phy.read(bits, true);
 
+        scramble(bits);
         ofdm(bits, buffer, data.dsp);
         logs::dsp.trace("[{}] modulate {} samples", fmt::format(fmt::fg(fmt::color::cyan), "OFDM"), buffer.size());
         data.sdr_dsp_tx.write(buffer);
