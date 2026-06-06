@@ -508,6 +508,8 @@ namespace
 
     float coarse_cfo(std::vector<std::complex<float>> &r, int max_index, int N, int Lcp, float fs)
     {
+        if (max_index < 0)
+            return 0;
         std::complex<float> P = 0.0f;
         for (int i = 0; i < Lcp; ++i)
             P += r[max_index + i] * std::conj(r[max_index + i + N]);
