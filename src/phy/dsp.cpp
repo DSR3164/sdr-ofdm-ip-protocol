@@ -11,6 +11,7 @@
 
 namespace
 {
+    constexpr size_t MAX_DATA_SYMBOLS = SDRConfig{}.buffer_size / (DSP{}.ofdm_cfg.n_cp + DSP{}.ofdm_cfg.n_subcarriers) - 2;
     constexpr float dac_max_value = 16384.0f;
 
     constexpr float bpsk_scale = dac_max_value / 20.9f;
@@ -693,6 +694,20 @@ namespace
         int pilot_spacing = ofdm_config.pilot_spacing;
         Modulation modulation_type = ofdm_config.mod;
 
+        std::vector<int> pilots;
+        std::vector<int> data;
+        std::vector<bool> is_pilot;
+        std::vector<bool> is_guard;
+        calculate_pilots_and_guard(ofdm_config, pilots, data, is_pilot, is_guard);
+
+        size_t data_symbols = (bits.size() / get_bits_per_symbol(modulation_type)) / data.size();
+
+        if (data_symbols > MAX_DATA_SYMBOLS)
+        {
+            logs::dsp.warn("There is more data than PHY can send ({}): {} {} symbols", MAX_DATA_SYMBOLS, data_symbols, mod_to_string(modulation_type));
+            return;
+        }
+
         if (N < 4 or pilot_spacing < 2)
             return;
 
@@ -739,11 +754,6 @@ namespace
         static FFTWPlan ifft(N, false);
 
         int total_symbols = (int)symbols.size();
-        std::vector<int> data;
-        std::vector<int> pilots;
-        std::vector<bool> is_guard;
-        std::vector<bool> is_pilot;
-        calculate_pilots_and_guard(ofdm_config, pilots, data, is_pilot, is_guard);
 
         int symbols_per_ofdm = static_cast<int>(data.size());
         int num_ofdm_symbols = (total_symbols + symbols_per_ofdm - 1) / symbols_per_ofdm;
