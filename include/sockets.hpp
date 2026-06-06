@@ -21,6 +21,7 @@ struct socketData {
     socketData(const bool setup_dir = true, const std::string &base_folder = "soip_sockets");
     ~socketData();
     std::string setup_socket_dir(const std::string &folder_name);
+    void cleanup_old_sockets(const std::string &base_name = "soip_sockets_");
 };
 
 void found_sockets(std::vector<std::string> &sockets, const std::string base_name = "soip_sockets_");

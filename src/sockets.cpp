@@ -84,6 +84,40 @@ std::string socketData::setup_socket_dir(const std::string &folder_name)
     return p.string();
 }
 
+void socketData::cleanup_old_sockets(const std::string &base_name)
+{
+    namespace fs = std::filesystem;
+    const std::string tmp_path = "/tmp";
+
+    try
+    {
+        for (const auto &entry : fs::directory_iterator(tmp_path))
+        {
+            std::string filename = entry.path().filename().string();
+
+            if (filename.find(base_name) != 0)
+                continue;
+
+            std::string pid_str = filename.substr(base_name.size());
+            logs::main.info("Parsed PID string: '{}' from '{}'", pid_str, filename);
+            pid_t pid = std::stoi(pid_str);
+
+            if (kill(pid, 0) == 0)
+            {
+                logs::main.warn("Process {} still alive, skipping {}", pid, filename);
+                continue;
+            }
+
+            logs::main.info("Removing stale socket dir: {}", filename);
+            fs::remove_all(entry.path());
+        }
+    }
+    catch (const fs::filesystem_error &e)
+    {
+        logs::main.error("Cleanup error: {}", e.what());
+    }
+}
+
 void found_sockets(std::vector<std::string> &sockets, const std::string base_name)
 {
     namespace fs = std::filesystem;
