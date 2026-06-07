@@ -38,10 +38,6 @@ int main(int argc, char *argv[])
 
     std::signal(SIGINT, signal_handler);
 
-    fftwf_init_threads();
-    fftwf_plan_with_nthreads(std::thread::hardware_concurrency());
-    fftwf_make_planner_thread_safe();
-
     if (getuid() != 0)
     {
         logs::main.critical("Please run with sudo or as root");

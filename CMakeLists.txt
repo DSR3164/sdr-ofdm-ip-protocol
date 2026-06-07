@@ -21,12 +21,10 @@ find_package(OpenGL REQUIRED)
 
 # ---------- FFTW ----------
 find_library(FFTW3F_LIB fftw3f REQUIRED)
-find_library(FFTW3F_THREADS_LIB fftw3f_threads REQUIRED)
 find_path(FFTW3F_INCLUDE_DIR fftw3.h REQUIRED)
 
-set(FFTW3F_LIBRARIES ${FFTW3F_THREADS_LIB} ${FFTW3F_LIB})
+set(FFTW3F_LIBRARIES ${FFTW3F_LIB})
 message(STATUS "Found FFTW3F: ${FFTW3F_LIB}")
-message(STATUS "Found FFTW3F_THREADS: ${FFTW3F_THREADS_LIB}")
 
 # ---------- SDL2 ----------
 find_package(SDL2 CONFIG QUIET)
@@ -224,7 +222,6 @@ target_include_directories(soip_gui
 target_link_libraries(soip_core
   PRIVATE
   ${SOAPY_TARGET}
-  ${FFTW3F_THREADS_LIB}
   ${FFTW3F_LIB}
   PUBLIC
   Threads::Threads

@@ -2,12 +2,71 @@
 #include "phy/dsp.hpp"
 
 #include <cstddef>
+#include <cstdint>
 #include <fftw3.h>
+#include <mutex>
 #include <spdlog/fmt/bundled/color.h>
 #include <spdlog/spdlog.h>
+#include <vector>
 
 namespace
 {
+    constexpr size_t MAX_DATA_SYMBOLS = SDRConfig{}.buffer_size / (DSP{}.ofdm_cfg.n_cp + DSP{}.ofdm_cfg.n_subcarriers) - 2;
+    constexpr float dac_max_value = 16384.0f;
+
+    constexpr float bpsk_scale = dac_max_value / 20.9f;
+    constexpr float qpsk_scale = dac_max_value / 26.9f;
+    constexpr float qam16_scale = dac_max_value / 26.9f;
+    constexpr float qam64_scale = dac_max_value / 26.9f;
+
+    [[nodiscard]] constexpr size_t get_bits_per_symbol(Modulation mod) noexcept
+    {
+        switch (mod)
+        {
+        case Modulation::BPSK:
+            return 1;
+        case Modulation::QPSK:
+            return 2;
+        case Modulation::QAM16:
+            return 4;
+        case Modulation::QAM64:
+            return 6;
+        }
+        return 0;
+    }
+
+    [[nodiscard]] constexpr float get_scale(Modulation mod) noexcept
+    {
+        switch (mod)
+        {
+        case Modulation::BPSK:
+            return bpsk_scale;
+        case Modulation::QPSK:
+            return qpsk_scale;
+        case Modulation::QAM16:
+            return qam16_scale;
+        case Modulation::QAM64:
+            return qam64_scale;
+        }
+        return 1.0f;
+    }
+
+    [[nodiscard]] constexpr std::complex<float> get_pilot(Modulation mod) noexcept
+    {
+        switch (mod)
+        {
+        case Modulation::BPSK:
+            [[fallthrough]];
+        case Modulation::QPSK:
+            return std::complex(0.707106781f, 0.707106781f) / std::sqrt(2.0f);
+        case Modulation::QAM16:
+            return std::complex(0.948683260f, 0.948683260f) / std::sqrt(2.0f);
+        case Modulation::QAM64:
+            return std::complex(1.080123500f, 1.080123500f) / std::sqrt(2.0f);
+        }
+        return 1.0f;
+    }
+
     struct FFTWPlan {
         std::vector<float> window;
         fftwf_complex *in = nullptr;
@@ -25,7 +84,15 @@ namespace
             if (!in || !out)
                 throw std::bad_alloc{};
 
-            plan = fftwf_plan_dft_1d(size, in, out, direction ? FFTW_FORWARD : FFTW_BACKWARD, FFTW_MEASURE);
+            static std::mutex fftw_planner_mutex;
+
+            fftwf_plan local_plan = nullptr;
+            {
+                std::lock_guard<std::mutex> lock(fftw_planner_mutex);
+                local_plan = fftwf_plan_dft_1d(size, in, out, direction ? FFTW_FORWARD : FFTW_BACKWARD, FFTW_MEASURE);
+            }
+            plan = local_plan;
+
             if (!plan)
                 throw std::runtime_error("fftwf_plan_dft_1d failed");
         }
@@ -78,6 +145,29 @@ namespace
         FFTWPlan &operator=(const FFTWPlan &) = delete;
     };
 
+    void scramble(std::vector<uint8_t> &bits, uint8_t seed = 0x5B)
+    {
+        if (seed == 0 || seed > 0x7F)
+        {
+            logs::dsp.warn("Scramble seed must be in range [0x01, 0x7F]");
+            return;
+        }
+
+        uint8_t lfsr = seed;
+
+        for (uint8_t &bit : bits)
+        {
+            uint8_t feedback = ((lfsr >> 6) ^ (lfsr >> 3)) & 1;
+            lfsr = ((lfsr << 1) | feedback) & 0x7F;
+            bit ^= feedback;
+        }
+    }
+
+    void descramble(std::vector<uint8_t> &bits, uint8_t seed = 0x5B)
+    {
+        scramble(bits, seed);
+    }
+
     void bpsk_mapper_3gpp(const std::vector<uint8_t> &bits, std::vector<std::complex<float>> &symbols)
     {
         for (size_t i = 0; i < symbols.size(); ++i)
@@ -118,102 +208,86 @@ namespace
                          / sqrtf(42.0);
     }
 
-    static std::pair<uint8_t, uint8_t> demap_component_3gpp(float val)
+    void demodulate(Modulation mod, const std::vector<std::complex<float>> &symbols, std::vector<uint8_t> &bits, std::vector<float> &llr)
     {
-        uint8_t b_sign = (val < 0.0f) ? 1 : 0;
-        uint8_t b_amp = (std::abs(val) < 2.0f) ? 0 : 1;
-        return { b_sign, b_amp };
-    }
-
-    void demodulate(Modulation mod, const std::vector<std::complex<float>> &symbols, std::vector<uint8_t> &bits)
-    {
-
         switch (mod)
         {
         case Modulation::BPSK: {
-            bits.resize(symbols.size());
-
-            for (size_t i = 0; i < symbols.size(); ++i)
-                bits[i] = demap_component_3gpp(symbols[i].real() + symbols[i].imag()).first;
-            break;
-        }
-        case Modulation::QPSK: {
-            bits.resize(symbols.size() * 2);
+            llr.resize(symbols.size());
+            const float scale = std::sqrt(2.0f);
 
             for (size_t i = 0; i < symbols.size(); ++i)
             {
-                bits[2 * i + 0] = demap_component_3gpp(symbols[i].real()).first;
-                bits[2 * i + 1] = demap_component_3gpp(symbols[i].imag()).first;
+                const auto sr = symbols[i].real() * scale;
+                const auto si = symbols[i].imag() * scale;
+
+                llr[i] = sr + si;
+            }
+            break;
+        }
+        case Modulation::QPSK: {
+            llr.resize(symbols.size() * 2);
+            const float scale = std::sqrt(2.0f);
+
+            for (size_t i = 0; i < symbols.size(); ++i)
+            {
+                const auto sr = symbols[i].real() * scale;
+                const auto si = symbols[i].imag() * scale;
+                const size_t shift = i * 2;
+
+                llr[shift + 0] = sr;
+                llr[shift + 1] = si;
             }
             break;
         }
         case Modulation::QAM16: {
-            bits.resize(symbols.size() * 4);
+            llr.resize(symbols.size() * 4);
             const float scale = std::sqrt(10.0f);
 
             for (size_t i = 0; i < symbols.size(); ++i)
             {
-                auto [b0, b2] = demap_component_3gpp(symbols[i].real() * scale);
-                auto [b1, b3] = demap_component_3gpp(symbols[i].imag() * scale);
+                const auto sr = symbols[i].real() * scale;
+                const auto si = symbols[i].imag() * scale;
+                const size_t shift = i * 4;
 
-                bits[4 * i + 0] = b0;
-                bits[4 * i + 1] = b1;
-                bits[4 * i + 2] = b2;
-                bits[4 * i + 3] = b3;
+                llr[shift + 0] = sr;
+                llr[shift + 1] = si;
+
+                llr[shift + 2] = 2.0f - std::abs(sr);
+                llr[shift + 3] = 2.0f - std::abs(si);
             }
             break;
         }
         case Modulation::QAM64: {
-            bits.resize(symbols.size() * 6);
+            llr.resize(symbols.size() * 6);
 
-            std::vector<std::complex<float>> s(1);
-            std::vector<uint8_t> b(6);
-
-            struct Point {
-                float I, Q;
-                uint8_t bits[6];
-            };
-            std::vector<Point> constellation(64);
-
-            for (int idx = 0; idx < 64; ++idx)
-            {
-                for (int bit = 0; bit < 6; ++bit)
-                    b[bit] = (idx >> (5 - bit)) & 1;
-                qam64_mapper_3gpp(b, s);
-                constellation[idx].I = s[0].real();
-                constellation[idx].Q = s[0].imag();
-                for (int bit = 0; bit < 6; ++bit)
-                    constellation[idx].bits[bit] = b[bit];
-            }
+            const float scale = std::sqrt(42.0f);
 
             for (size_t i = 0; i < symbols.size(); ++i)
             {
-                float rI = symbols[i].real();
-                float rQ = symbols[i].imag();
+                const auto sr = symbols[i].real() * scale;
+                const auto si = symbols[i].imag() * scale;
+                const auto l1r = std::abs(sr);
+                const auto l1i = std::abs(si);
+                const size_t shift = i * 6;
 
-                int best_idx = 0;
-                float best_dist = std::numeric_limits<float>::max();
+                llr[shift + 0] = sr;
+                llr[shift + 1] = si;
 
-                for (int j = 0; j < 64; ++j)
-                {
-                    float dI = rI - constellation[j].I;
-                    float dQ = rQ - constellation[j].Q;
-                    float dist = dI * dI + dQ * dQ;
-                    if (dist < best_dist)
-                    {
-                        best_dist = dist;
-                        best_idx = j;
-                    }
-                }
+                llr[shift + 2] = 4.0f - l1r;
+                llr[shift + 3] = 4.0f - l1i;
 
-                for (int bit = 0; bit < 6; ++bit)
-                    bits[6 * i + bit] = constellation[best_idx].bits[bit];
+                llr[shift + 4] = 2.0f - std::abs(llr[shift + 2]);
+                llr[shift + 5] = 2.0f - std::abs(llr[shift + 3]);
             }
             break;
         }
         default:
             logs::dsp.warn("Неподдерживаемый тип демодуляции");
         }
+        bits.resize(llr.size());
+        for (size_t i = 0; i < llr.size(); ++i)
+            bits[i] = llr[i] < 0.0f ? 1 : 0;
     }
 
     void split_to_float(const std::complex<float> *__restrict src, float *__restrict dst_re, float *__restrict dst_im, size_t n)
@@ -225,6 +299,55 @@ namespace
             dst_re[i] = raw_src[2 * i];
             dst_im[i] = raw_src[2 * i + 1];
         }
+    }
+
+    int zc_sync_full(const std::vector<std::complex<float>> &for_ofdm, const std::vector<std::complex<float>> &zadoff_chu, const float zc_energy, std::vector<float> &plato, float threshold)
+    {
+        auto N = zadoff_chu.size();
+        auto L = for_ofdm.size();
+        static std::vector<float> r_re(L);
+        static std::vector<float> r_im(L);
+        static std::vector<float> zc_re(N);
+        static std::vector<float> zc_im(N);
+
+        split_to_float(for_ofdm.data(), r_re.data(), r_im.data(), r_im.size());
+        split_to_float(zadoff_chu.data(), zc_re.data(), zc_im.data(), zc_im.size());
+
+        float max_norm = -1.f;
+        int best_idx = -1;
+
+        for (size_t n = 0; n <= L - N; ++n)
+        {
+            float sum_re = 0.0f;
+            float sum_im = 0.0f;
+            float sig_energy = 0.0f;
+
+            for (size_t k = 0; k < N; ++k)
+            {
+                float sr = r_re[n + k];
+                float si = r_im[n + k];
+                float zr = zc_re[k];
+                float zi = zc_im[k];
+
+                sum_re += sr * zr + si * zi;
+                sum_im += si * zr - sr * zi;
+
+                sig_energy += sr * sr + si * si;
+            }
+
+            float corr = sum_re * sum_re + sum_im * sum_im;
+            float norm = corr / (sig_energy * zc_energy + 1e-12f);
+
+            plato[n] = norm;
+
+            if (norm > max_norm and norm > threshold)
+            {
+                max_norm = norm;
+                best_idx = (int)n;
+            }
+        }
+
+        return best_idx;
     }
 
     int zc_sync(const std::vector<std::complex<float>> &for_ofdm, const std::vector<std::complex<float>> &zadoff_chu, const float zc_energy, float threshold, int cp_index, int Lcp)
@@ -366,7 +489,7 @@ namespace
     {
         int N = ofdm_config.n_subcarriers;
         float accumulated_phase = 0;
-        const std::complex<float> known_pilot = { 1.0f, 0.0f };
+        const std::complex<float> pilot = get_pilot(ofdm_config.mod);
         std::vector<std::complex<float>> temp = input;
         output.clear();
 
@@ -387,7 +510,7 @@ namespace
             std::vector<std::complex<float>> equalized(N);
 
             for (auto k : pilots)
-                H[k] = sym[k] / known_pilot;
+                H[k] = sym[k] / pilot;
 
             for (size_t p = 0; p < pilots.size() - 1; ++p)
             {
@@ -439,7 +562,7 @@ namespace
 
             float cpe = 0;
             for (auto k : pilots)
-                cpe += std::arg(equalized[k] / known_pilot);
+                cpe += std::arg(equalized[k] / pilot);
             cpe /= pilots.size();
 
             accumulated_phase += cpe;
@@ -558,6 +681,11 @@ namespace
         }
     }
 
+    int16_t clip(float x)
+    {
+        return static_cast<int16_t>(std::clamp(x, -16384.0f, 16384.0f));
+    }
+
     void ofdm(std::vector<uint8_t> &bits, std::vector<int16_t> &buffer, DSP &dsp_config)
     {
         auto &ofdm_config = dsp_config.ofdm_cfg;
@@ -565,6 +693,20 @@ namespace
         int N = ofdm_config.n_subcarriers;
         int pilot_spacing = ofdm_config.pilot_spacing;
         Modulation modulation_type = ofdm_config.mod;
+
+        std::vector<int> pilots;
+        std::vector<int> data;
+        std::vector<bool> is_pilot;
+        std::vector<bool> is_guard;
+        calculate_pilots_and_guard(ofdm_config, pilots, data, is_pilot, is_guard);
+
+        size_t data_symbols = (bits.size() / get_bits_per_symbol(modulation_type)) / data.size();
+
+        if (data_symbols > MAX_DATA_SYMBOLS)
+        {
+            logs::dsp.warn("There is more data than PHY can send ({}): {} {} symbols", MAX_DATA_SYMBOLS, data_symbols, mod_to_string(modulation_type));
+            return;
+        }
 
         if (N < 4 or pilot_spacing < 2)
             return;
@@ -612,15 +754,12 @@ namespace
         static FFTWPlan ifft(N, false);
 
         int total_symbols = (int)symbols.size();
-        std::vector<int> data;
-        std::vector<int> pilots;
-        std::vector<bool> is_guard;
-        std::vector<bool> is_pilot;
-        calculate_pilots_and_guard(ofdm_config, pilots, data, is_pilot, is_guard);
 
         int symbols_per_ofdm = static_cast<int>(data.size());
         int num_ofdm_symbols = (total_symbols + symbols_per_ofdm - 1) / symbols_per_ofdm;
 
+        const float scale = get_scale(modulation_type);
+        const std::complex<float> pilot = get_pilot(modulation_type);
         buffer.reserve((num_ofdm_symbols + Ncp) * (N + 2));
 
         auto ofdm_zc_symbol = ofdm_zadoff_chu_symbol(dsp_config);
@@ -641,8 +780,8 @@ namespace
 
             for (int k : pilots)
             {
-                ifft.in[k][0] = 1.0f;
-                ifft.in[k][1] = 0.0f;
+                ifft.in[k][0] = pilot.real();
+                ifft.in[k][1] = pilot.imag();
             }
 
             for (size_t i = 0; i < data.size(); ++i)
@@ -667,22 +806,22 @@ namespace
             // Norm
             for (int n = 0; n < N; ++n)
             {
-                ifft.out[n][0] /= (float)(N / (3.0 * 16000.0f));
-                ifft.out[n][1] /= (float)(N / (3.0 * 16000.0f));
+                ifft.out[n][0] *= scale;
+                ifft.out[n][1] *= scale;
             }
 
             // Cyclic Prefix
             for (int n = N - Ncp; n < N; ++n)
             {
-                buffer.push_back((int16_t)ifft.out[n][0]);
-                buffer.push_back((int16_t)ifft.out[n][1]);
+                buffer.push_back(clip(ifft.out[n][0]));
+                buffer.push_back(clip(ifft.out[n][1]));
             }
 
             // Data
             for (int n = 0; n < N; ++n)
             {
-                buffer.push_back((int16_t)ifft.out[n][0]);
-                buffer.push_back((int16_t)ifft.out[n][1]);
+                buffer.push_back(clip(ifft.out[n][0]));
+                buffer.push_back(clip(ifft.out[n][1]));
             }
         }
     }
@@ -722,6 +861,7 @@ int run_dsp_rx(SharedData &data)
     std::vector<std::complex<float>> equalized(buff_size * 2);
     for_processing.reserve(buff_size * 2);
     std::vector<std::complex<float>> zadoff_chu = ofdm_zadoff_chu_symbol(dsp);
+    std::vector<float> llr;
     const int zc_len = static_cast<int>(zadoff_chu.size());
 
     const float *zptr = reinterpret_cast<const float *>(zadoff_chu.data());
@@ -747,7 +887,7 @@ int run_dsp_rx(SharedData &data)
         for_processing.insert(for_processing.end(), raw_b.begin(), raw_b.end());
         data.dsp_sockets_raw.write(for_processing);
 
-        const int boundary = static_cast<int>(raw_a.size());
+        const int boundary = static_cast<int>(raw_a.size()) + CP;
 
         plato.resize(for_processing.size());
 
@@ -756,14 +896,24 @@ int run_dsp_rx(SharedData &data)
         std::atomic_signal_fence(std::memory_order_seq_cst);
 
         cp_idx = ofdm_cp_corr(for_processing, N, CP, plato);
+        if (cp_idx < 0)
+        {
+            dsp.max_index = zc_sync_full(for_processing, zadoff_chu, zc_energy, plato, 0.3f);
+            if (dsp.max_index < 0)
+            {
+                raw_a = std::move(raw_b);
+                continue;
+            }
+            cp_idx = dsp.max_index + zc_len + CP;
+        }
         coarse = coarse_cfo(for_processing, cp_idx, N, CP, data.sdr.get_sample_rate());
         coarse_mean = alpha * coarse + (1.0f - alpha) * coarse_mean;
 
-        int zc_idx = zc_sync(for_processing, zadoff_chu, zc_energy, 0.3f, cp_idx, CP) + dsp.offset;
+        int zc_idx = zc_sync(for_processing, zadoff_chu, zc_energy, 0.3f, cp_idx, CP);
 
-        data.snap.cp_found = dsp.max_index > 0;
+        data.snap.cp_found = cp_idx > 0;
         data.snap.zc_found = zc_idx > 0;
-        data.snap.cp_pos = dsp.max_index;
+        data.snap.cp_pos = cp_idx;
         data.snap.zc_pos = zc_idx;
         data.snap.cfo = coarse;
 
@@ -785,10 +935,10 @@ int run_dsp_rx(SharedData &data)
         int last = 0;
 
         if (static_cast<int>(for_processing.size()) > zc_idx + zc_len + N)
-            next = zc_idx + zc_len;
+            next = zc_idx + zc_len + dsp.offset;
         else
         {
-            raw_a = raw_b;
+            raw_a = std::move(raw_b);
             continue;
         }
 
@@ -818,7 +968,8 @@ int run_dsp_rx(SharedData &data)
         ofdm_equalize(processed, equalized, dsp.ofdm_cfg);
 
         data.dsp_sockets_symbols.write(equalized);
-        demodulate(dsp.ofdm_cfg.mod, equalized, bits);
+        demodulate(dsp.ofdm_cfg.mod, equalized, bits, llr);
+        descramble(bits);
         data.phy_ip.write(bits, true);
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
@@ -838,7 +989,7 @@ int run_dsp_rx(SharedData &data)
                 hist.cp_not_found, hist.zc_not_found, hist.cfo_jumped, hist.mean_time_us
             );
             logs::tun.debug(
-                "{}: {}%, packets found: {}, packets lost: {}", fmt::format(fg(fmt::color::red), "PL"),
+                "{}: {:.4f}%, packets found: {}, packets lost: {}", fmt::format(fg(fmt::color::red), "PL"),
                 hist.packet_loss, hist.packet_found, hist.packet_lost
             );
         }
@@ -860,6 +1011,7 @@ int run_dsp_tx(SharedData &data)
     {
         data.ip_phy.read(bits, true);
 
+        scramble(bits);
         ofdm(bits, buffer, data.dsp);
         logs::dsp.trace("[{}] modulate {} samples", fmt::format(fmt::fg(fmt::color::cyan), "OFDM"), buffer.size());
         data.sdr_dsp_tx.write(buffer);
