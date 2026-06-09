@@ -112,11 +112,11 @@ void run_tun_tx(SharedData &data)
                     frame.insert(frame.end(), payload.begin() + offset, payload.begin() + offset + chunk_size);
 
                     auto encoded = conv_encoder(frame);
-                    // encoded = interleaving(encoded);
+                    encoded = interleaving(encoded);
                     auto bits = byte_to_bits(encoded, 8);
 
                     data.ip_phy.write(bits, true);
-                    std::this_thread::sleep_for(std::chrono::milliseconds(3));
+                    std::this_thread::sleep_for(std::chrono::milliseconds(6));
 
                     offset += chunk_size;
                 }
@@ -145,9 +145,8 @@ void run_tun_rx(SharedData &data)
         data.phy_ip.read(frame, true);
 
         block = bits_to_bytes<uint8_t>(frame, 8);
-        // block = deinterleaving(block);
+        block = deinterleaving(block);
         frame = viterbi_decoder(block);
-        // frame = block;
 
         if (frame.size() < sizeof(FrameHeader) + 2)
             continue;
@@ -204,33 +203,20 @@ void run_tun_rx(SharedData &data)
 
             if (full_packet.size() > 2)
             {
-                std::vector<uint8_t> crc_received(full_packet.end() - 2, full_packet.end());
-                full_packet.resize(full_packet.size() - 2);
+                ssize_t written = write(tun_fd, full_packet.data(), full_packet.size());
 
-                std::vector<uint8_t> crc_calc = calculateCRC16(full_packet);
-
-                if (crc_calc[0] == crc_received[0] && crc_calc[1] == crc_received[1])
+                if (written >= 0)
                 {
-                    ssize_t written = write(tun_fd, full_packet.data(), full_packet.size());
-
-                    if (written >= 0)
-                    {
-                        data.snap.is_packet = true;
-                        data.history.push(data.snap);
-                        data.snap.reset();
-                    }
-                    else
-                        logs::tun.error("[{}] Write error: {}", tun_name, strerror(errno));
+                    data.snap.is_packet = true;
+                    data.history.push(data.snap);
+                    data.snap.reset();
                 }
                 else
-                {
-                    std::vector<uint8_t> gui_frame;
-                    gui_frame.insert(gui_frame.end(), (uint8_t *)&hdr, (uint8_t *)&hdr + sizeof(FrameHeader));
-                    gui_frame.insert(gui_frame.end(), full_packet.begin(), full_packet.end());
-                    data.ip_sockets_bytes.write(gui_frame);
-
-                    logs::tun.error("[{}] CRC Failed for assembled packet ID {}", tun_name, (uint16_t)id);
-                }
+                    logs::tun.error("[{}] Write error: {}", tun_name, strerror(errno));
+                std::vector<uint8_t> gui_frame;
+                gui_frame.insert(gui_frame.end(), (uint8_t *)&hdr, (uint8_t *)&hdr + sizeof(FrameHeader));
+                gui_frame.insert(gui_frame.end(), full_packet.begin(), full_packet.end());
+                data.ip_sockets_bytes.write(gui_frame);
             }
             assembly_map.erase(id);
         }

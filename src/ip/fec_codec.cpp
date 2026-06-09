@@ -1,3 +1,4 @@
+#include "logger.hpp"
 #include "ip/fec_codec.hpp"
 
 #include <algorithm>
@@ -8,7 +9,8 @@
 
 std::vector<uint8_t> conv_encoder(const std::vector<uint8_t> &bytes)
 {
-    std::vector<uint8_t> encoded_bytes((bytes.size() * n) + 1, 0);
+    size_t out_bits = bytes.size() * 8 * n;
+    std::vector<uint8_t> encoded_bytes((out_bits + 7) / 8, 0);
 
     uint8_t state = 0;
 
@@ -53,7 +55,7 @@ std::vector<uint8_t> conv_encoder(const std::vector<uint8_t> &bytes)
 
 std::vector<uint8_t> viterbi_decoder(const std::vector<uint8_t> &bytes)
 {
-    size_t T = (bytes.size() * 8) / n;
+    size_t T = (bytes.size() * 8);
 
     std::array<std::array<TransitionTarget, 2>, num_states> transitions;
 
@@ -127,16 +129,7 @@ std::vector<uint8_t> viterbi_decoder(const std::vector<uint8_t> &bytes)
         cur_metrics = next_metrics;
     }
 
-    int min_metric = VINF;
     uint8_t cur_state = 0;
-    for (uint8_t s = 0; s < num_states; ++s)
-    {
-        if (cur_metrics[s] < min_metric)
-        {
-            min_metric = cur_metrics[s];
-            cur_state = s;
-        }
-    }
 
     std::vector<uint8_t> decoded_bytes(T / 8, 0);
 
@@ -160,6 +153,7 @@ std::vector<uint8_t> viterbi_decoder(const std::vector<uint8_t> &bytes)
         cur_state = prev_state;
     }
 
+    decoded_bytes.pop_back();
     return decoded_bytes;
 }
 
@@ -251,18 +245,18 @@ std::vector<uint8_t> hamming_decoder(const std::vector<uint32_t> &encoded_bytes)
     return decoded_bytes;
 }
 
-std::vector<uint32_t> interleaving(const std::vector<uint32_t> &input)
+std::vector<uint8_t> interleaving(const std::vector<uint8_t> &input)
 {
     if (input.empty())
         return {};
-    constexpr size_t B = 32;
+    constexpr size_t B = 8;
     const size_t N = input.size();
 
-    std::vector<uint32_t> output(N, 0);
+    std::vector<uint8_t> output(N, 0);
     for (size_t g = 0; g < N * B; ++g)
     {
         size_t sw = g / B, sb = B - 1 - (g % B);
-        uint32_t bit = (input[sw] >> sb) & 1U;
+        uint8_t bit = (input[sw] >> sb) & 1U;
         size_t col = g / N, row = g % N;
         size_t dg = col * N + row;
         size_t dw = dg / B, db = B - 1 - (dg % B);
@@ -271,14 +265,14 @@ std::vector<uint32_t> interleaving(const std::vector<uint32_t> &input)
     return output;
 }
 
-std::vector<uint32_t> deinterleaving(const std::vector<uint32_t> &input)
+std::vector<uint8_t> deinterleaving(const std::vector<uint8_t> &input)
 {
     if (input.empty())
         return {};
-    constexpr size_t B = 32;
+    constexpr size_t B = 8;
     const size_t N = input.size();
 
-    std::vector<uint32_t> output(N, 0);
+    std::vector<uint8_t> output(N, 0);
     for (size_t g = 0; g < N * B; ++g)
     {
         size_t col = g / N, row = g % N;
@@ -286,7 +280,7 @@ std::vector<uint32_t> deinterleaving(const std::vector<uint32_t> &input)
         size_t sg = col * N + row;
         size_t sw = sg / B, sb = B - 1 - (sg % B);
 
-        uint32_t bit = (input[sw] >> sb) & 1U;
+        uint8_t bit = (input[sw] >> sb) & 1U;
 
         size_t dw = g / B, db = B - 1 - (g % B);
         output[dw] |= (bit << db);
