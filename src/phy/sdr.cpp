@@ -28,10 +28,11 @@ void soapy_log_handler(const SoapySDRLogLevel logLevel, const char *message)
     }
 }
 
-SDR::SDR(const SDRConfig &config)
+SDR::SDR(const SDRConfig &config, std::atomic<bool> &stop_condition)
+    : cond(stop_condition),
+      cfg(config)
 {
     SoapySDR::registerLogHandler(soapy_log_handler);
-    cfg = config;
     scan();
 }
 
@@ -228,13 +229,13 @@ void SDR::scan()
     }
 }
 
-void SDR::wait_connection(std::atomic<bool> &condition)
+void SDR::wait_connection()
 {
     while (!has_flag(flags, Flags::IS_ACTIVE))
     {
         if (connection_retries == 1)
             logs::sdr.warn("No SDR devices detected. Waiting for any available connection...");
-        if (condition.load())
+        if (cond.load())
         {
             logs::sdr.info("Closing SDR thread");
             return;
@@ -246,7 +247,7 @@ void SDR::wait_connection(std::atomic<bool> &condition)
     connection_retries = 0;
 }
 
-bool SDR::check_connection(std::atomic<bool> &condition)
+bool SDR::check_connection()
 {
     if (!sdr || !has_flag(flags, Flags::IS_ACTIVE))
         return false;
@@ -269,7 +270,7 @@ bool SDR::check_connection(std::atomic<bool> &condition)
         if (deinit())
         {
             logs::sdr.critical("SDR {} was disconnected, {}", args["uri"], msg);
-            wait_connection(condition);
+            wait_connection();
             if (!init())
                 return false;
         }

@@ -83,7 +83,7 @@ struct SDRConfig {
 
 class SDR {
   public:
-    explicit SDR(const SDRConfig &config);
+    explicit SDR(const SDRConfig &config, std::atomic<bool> &stop_condition);
     ~SDR()
     {
         if (deinit())
@@ -97,9 +97,9 @@ class SDR {
     [[nodiscard]] bool init();
     [[nodiscard]] bool reinit();
     [[nodiscard]] bool deinit();
-    [[nodiscard]] bool check_connection(std::atomic<bool> &condition);
+    [[nodiscard]] bool check_connection();
     void scan();
-    void wait_connection(std::atomic<bool> &condition);
+    void wait_connection();
     int add_args();
     void apply_runtime();
 
@@ -145,6 +145,7 @@ class SDR {
     static constexpr int RX = SOAPY_SDR_RX;
     static constexpr int TX = SOAPY_SDR_TX;
   private:
+    std::atomic<bool> &cond;
     SDRConfig cfg;
     Flags flags = Flags::None;
 
