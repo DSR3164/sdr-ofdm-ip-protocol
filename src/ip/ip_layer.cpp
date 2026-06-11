@@ -1,3 +1,4 @@
+#include "common.hpp"
 #include "sockets.hpp"
 #include "ip/bit_utils.hpp"
 #include "ip/crc.hpp"
@@ -19,6 +20,59 @@
 #include <sys/poll.h>
 #include <thread>
 #include <vector>
+
+size_t calculate_mtu(const SharedData &data)
+{
+    const size_t ns = data.dsp.ofdm_cfg.n_subcarriers;
+    const int ps = data.dsp.ofdm_cfg.pilot_spacing;
+    const auto mod_type = data.dsp.ofdm_cfg.mod;
+
+    uint16_t bps = 1;
+
+    size_t data_subs = 0;
+    int active_idx = 0;
+
+    for (size_t k = 0; k < ns; ++k)
+    {
+        if (k == 0 || (k >= 37 && k <= 91))
+            continue;
+
+        bool is_pilot = (active_idx % ps == 0) || (k == ns / 2 - 28) || (k == ns / 2 + 28) || (k == ns - 1);
+
+        if (!is_pilot)
+            data_subs++;
+
+        active_idx++;
+    }
+
+    logs::tun.debug("MTU debug: data_subs={}, ps={}, mod={}", data_subs, ps, static_cast<int>(mod_type));
+
+    switch (static_cast<int>(mod_type))
+    {
+    case 0:
+        bps = 1;
+        break;
+    case 1:
+        bps = 2;
+        break;
+    case 2:
+        bps = 4;
+        break;
+    case 3:
+        bps = 6;
+        break;
+    default:
+        bps = 1;
+        break;
+    }
+
+    const size_t bits_per_stream = data_subs * bps * 10;
+
+    if (bits_per_stream / 8 <= (sizeof(FrameHeader) + 2))
+        return 0;
+
+    return (bits_per_stream / 2) / 8 - 20;
+}
 
 void run_tun_tx(SharedData &data)
 {
@@ -49,6 +103,9 @@ void run_tun_tx(SharedData &data)
     uint8_t buffer[1460];
     std::vector<uint32_t> encoded_bytes;
     FrameHeader hdr;
+
+    const auto mtu = calculate_mtu(data);
+    logs::tun.info("MTU: {}", mtu);
 
     while (!data.stop.load())
     {
@@ -93,7 +150,7 @@ void run_tun_tx(SharedData &data)
 
                 while (offset < total_len)
                 {
-                    size_t chunk_size = std::min<size_t>(BUF_MTU, total_len - offset);
+                    size_t chunk_size = std::min<size_t>(mtu, total_len - offset);
                     uint8_t hflag = 0;
                     if (offset == 0)
                         hflag |= FLAG_FIRST;
@@ -117,7 +174,7 @@ void run_tun_tx(SharedData &data)
 
                     data.ip_phy.write(bits, true);
                     std::this_thread::sleep_for(std::chrono::milliseconds(6));
-                    logs::tun.debug("Sent chunk: seq {}, id {}, size {}, flags {:02X}", packet_seq - 1, packet_id, chunk_size, hflag);
+                    logs::tun.trace("Sent chunk: seq {}, id {}, size {}, flags {:02X}", packet_seq - 1, packet_id, chunk_size, hflag);
                     offset += chunk_size;
                 }
             }
