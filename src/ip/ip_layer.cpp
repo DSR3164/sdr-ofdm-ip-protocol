@@ -117,7 +117,7 @@ void run_tun_tx(SharedData &data)
 
                     data.ip_phy.write(bits, true);
                     std::this_thread::sleep_for(std::chrono::milliseconds(6));
-
+                    logs::tun.debug("Sent chunk: seq {}, id {}, size {}, flags {:02X}", packet_seq - 1, packet_id, chunk_size, hflag);
                     offset += chunk_size;
                 }
             }
@@ -201,6 +201,22 @@ void run_tun_rx(SharedData &data)
         {
             std::vector<uint8_t> &full_packet = res_buf.data;
 
+            auto crc_rx = std::vector<uint8_t>(full_packet.end() - 2, full_packet.end());
+            full_packet.erase(full_packet.end() - 2, full_packet.end());
+
+            auto crc = calculateCRC16(full_packet);
+            if (crc != crc_rx)
+            {
+                logs::tun.debug("[{}] CRC mismatch for packet ID {}, dropping", tun_name, id);
+                assembly_map.erase(id);
+                std::vector<uint8_t> gui_frame;
+                gui_frame.insert(gui_frame.end(), (uint8_t *)&hdr, (uint8_t *)&hdr + sizeof(FrameHeader));
+                gui_frame.insert(gui_frame.end(), full_packet.begin(), full_packet.end());
+                data.ip_sockets_bytes.write(gui_frame);
+
+                continue;
+            }
+
             if (full_packet.size() > 2)
             {
                 ssize_t written = write(tun_fd, full_packet.data(), full_packet.size());
@@ -213,10 +229,6 @@ void run_tun_rx(SharedData &data)
                 }
                 else
                     logs::tun.error("[{}] Write error: {}", tun_name, strerror(errno));
-                std::vector<uint8_t> gui_frame;
-                gui_frame.insert(gui_frame.end(), (uint8_t *)&hdr, (uint8_t *)&hdr + sizeof(FrameHeader));
-                gui_frame.insert(gui_frame.end(), full_packet.begin(), full_packet.end());
-                data.ip_sockets_bytes.write(gui_frame);
             }
             assembly_map.erase(id);
         }

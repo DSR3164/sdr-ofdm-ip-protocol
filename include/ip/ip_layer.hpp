@@ -37,4 +37,4 @@ void run_tun_tx(SharedData &data);
 void run_tun_rx(SharedData &data);
 int run_ip_gui_bridge(SharedData &data, socketData &socket);
 
-constexpr ssize_t BUF_MTU = 250;
+constexpr ssize_t BUF_MTU = 150;

@@ -9,15 +9,34 @@
 
 std::vector<uint8_t> conv_encoder(const std::vector<uint8_t> &bytes)
 {
-    size_t out_bits = bytes.size() * 8 * n;
+    size_t out_bits = (bytes.size() * 8 + m) * n;
     std::vector<uint8_t> encoded_bytes((out_bits + 7) / 8, 0);
 
     uint8_t state = 0;
-
     size_t byte_in_pos = 0;
     size_t byte_out_pos = 0;
     int bit_in_pos = 0;
     int bit_out_pos = 0;
+
+    auto encode_bit = [&](uint8_t u)
+    {
+        uint8_t win = (state << 1) | u;
+        uint8_t b1 = (__builtin_popcount(win & g_1)) % 2;
+        uint8_t b2 = (__builtin_popcount(win & g_2)) % 2;
+        encoded_bytes[byte_out_pos] |= (b1 << (7 - bit_out_pos));
+        if (++bit_out_pos == 8)
+        {
+            bit_out_pos = 0;
+            byte_out_pos++;
+        }
+        encoded_bytes[byte_out_pos] |= (b2 << (7 - bit_out_pos));
+        if (++bit_out_pos == 8)
+        {
+            bit_out_pos = 0;
+            byte_out_pos++;
+        }
+        state = win & ((1 << m) - 1);
+    };
 
     while (byte_in_pos < bytes.size())
     {
@@ -27,28 +46,11 @@ std::vector<uint8_t> conv_encoder(const std::vector<uint8_t> &bytes)
             bit_in_pos = 0;
             byte_in_pos++;
         }
-
-        uint8_t win = (state << 1) | u;
-
-        uint8_t b1 = (__builtin_popcount(win & g_1)) % 2;
-        uint8_t b2 = (__builtin_popcount(win & g_2)) % 2;
-
-        encoded_bytes[byte_out_pos] |= (b1 << (7 - bit_out_pos));
-        if (++bit_out_pos == 8)
-        {
-            bit_out_pos = 0;
-            byte_out_pos++;
-        }
-
-        encoded_bytes[byte_out_pos] |= (b2 << (7 - bit_out_pos));
-        if (++bit_out_pos == 8)
-        {
-            bit_out_pos = 0;
-            byte_out_pos++;
-        }
-
-        state = win & ((1 << m) - 1);
+        encode_bit(u);
     }
+
+    for (int f = 0; f < m; ++f)
+        encode_bit(0);
 
     return encoded_bytes;
 }
@@ -153,7 +155,6 @@ std::vector<uint8_t> viterbi_decoder(const std::vector<uint8_t> &bytes)
         cur_state = prev_state;
     }
 
-    decoded_bytes.pop_back();
     return decoded_bytes;
 }
 
