@@ -7,22 +7,23 @@
 
 void soapy_log_handler(const SoapySDRLogLevel logLevel, const char *message)
 {
+    static auto tag = fmt::format(fmt::fg(fmt::color::blue_violet), "SoapySDR");
     switch (logLevel)
     {
     case SOAPY_SDR_FATAL:
-        logs::sdr.critical("SoapySDR: {}", message);
+        logs::sdr.critical("[{}] {}", tag, message);
         break;
     case SOAPY_SDR_ERROR:
-        logs::sdr.error("SoapySDR: {}", message);
+        logs::sdr.error("[{}] {}", tag, message);
         break;
     case SOAPY_SDR_WARNING:
-        logs::sdr.warn("SoapySDR: {}", message);
+        logs::sdr.warn("[{}] {}", tag, message);
         break;
     case SOAPY_SDR_INFO:
-        logs::sdr.info("SoapySDR: {}", message);
+        logs::sdr.info("[{}] {}", tag, message);
         break;
     default:
-        logs::sdr.debug("SoapySDR: {}", message);
+        logs::sdr.debug("[{}] {}", tag, message);
         break;
     }
 }
@@ -95,6 +96,7 @@ bool SDR::init()
     auto rx_carrier_range = sdr->getFrequencyRange(SOAPY_SDR_RX, 0);
     auto tx_carrier_range = sdr->getFrequencyRange(SOAPY_SDR_TX, 0);
 
+    logs::sdr.debug("SDR Sample Rate: {:.3f} MHz", sdr->getSampleRate(SOAPY_SDR_RX, 0) / 1e6);
     logs::sdr.debug("SDR RX Gain range: {:.2f} dB -> {:.2f} dB", rx_gain_range.minimum(), rx_gain_range.maximum());
     logs::sdr.debug("SDR TX Gain range: {:.2f} dB -> {:.2f} dB", tx_gain_range.minimum(), tx_gain_range.maximum());
     logs::sdr.debug("SDR RX Carrier range: {:.2f} MHz -> {:.2f} GHz", rx_carrier_range[0].minimum() / 1e6, rx_carrier_range[0].maximum() / 1e9);
