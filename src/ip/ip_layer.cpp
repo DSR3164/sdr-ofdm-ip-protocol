@@ -194,6 +194,7 @@ void run_tun_rx(SharedData &data)
     std::vector<uint8_t> block;
 
     uint16_t last_id = 0;
+    uint16_t last_seq = 0;
     bool last_id_valid = false;
     std::unordered_map<uint16_t, ReassemblyBuffer> assembly_map;
     auto last_cleanup = std::chrono::steady_clock::now();
@@ -247,10 +248,14 @@ void run_tun_rx(SharedData &data)
         auto &res_buf = assembly_map[id];
         res_buf.last_update = std::chrono::steady_clock::now();
 
+        if (diff == 0 && (last_seq == 0 || current_seq == last_seq))
+            logs::tun.warn("DUP! {}", current_id);
+
         if (hdr.flags & FLAG_FIRST)
         {
             res_buf.data.clear();
             res_buf.last_seq = current_seq;
+            last_seq = current_seq;
         }
 
         res_buf.data.insert(res_buf.data.end(), fragment_data, fragment_data + payload_len);
