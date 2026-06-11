@@ -79,7 +79,7 @@ std::vector<uint8_t> viterbi_decoder(const std::vector<uint8_t> &bytes)
     cur_metrics[0] = 0;
     std::fill(cur_metrics.begin() + 1, cur_metrics.end(), VINF);
 
-    std::vector<std::vector<int>> history(T, std::vector<int>(num_states, -1));
+    std::vector<uint8_t> history(T * num_states, -1);
 
     size_t byte_in_pos = 0;
     int bit_in_pos = 0;
@@ -123,7 +123,7 @@ std::vector<uint8_t> viterbi_decoder(const std::vector<uint8_t> &bytes)
                 if (candidate < next_metrics[next_state])
                 {
                     next_metrics[next_state] = candidate;
-                    history[t][next_state] = prev_state;
+                    history[t * num_states + next_state] = prev_state;
                 }
             }
         }
@@ -140,7 +140,7 @@ std::vector<uint8_t> viterbi_decoder(const std::vector<uint8_t> &bytes)
 
     for (int t = (int)T - 1; t >= 0; --t)
     {
-        uint8_t prev_state = history[t][cur_state];
+        uint8_t prev_state = history[t * num_states + cur_state];
 
         uint8_t input_bit = cur_state & 1U;
 
