@@ -37,7 +37,4 @@ void run_tun_tx(SharedData &data);
 void run_tun_rx(SharedData &data);
 int run_ip_gui_bridge(SharedData &data, socketData &socket);
 
-std::vector<uint8_t> byte_to_bits(const std::vector<uint8_t> &bytes, int16_t r);
-std::vector<uint8_t> bits_to_bytes(const std::vector<uint8_t> &bits, int16_t r);
-
-constexpr ssize_t BUF_MTU = 250;
+constexpr ssize_t BUF_MTU = 150;
