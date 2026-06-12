@@ -26,7 +26,7 @@ The PHY layer is broadly inspired by LTE's narrowband profile:
 ## Architecture
 
 <p align="center">
-  <img src="docs/images/architecture.png" width="auto">
+  <img src="docs/images/architecture.svg" width="auto">
 </p>
 
 Six threads share a common data structure and communicate via lock-free queues:
