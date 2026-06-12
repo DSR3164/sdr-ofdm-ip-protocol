@@ -6,7 +6,7 @@
 [![Build: CMake](https://img.shields.io/badge/Build-CMake-red.svg)](https://cmake.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> Experimental point-to-point IP tunnel over the air using Software Defined Radio and OFDM.  
+> Experimental point-to-point IP tunnel over the air using Software Defined Radio and OFDM.
 > Research/learning project - not production software.
 
 ---
@@ -19,7 +19,7 @@ transmits over the air, and reconstructs the original packets on the receiving e
 effectively creating a custom Layer 3 radio link from scratch.
 
 The PHY layer is broadly inspired by LTE's narrowband profile:
-**1.4 MHz bandwidth, 128 OFDM subcarriers**. The link operates in FDD mode with 3 MHz duplex spacing at 2.2 GHz.
+**1.4 MHz bandwidth, 128 OFDM subcarriers**. The link operates in FDD mode with 30 MHz duplex spacing at 2.2 GHz.
 
 ---
 
@@ -53,9 +53,9 @@ the core tunnel runs headless, and the GUI can be attached or detached independe
 | Bandwidth           | 1.4 MHz                             |
 | Subcarriers         | 128                                 |
 | RB (Resource Block) | 6 (72 active subcarriers)           |
-| Pilots              | 6                                   |
+| Pilots              | 7                                   |
 | Sample rate         | 1.92 MSPS                           |
-| FDD spacing         | 3 MHz                               |
+| FDD spacing         | 30 MHz                              |
 | Duplex mode         | FDD (Frequency Division Duplex)     |
 | Profile             | LTE-inspired (narrowband)           |
 | Hardware API        | SoapySDR (RTL-SDR, HackRF, USRP, …) |
