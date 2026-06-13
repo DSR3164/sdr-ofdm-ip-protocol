@@ -187,3 +187,109 @@ socketData choose_socket(const std::string &folder_name)
 
     return socket;
 }
+
+void App::run_heatmap(const std::string &label, const float *data, int rows, int cols, float scale_min = -80.0f, float scale_max = -20.0f)
+{
+    if (ImPlot::BeginPlot(label.c_str(), ImVec2(ImGui::GetContentRegionAvail())))
+    {
+        ImPlot::SetupAxes("Frequency", "Time");
+        ImPlotPoint bounds_min(0, 0);
+        ImPlotPoint bounds_max(cols, rows);
+        ImPlot::PlotHeatmap("##heatmap", data, rows, cols, scale_min, scale_max, nullptr, bounds_min, bounds_max);
+        ImPlot::EndPlot();
+    }
+}
+
+void App::run_waterfall(const std::string &label, WaterfallData &waterfall, const std::vector<std::complex<float>> &data)
+{
+    waterfall.process_samples(data);
+
+    ImGui::Text("FFT Size: %d", waterfall.fft_size);
+    ImGui::Text("History: %d rows", waterfall.history_rows);
+    ImGui::SliderInt("Update Rate(ms)", &waterfall.update_interval_ms, 5, 100);
+
+    static float min_db = -40.0f;
+    static float max_db = -10.0f;
+
+    ImGui::SliderFloat("Min dB", &min_db, -200.0f, -40.0f);
+    ImGui::SliderFloat("Max dB", &max_db, -40.0f, -0.0f);
+
+    static int colormap_idx = 5;
+    const char *colormap_names[] = { "Viridis", "Plasma", "Hot", "Cool", "Pink", "Jet" };
+    const int colormap_values[] = {
+        ImPlotColormap_Viridis,
+        ImPlotColormap_Plasma,
+        ImPlotColormap_Hot,
+        ImPlotColormap_Cool,
+        ImPlotColormap_Pink,
+        ImPlotColormap_Jet
+    };
+    ImGui::Combo("Colormap", &colormap_idx, colormap_names, 6);
+    ImPlot::PushColormap(colormap_values[colormap_idx]);
+    run_heatmap(label, waterfall.data.data(), waterfall.history_rows, waterfall.fft_size, min_db, max_db);
+    ImPlot::PopColormap();
+}
+
+WaterfallData::WaterfallData(int fft_sz, int rows)
+    : fft_size(fft_sz),
+      history_rows(rows),
+      update_interval_ms(15)
+{
+    data.resize(fft_size * history_rows, -80.0f);
+    window.resize(fft_size);
+    for (int i = 0; i < fft_size; ++i)
+        window[i] = 0.5f * (1.0f - std::cos(2.0f * M_PIf * i / (fft_size - 1)));
+    fft_in = fftwf_alloc_complex(fft_size);
+    fft_out = fftwf_alloc_complex(fft_size);
+    fft_plan = fftwf_plan_dft_1d(fft_size, fft_in, fft_out, FFTW_FORWARD, FFTW_ESTIMATE);
+    last_update = std::chrono::steady_clock::now();
+}
+
+WaterfallData::~WaterfallData()
+{
+    fftwf_destroy_plan(fft_plan);
+    fftwf_free(fft_in);
+    fftwf_free(fft_out);
+}
+
+void WaterfallData::process_samples(const std::vector<std::complex<float>> &samples)
+{
+    auto now = std::chrono::steady_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_update);
+
+    if (elapsed.count() < update_interval_ms)
+        return;
+
+    last_update = now;
+
+    if (samples.size() < fft_size)
+        return;
+
+    for (int i = 0; i < fft_size; ++i)
+    {
+        std::complex<float> windowed = samples[i] * window[i];
+        fft_in[i][0] = windowed.real();
+        fft_in[i][1] = windowed.imag();
+    }
+
+    fftwf_execute(fft_plan);
+
+    const float norm = 1.0f / fft_size;
+    const float norm_sq = norm * norm;
+    const int half = fft_size / 2;
+
+    static std::vector<float> power_db;
+    if (power_db.size() != fft_size)
+        power_db.resize(fft_size);
+
+    for (int i = 0; i < fft_size; ++i)
+    {
+        int idx = (i + half) % fft_size;
+        float re = fft_out[idx][0];
+        float im = fft_out[idx][1];
+        power_db[i] = 10.0f * std::log10f(norm_sq * (re * re + im * im) + 1e-12f);
+    }
+
+    std::memmove(data.data() + fft_size, data.data(), (history_rows - 1) * fft_size * sizeof(float));
+    std::memcpy(data.data(), power_db.data(), fft_size * sizeof(float));
+}

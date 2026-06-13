@@ -9,6 +9,25 @@
 #include <span>
 #include <string>
 
+struct WaterfallData {
+    int fft_size;
+    int history_rows;
+    std::vector<float> data;
+
+    fftwf_complex *fft_in;
+    fftwf_complex *fft_out;
+    fftwf_plan fft_plan;
+    std::vector<float> window;
+
+    std::chrono::steady_clock::time_point last_update;
+    int update_interval_ms;
+
+    WaterfallData(int fft_sz = 512, int rows = 300);
+    ~WaterfallData();
+
+    void process_samples(const std::vector<std::complex<float>> &samples);
+};
+
 struct Buffers {
     DoubleBuffer<std::complex<float>> sdr_raw;
     DoubleBuffer<std::complex<float>> dsp;
@@ -38,6 +57,8 @@ class App {
     void stop_frame();
     void control_wd(std::vector<std::string> &sockets, socketData &sock);
     void begin_debug();
+    void run_heatmap(const std::string &label, const float *data, int rows, int cols, float scale_min, float scale_max);
+    void run_waterfall(const std::string &label, WaterfallData &waterfall, const std::vector<std::complex<float>> &data);
     void set_vsync_state(bool vsync_state) { (vsync_state) ? SDL_GL_SetSwapInterval(1) : SDL_GL_SetSwapInterval(0); }
 
     bool choose_socket = false;
