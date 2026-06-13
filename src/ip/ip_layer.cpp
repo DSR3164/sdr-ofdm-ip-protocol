@@ -100,8 +100,7 @@ void run_tun_tx(SharedData &data)
 
     struct IP ip;
 
-    uint8_t buffer[1460];
-    std::vector<uint32_t> encoded_bytes;
+    uint8_t buffer[1500];
     FrameHeader hdr;
 
     const auto mtu = calculate_mtu(data);
