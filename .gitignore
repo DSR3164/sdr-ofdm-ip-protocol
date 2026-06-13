@@ -4,6 +4,7 @@
 !*.hpp
 !*.cpp
 !*.png
+!*.svg
 
 !.gitignore
 !README.md
