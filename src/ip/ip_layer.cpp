@@ -189,6 +189,7 @@ void run_tun_rx(SharedData &data)
 {
     auto &tun_name = data.tun_name;
     auto &tun_fd = data.tun_fd;
+    std::vector<float> llr;
     std::vector<uint8_t> frame;
     std::vector<uint8_t> block;
 
@@ -199,7 +200,13 @@ void run_tun_rx(SharedData &data)
 
     while (!data.stop.load())
     {
-        data.phy_ip.read(frame, true);
+        data.phy_ip.read(llr, true);
+
+        // Временная заглушка
+        frame.resize(llr.size());
+        for (size_t i = 0; i < llr.size(); ++i)
+            frame[i] = llr[i] < 0.0f ? 1 : 0;
+        // До полной имплементации Soft-decision
 
         block = bits_to_bytes<uint8_t>(frame, 8);
         block = deinterleaving(block);

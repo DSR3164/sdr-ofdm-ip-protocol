@@ -246,7 +246,7 @@ struct SharedData {
     DSP dsp;
 
     DoubleBuffer<uint8_t> ip_phy;
-    DoubleBuffer<uint8_t> phy_ip;
+    DoubleBuffer<float> phy_ip;
 
     DoubleBuffer<int16_t> sdr_dsp_tx;
     DoubleBuffer<int16_t> sdr_dsp_rx;
