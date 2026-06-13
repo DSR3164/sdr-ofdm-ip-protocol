@@ -10,6 +10,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <utility>
 #include <vector>
 
 extern std::atomic<bool> *stop_ptr;
@@ -151,14 +152,14 @@ struct StatsSummary {
 };
 
 struct StatsSnapshot {
-    int16_t cp_pos;
-    int16_t zc_pos;
-    bool cp_found;
-    bool zc_found;
-    bool is_packet;
-    bool is_previous_packet_lost;
-    float processing_time_us;
-    float cfo;
+    int16_t cp_pos = -1;
+    int16_t zc_pos = -1;
+    bool cp_found = false;
+    bool zc_found = false;
+    bool is_packet = false;
+    bool is_previous_packet_lost = false;
+    float processing_time_us = 0.0f;
+    float cfo = 0.0f;
 
     void reset()
     {
@@ -179,7 +180,7 @@ struct StatsHistory {
 
     void push(StatsSnapshot s)
     {
-        if (!s.zc_found)
+        if (!s.zc_found && s.cp_found)
             zc_not_found.fetch_add(1, std::memory_order_relaxed);
         if (!s.cp_found)
             cp_not_found.fetch_add(1, std::memory_order_relaxed);
@@ -207,7 +208,6 @@ struct StatsHistory {
         StatsSummary res;
         size_t current_head = head.load(std::memory_order_relaxed);
         size_t count = std::min(current_head, N);
-        size_t time_count = 0;
 
         res.zc_not_found = zc_not_found.load(std::memory_order_relaxed);
         res.cp_not_found = cp_not_found.load(std::memory_order_relaxed);
@@ -255,7 +255,12 @@ struct SharedData {
     DoubleBuffer<std::complex<float>> dsp_sockets_symbols;
     DoubleBuffer<uint8_t> ip_sockets_bytes;
 
+    StatsHistory<60000> history;
+    StatsSnapshot snap;
+
     std::string ip_addr;
+    int tun_fd;
+    char tun_name[16] = "";
 
     std::atomic<bool> stop{ false };
 
@@ -276,4 +281,15 @@ struct SharedData {
           dsp_sockets_symbols(cfg.buffer_size * 2)
     {
     }
+};
+
+struct ThreadJoiner {
+    std::string m_name;
+    std::jthread m_thread;
+    ThreadJoiner(std::string name, std::jthread thread)
+        : m_name(std::move(name)),
+          m_thread(std::move(thread))
+    {
+    }
+    ~ThreadJoiner() { logs::main.info("Joining thread: {}", m_name.c_str()); }
 };

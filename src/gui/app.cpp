@@ -7,7 +7,6 @@
 #include "backends/imgui_impl_sdl2.h"
 #include "imgui.h"
 #include "implot.h"
-#include "implot3d.h"
 
 #include <GL/glew.h>
 #include <filesystem>
@@ -23,9 +22,11 @@ App::App(const std::string &title, int width, int height)
 
     ImGui::CreateContext();
     ImPlot::CreateContext();
-    ImPlot3D::CreateContext();
 
+    std::filesystem::path exe_dir = std::filesystem::canonical(std::filesystem::path(SDL_GetBasePath()));
+    static std::string ini_path = (exe_dir.parent_path() / "config" / "imgui.ini").string();
     ImGuiIO &io = ImGui::GetIO();
+    io.IniFilename = ini_path.c_str();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
@@ -37,7 +38,6 @@ App::~App()
 {
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
-    ImPlot3D::DestroyContext();
     ImPlot::DestroyContext();
     ImGui::DestroyContext();
     SDL_GL_DeleteContext(gl_context);
@@ -70,7 +70,7 @@ void App::stop_frame()
     SDL_GL_SwapWindow(window);
 }
 
-void App::control_wd(std::vector<std::string> &sockets)
+void App::control_wd(std::vector<std::string> &sockets, socketData &sock)
 {
     bool chosen_socket = false;
 
@@ -100,6 +100,9 @@ void App::control_wd(std::vector<std::string> &sockets)
 
             if (ImGui::Button("Update sockets", ImVec2(ImGui::GetContentRegionAvail().x, 0.0f)))
                 found_sockets(sockets);
+
+            if (ImGui::Button("Clear stole sockets", ImVec2(ImGui::GetContentRegionAvail().x, 0.0f)))
+                sock.cleanup_old_sockets();
 
             if (sockets.empty())
                 ImGui::Text("%s", last_socket_path.c_str());
@@ -349,7 +352,7 @@ void run_gui(Buffers &buf, std::vector<std::string> &sockets, socketData &sock)
     while (app.is_open())
     {
         app.start_frame();
-        app.control_wd(sockets);
+        app.control_wd(sockets, sock);
 
         if (app.is_chos_sock())
         {

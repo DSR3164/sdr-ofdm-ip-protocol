@@ -71,7 +71,7 @@ class App {
     bool is_chos_sock() { return choose_socket; }
     void start_frame();
     void stop_frame();
-    void control_wd(std::vector<std::string> &sockets);
+    void control_wd(std::vector<std::string> &sockets, socketData &sock);
     void begin_debug(Buffers &buf);
     void run_mean_time_graph(const std::vector<Stats> &stats_vec);
     void run_packet_loss_graph(const std::vector<Stats> &stats_vec);

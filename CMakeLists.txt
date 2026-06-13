@@ -9,6 +9,10 @@ set(FETCHCONTENT_BASE_DIR ${CMAKE_SOURCE_DIR}/third_party)
 set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND NOT MSVC)
+  set(DEBUG_FLAGS -fsanitize=address,undefined -fno-omit-frame-pointer -g)
+endif()
+
 # ---------- Threads ----------
 find_package(Threads REQUIRED)
 
@@ -121,15 +125,6 @@ fetchcontent_declare(
 
 fetchcontent_makeavailable(implot)
 
-# ---------- ImPlot3D ----------
-fetchcontent_declare(
-  implot3d
-  GIT_REPOSITORY https://github.com/brenocq/implot3d
-  GIT_TAG main
-)
-
-fetchcontent_makeavailable(implot3d)
-
 if(TARGET SoapySDR::SoapySDR)
   set(SOAPY_TARGET SoapySDR::SoapySDR)
 elseif(TARGET SoapySDR)
@@ -147,20 +142,8 @@ add_library(implot STATIC
 target_include_directories(implot PUBLIC
   ${implot_SOURCE_DIR}
 )
-
-add_library(implot3d STATIC
-  ${implot3d_SOURCE_DIR}/implot3d.cpp
-  ${implot3d_SOURCE_DIR}/implot3d_demo.cpp
-  ${implot3d_SOURCE_DIR}/implot3d_items.cpp
-  ${implot3d_SOURCE_DIR}/implot3d_meshes.cpp
-)
-
-target_include_directories(implot3d PUBLIC
-  ${implot3d_SOURCE_DIR}
-)
-
 target_link_libraries(implot PUBLIC imgui)
-target_link_libraries(implot3d PUBLIC imgui)
+target_compile_options(implot PRIVATE -Wno-deprecated-enum-enum-conversion)
 
 # ---------- ZeroMQ (Core) ----------
 set(ZMQ_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -209,12 +192,25 @@ add_library(soip_core STATIC
   ${PROJECT_SOURCE_DIR}/src/config.cpp
 )
 
+if(DEBUG_FLAGS)
+  target_compile_options(soip_core PRIVATE ${DEBUG_FLAGS})
+  target_compile_options(soip_core PRIVATE -mavx2)
+  target_link_options(soip_core PRIVATE ${DEBUG_FLAGS})
+else()
+  target_compile_options(soip_core PRIVATE -mavx2 -ffast-math)
+endif()
+
 add_library(soip_gui STATIC
   ${PROJECT_SOURCE_DIR}/src/gui/gui_layer.cpp
   ${PROJECT_SOURCE_DIR}/src/gui/phy_dev.cpp
   ${PROJECT_SOURCE_DIR}/src/gui/ip_dev.cpp
   ${PROJECT_SOURCE_DIR}/src/gui/app.cpp
 )
+
+if(DEBUG_FLAGS)
+  target_compile_options(soip_gui PRIVATE ${DEBUG_FLAGS})
+  target_link_options(soip_gui PRIVATE ${DEBUG_FLAGS})
+endif()
 
 target_include_directories(soip_core
   PUBLIC ${PROJECT_SOURCE_DIR}/include
@@ -236,14 +232,12 @@ target_link_libraries(soip_core
   cxxopts::cxxopts
   cppzmq
 )
-target_compile_options(soip_core PRIVATE -mavx2 -ffast-math)
 
 target_link_libraries(soip_gui
   PUBLIC
   soip_core
   imgui
   implot
-  implot3d
   GLEW::GLEW
   SDL2::SDL2
   OpenGL::GL
@@ -266,15 +260,10 @@ target_link_libraries(gui PRIVATE
   soip_gui
 )
 
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-  foreach(target soip gui)
-    target_compile_options(${target} PRIVATE
-      -fsanitize=address,undefined
-      -fno-omit-frame-pointer
-      -g
-    )
-    target_link_options(${target} PRIVATE
-      -fsanitize=address,undefined
-    )
-  endforeach()
+if(DEBUG_FLAGS)
+  target_compile_options(soip PRIVATE ${DEBUG_FLAGS})
+  target_link_options(soip PRIVATE ${DEBUG_FLAGS})
+
+  target_compile_options(gui PRIVATE ${DEBUG_FLAGS})
+  target_link_options(gui PRIVATE ${DEBUG_FLAGS})
 endif()

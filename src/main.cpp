@@ -53,39 +53,16 @@ int main(int argc, char *argv[])
     {
         socketData socket;
 
-        std::thread dsp_rx_thread(run_dsp_rx, std::ref(data));
-        std::thread dsp_tx_thread(run_dsp_tx, std::ref(data));
-        std::thread sdr_thread(run_sdr, std::ref(data));
-        std::thread tun_tx_thread(run_tun_tx, std::ref(data));
-        std::thread dsp_gui_bridge_thread(run_dsp_gui_bridge, std::ref(data), std::ref(socket));
-        std::thread ip_gui_bridge_thread(run_ip_gui_bridge, std::ref(data), std::ref(socket));
+        ThreadJoiner ip_gui_bridge{ "ip_gui_bridge", std::jthread(run_ip_gui_bridge, std::ref(data), std::ref(socket)) };
+        ThreadJoiner dsp_gui_bridge{ "dsp_gui_bridge", std::jthread(run_dsp_gui_bridge, std::ref(data), std::ref(socket)) };
+        ThreadJoiner tun_tx{ "tun_tx", std::jthread(run_tun_tx, std::ref(data)) };
+        ThreadJoiner rx_thread{ "tun_rx", std::jthread(run_tun_rx, std::ref(data)) };
+        ThreadJoiner sdr{ "sdr", std::jthread(run_sdr, std::ref(data)) };
+        ThreadJoiner dsp_tx{ "dsp_tx", std::jthread(run_dsp_tx, std::ref(data)) };
+        ThreadJoiner dsp_rx{ "dsp_rx", std::jthread(run_dsp_rx, std::ref(data)) };
 
         while (!data.stop.load())
             std::this_thread::sleep_for(std::chrono::seconds(1));
-
-        logs::main.info("Joining dsp_rx...");
-        if (dsp_rx_thread.joinable())
-            dsp_rx_thread.join();
-
-        logs::main.info("Joining dsp_tx...");
-        if (dsp_tx_thread.joinable())
-            dsp_tx_thread.join();
-
-        logs::main.info("Joining sdr...");
-        if (sdr_thread.joinable())
-            sdr_thread.join();
-
-        logs::main.info("Joining tun_tx...");
-        if (tun_tx_thread.joinable())
-            tun_tx_thread.join();
-
-        logs::main.info("Joining dsp_bridge...");
-        if (dsp_gui_bridge_thread.joinable())
-            dsp_gui_bridge_thread.join();
-
-        logs::main.info("Joining ip_bridge...");
-        if (ip_gui_bridge_thread.joinable())
-            ip_gui_bridge_thread.join();
     }
 
     logs::main.info("All threads joined. Exiting.");

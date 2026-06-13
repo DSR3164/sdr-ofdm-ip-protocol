@@ -34,7 +34,7 @@ struct ReassemblyBuffer {
 };
 
 void run_tun_tx(SharedData &data);
-void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name);
+void run_tun_rx(SharedData &data);
 int run_ip_gui_bridge(SharedData &data, socketData &socket);
 
 std::vector<uint8_t> byte_to_bits(const std::vector<uint8_t> &bytes, int16_t r);

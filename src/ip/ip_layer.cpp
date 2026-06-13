@@ -25,8 +25,9 @@ extern StatsSnapshot snap;
 
 void run_tun_tx(SharedData &data)
 {
-    char tun_name[IFNAMSIZ] = "";
-    int tun_fd = allocate_tun(tun_name);
+    auto &tun_fd = data.tun_fd;
+    auto &tun_name = data.tun_name;
+    data.tun_fd = allocate_tun(tun_name);
 
     if (tun_fd < 0)
         return;
@@ -45,8 +46,6 @@ void run_tun_tx(SharedData &data)
     }
     else
         logs::tun.error("Failed to assign IP to {}", tun_name);
-
-    std::thread rx_thread(run_tun_rx, std::ref(data), tun_fd, tun_name);
 
     struct IP ip;
 
@@ -129,23 +128,20 @@ void run_tun_tx(SharedData &data)
     }
 
     close(tun_fd);
-    logs::tun.info("TUN FD {} Closed", tun_fd);
-
-    if (rx_thread.joinable())
-    {
-        logs::tun.info("Waiting for RX thread to join...");
-        rx_thread.join();
-    }
-    logs::tun.info("TUN RX and TX threads finished");
+    logs::tun.info("TUN device {} (fd {}) closed", tun_name, tun_fd);
 }
 
-void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
+void run_tun_rx(SharedData &data)
 {
+    auto &tun_name = data.tun_name;
+    auto &tun_fd = data.tun_fd;
     std::vector<uint8_t> frame;
     std::vector<uint32_t> block;
     uint16_t last_seq = 0;
     bool last_seq_valid = false;
 
+    uint16_t last_id = 0;
+    bool last_id_valid = false;
     std::unordered_map<uint16_t, ReassemblyBuffer> assembly_map;
     auto last_cleanup = std::chrono::steady_clock::now();
 
@@ -167,22 +163,22 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
             logs::tun.debug("[{}] Bad magic: 0x{:04X}", tun_name, ntohs(hdr.magic));
             continue;
         }
-        uint16_t current_seq = ntohs(hdr.seq);
-        int16_t diff = (int16_t)(current_seq - last_seq);
-        if (diff > 1 && last_seq_valid)
+        uint16_t current_id = ntohs(hdr.id);
+        int16_t diff = (int16_t)(current_id - last_id);
+        if (diff > 1 && last_id_valid)
         {
             StatsSnapshot log;
-            history.get_last(log);
-            logs::tun.warn("Missing sequence: current - {}\tlast - {}", static_cast<uint16_t>(current_seq), last_seq);
+            data.history.get_last(log);
+            logs::tun.debug("Missing sequence: {}...{}", last_id, static_cast<uint16_t>(current_id));
             logs::tun.debug(
-                "{} packet: CP: {}\tZC: {}\t CFO: {:.0f}\tZC_F: {}\tCP_F: {}", fmt::format(fg(fmt::color::beige), "Current"),
-                snap.cp_pos, snap.zc_pos, snap.cfo, snap.zc_found, snap.cp_found
+                "{} packet: CP: {}\tZC: {}\t CFO: {}\tZC_F: {}\tCP_F: {}", fmt::format(fg(fmt::color::beige), "Current"),
+                data.snap.cp_pos, data.snap.zc_pos, static_cast<int>(data.snap.cfo), data.snap.zc_found, data.snap.cp_found
             );
             logs::tun.debug(
-                "{} packet: CP: {}\tZC: {}\t CFO: {:.0f}\tZC_F: {}\tCP_F: {}", fmt::format(fg(fmt::color::beige), "Previous"),
-                log.cp_pos, log.zc_pos, log.cfo, log.zc_found, log.cp_found
+                "{} packet: CP: {}\tZC: {}\t CFO: {}\tZC_F: {}\tCP_F: {}", fmt::format(fg(fmt::color::beige), "Previous"),
+                log.cp_pos, log.zc_pos, static_cast<int>(log.cfo), log.zc_found, log.cp_found
             );
-            snap.is_previous_packet_lost = true;
+            data.snap.is_previous_packet_lost = true;
         }
 
         uint16_t payload_len = ntohs(hdr.length);
@@ -197,7 +193,7 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
         if (hdr.flags & FLAG_FIRST)
         {
             res_buf.data.clear();
-            res_buf.last_seq = current_seq;
+            res_buf.last_seq = current_id;
         }
 
         res_buf.data.insert(res_buf.data.end(), fragment_data, fragment_data + payload_len);
@@ -221,11 +217,11 @@ void run_tun_rx(SharedData &data, int tun_fd, const char *tun_name)
                         logs::tun.error("[{}] Write error: {}", tun_name, strerror(errno));
                     else
                     {
-                        last_seq = current_seq;
-                        last_seq_valid = true;
-                        snap.is_packet = true;
-                        history.push(snap);
-                        snap.reset();
+                        last_id = current_id;
+                        last_id_valid = true;
+                        data.snap.is_packet = true;
+                        data.history.push(data.snap);
+                        data.snap.reset();
                     }
                 }
                 else

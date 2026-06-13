@@ -6,9 +6,6 @@
 #include <spdlog/fmt/bundled/color.h>
 #include <spdlog/spdlog.h>
 
-extern StatsHistory<60'000> history;
-extern StatsSnapshot snap;
-
 namespace
 {
     struct FFTWPlan {
@@ -511,6 +508,8 @@ namespace
 
     float coarse_cfo(std::vector<std::complex<float>> &r, int max_index, int N, int Lcp, float fs)
     {
+        if (max_index < 0)
+            return 0;
         std::complex<float> P = 0.0f;
         for (int i = 0; i < Lcp; ++i)
             P += r[max_index + i] * std::conj(r[max_index + i + N]);
@@ -538,7 +537,7 @@ namespace
         int symbol_len = N + CP;
         for (size_t i = 0; i < 10; ++i)
         {
-            int sym_start = start + i * symbol_len;
+            size_t sym_start = start + i * symbol_len;
             if (signal.size() < sym_start + N + CP)
                 break;
 
@@ -646,7 +645,7 @@ namespace
                 ifft.in[k][1] = 0.0f;
             }
 
-            for (int i = 0; i < data.size(); ++i)
+            for (size_t i = 0; i < data.size(); ++i)
             {
                 int idx = sym * symbols_per_ofdm + i;
                 int k = data[i];
@@ -699,7 +698,7 @@ int run_dsp_rx(SharedData &data)
     FFTWPlan fft(dsp.ofdm_cfg.n_subcarriers, true);
     std::chrono::steady_clock::time_point start;
     std::chrono::steady_clock::time_point end;
-    std::chrono::steady_clock::time_point clock;
+    auto clock = std::chrono::steady_clock::now();
     std::vector<float> plato(buff_size * 2);
     std::vector<uint8_t> bits(4000);
 
@@ -762,11 +761,11 @@ int run_dsp_rx(SharedData &data)
 
         int zc_idx = zc_sync(for_processing, zadoff_chu, zc_energy, 0.3f, cp_idx, CP) + dsp.offset;
 
-        snap.cp_found = cp_idx > 0;
-        snap.zc_found = zc_idx > 0;
-        snap.cp_pos = cp_idx;
-        snap.zc_pos = zc_idx;
-        snap.cfo = coarse;
+        data.snap.cp_found = dsp.max_index > 0;
+        data.snap.zc_found = zc_idx > 0;
+        data.snap.cp_pos = dsp.max_index;
+        data.snap.zc_pos = zc_idx;
+        data.snap.cfo = coarse;
 
         const int zc_end = zc_idx + zc_len;
         const int needed_after_zc = 10 * (N + CP);
@@ -831,11 +830,11 @@ int run_dsp_rx(SharedData &data)
         {
             clock = std::chrono::steady_clock::now();
             StatsSnapshot log;
-            history.get_last(log);
-            auto hist = history.get_summary();
+            data.history.get_last(log);
+            auto hist = data.history.get_summary();
             logs::dsp.debug(
-                "{} packet: CP: {}; ZC: {}; CFO: {:.0f}; ZC_F: {}; CP_F: {}, CP_F: {}; ZC_F: {}; CFO_J: {}; TIME: {:.2f}", fmt::format(fg(fmt::color::beige), "Current"),
-                snap.cp_pos, snap.zc_pos, snap.cfo, snap.zc_found, snap.cp_found,
+                "Stats: CP_idx: {} ZC_idx: {} CFO: {:.0f} CP_!F: {} ZC_!F: {} CFO_J: {} TIME: {:.2f}",
+                data.snap.cp_pos, data.snap.zc_pos, data.snap.cfo,
                 hist.cp_not_found, hist.zc_not_found, hist.cfo_jumped, hist.mean_time_us
             );
             logs::tun.debug(
@@ -843,7 +842,7 @@ int run_dsp_rx(SharedData &data)
                 hist.packet_loss, hist.packet_found, hist.packet_lost
             );
         }
-        snap.processing_time_us = duration.count() / 1e3;
+        data.snap.processing_time_us = duration.count() / 1e3;
         raw_a = std::move(raw_b);
         raw_b.resize(buff_size);
     }
