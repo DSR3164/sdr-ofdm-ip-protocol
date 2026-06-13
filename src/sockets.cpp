@@ -22,11 +22,13 @@ socketData::socketData(const bool setup_dir, const std::string &base_folder)
 
         ip_socket = "ipc://" + (base / "ip_gui.sock").string();
         phy_socket = "ipc://" + (base / "dsp_gui.sock").string();
+        stats_socket = "ipc://" + (base / "stats.sock").string();
     }
     else
     {
         ip_socket = "";
         phy_socket = "";
+        stats_socket = "";
     }
 }
 
@@ -165,7 +167,7 @@ bool IPC::start_server(const std::string &path)
     try
     {
         _socket.set(zmq::sockopt::linger, 0);
-        _socket.set(zmq::sockopt::sndhwm, 10);
+        _socket.set(zmq::sockopt::sndhwm, 1000);
         _socket.bind(path);
         return true;
     }
@@ -180,7 +182,6 @@ bool IPC::connect_to(const std::string &path)
 {
     try
     {
-        _socket = zmq::socket_t(_context, zmq::socket_type::sub);
         _socket.set(zmq::sockopt::subscribe, "");
         _socket.set(zmq::sockopt::rcvtimeo, 500);
         _socket.connect(path);

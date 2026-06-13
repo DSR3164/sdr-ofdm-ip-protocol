@@ -16,6 +16,7 @@ struct socketData {
     std::string socketPid;
     std::string ip_socket;
     std::string phy_socket;
+    std::string stats_socket;
     bool is_owner = false;
 
     socketData(const bool setup_dir = true, const std::string &base_folder = "soip_sockets");
@@ -35,6 +36,7 @@ enum class MsgType : uint32_t
     Error,
     Vector,
     pid,
+    Stats,
 };
 
 struct ipc_header {
@@ -48,9 +50,9 @@ class IPC {
     zmq::context_t _context;
     zmq::socket_t _socket;
   public:
-    IPC()
+    explicit IPC(zmq::socket_type type)
         : _context(1),
-          _socket(_context, zmq::socket_type::pub)
+          _socket(_context, type)
     {
     }
 
