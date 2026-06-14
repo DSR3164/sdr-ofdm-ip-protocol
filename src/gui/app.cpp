@@ -245,7 +245,7 @@ WaterfallData::WaterfallData(int fft_sz, int rows)
         window[i] = 0.5f * (1.0f - std::cos(2.0f * M_PIf * i / (fft_size - 1)));
     fft_in = fftwf_alloc_complex(fft_size);
     fft_out = fftwf_alloc_complex(fft_size);
-    fft_plan = fftwf_plan_dft_1d(fft_size, fft_in, fft_out, FFTW_FORWARD, FFTW_ESTIMATE);
+    fft_plan = fftwf_plan_dft_1d(fft_size, fft_in, fft_out, FFTW_FORWARD, FFTW_MEASURE);
     last_update = std::chrono::steady_clock::now();
 }
 
