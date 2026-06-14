@@ -259,6 +259,34 @@ WaterfallData::~WaterfallData()
 
 void WaterfallData::process_samples(const std::vector<std::complex<float>> &samples)
 {
+    static std::vector<float> local_max_db(fft_size, -200.0f);
+    static int accumulated_blocks = 0;
+
+    if (samples.size() < fft_size) return;
+
+    for (int i = 0; i < fft_size; ++i) {
+        std::complex<float> windowed = samples[i] * window[i];
+        fft_in[i][0] = windowed.real();
+        fft_in[i][1] = windowed.imag();
+    }
+    fftwf_execute(fft_plan);
+
+    const float norm = 1.0f / fft_size;
+    const float norm_sq = norm * norm;
+    const int half = fft_size / 2;
+
+    for (int i = 0; i < fft_size; ++i) {
+        int idx = (i + half) % fft_size;
+        float re = fft_out[idx][0];
+        float im = fft_out[idx][1];
+        float db = 10.0f * std::log10f(norm_sq * (re * re + im * im) + 1e-12f);
+
+        if (db > local_max_db[i]) {
+            local_max_db[i] = db;
+        }
+    }
+    accumulated_blocks++;
+
     auto now = std::chrono::steady_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_update);
 
@@ -267,34 +295,11 @@ void WaterfallData::process_samples(const std::vector<std::complex<float>> &samp
 
     last_update = now;
 
-    if (samples.size() < fft_size)
-        return;
-
-    for (int i = 0; i < fft_size; ++i)
-    {
-        std::complex<float> windowed = samples[i] * window[i];
-        fft_in[i][0] = windowed.real();
-        fft_in[i][1] = windowed.imag();
-    }
-
-    fftwf_execute(fft_plan);
-
-    const float norm = 1.0f / fft_size;
-    const float norm_sq = norm * norm;
-    const int half = fft_size / 2;
-
-    static std::vector<float> power_db;
-    if (power_db.size() != fft_size)
-        power_db.resize(fft_size);
-
-    for (int i = 0; i < fft_size; ++i)
-    {
-        int idx = (i + half) % fft_size;
-        float re = fft_out[idx][0];
-        float im = fft_out[idx][1];
-        power_db[i] = 10.0f * std::log10f(norm_sq * (re * re + im * im) + 1e-12f);
-    }
+    if (accumulated_blocks == 0) return;
 
     std::memmove(data.data() + fft_size, data.data(), (history_rows - 1) * fft_size * sizeof(float));
-    std::memcpy(data.data(), power_db.data(), fft_size * sizeof(float));
+    std::memcpy(data.data(), local_max_db.data(), fft_size * sizeof(float));
+
+    std::fill(local_max_db.begin(), local_max_db.end(), -200.0f);
+    accumulated_blocks = 0;
 }
