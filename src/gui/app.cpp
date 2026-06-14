@@ -216,7 +216,7 @@ void App::run_waterfall(const std::string &label, WaterfallData &waterfall, cons
     static float max_db = -10.0f;
 
     ImGui::SliderFloat("Min dB", &min_db, -200.0f, -40.0f);
-    ImGui::SliderFloat("Max dB", &max_db, -40.0f, -0.0f);
+    ImGui::SliderFloat("Max dB", &max_db, -39.99f, -0.0f);
 
     static int colormap_idx = 5;
     const char *colormap_names[] = { "Viridis", "Plasma", "Hot", "Cool", "Pink", "Jet" };
