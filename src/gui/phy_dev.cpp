@@ -42,6 +42,7 @@ void phy_dev(App &app, Buffers &data) // Phy layer
         app.begin_plot_2d<float, std::complex<float>>(label, "I", "Q", raw);
     ImGui::End();
 
+    // Stats
     static StatsSnapshot snapshot{};
     std::vector<uint8_t> raw_stats;
 
@@ -79,8 +80,8 @@ void phy_dev(App &app, Buffers &data) // Phy layer
         ImGui::SameLine();
         ImGui::TextColored(snapshot.is_previous_packet_lost ? color_no : color_yes, snapshot.is_previous_packet_lost ? "YES" : "NO");
 
-        ImGui::End();
     }
+    ImGui::End();
 
     if (ImGui::Begin("Waterfall"))
         app.run_waterfall("##Waterfall", waterfall, raw);

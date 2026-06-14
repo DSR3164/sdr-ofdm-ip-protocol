@@ -6,6 +6,7 @@
 #include <GL/glew.h>
 #include <backends/imgui_impl_opengl3.h>
 #include <backends/imgui_impl_sdl2.h>
+#include <fftw3.h>
 #include <filesystem>
 #include <imgui.h>
 #include <string>
