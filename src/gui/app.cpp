@@ -195,9 +195,10 @@ void App::run_heatmap(const std::string &label, const float *data, int rows, int
 {
     if (ImPlot::BeginPlot(label.c_str(), ImVec2(ImGui::GetContentRegionAvail())))
     {
-        ImPlot::SetupAxes("Frequency", "Time");
-        ImPlotPoint bounds_min(0, 0);
-        ImPlotPoint bounds_max(cols, rows);
+        ImPlot::SetupAxes("Frequency", "Row");
+        double half_cols = cols / 2.0;
+        ImPlotPoint bounds_min(-half_cols, 0);
+        ImPlotPoint bounds_max(half_cols, rows);
         ImPlot::PlotHeatmap("##heatmap", data, rows, cols, scale_min, scale_max, nullptr, bounds_min, bounds_max);
         ImPlot::EndPlot();
     }
