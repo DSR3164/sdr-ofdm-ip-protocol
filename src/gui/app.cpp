@@ -79,7 +79,10 @@ void App::control_wd(std::vector<std::string> &sockets, socketData &sock)
         if (menu_open)
         {
             if (!control_menu_was_open)
+            {
                 found_sockets(sockets);
+                sock.cleanup_old_sockets();
+            }
 
             control_menu_was_open = true;
 
