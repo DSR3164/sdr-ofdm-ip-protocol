@@ -1,12 +1,10 @@
 #include "common.hpp"
 #include "sockets.hpp"
 #include "gui/app.hpp"
-#include "zmq.hpp"
 
 #include <cstdint>
 #include <functional>
 #include <string>
-#include <thread>
 #include <vector>
 
 float lat = 1.0f;
@@ -168,18 +166,19 @@ int main()
     std::vector<std::string> all_sockets;
     found_sockets(all_sockets);
     Buffers bufs(1920 * 2);
-
     socketData sock(false);
 
-    std::thread gui(run_gui, std::ref(bufs), std::ref(all_sockets), std::ref(sock));
-    std::thread phy_bridge(run_dsp_bridge, std::ref(bufs), std::ref(sock));
-    std::thread stats_bridge(run_stats_bridge, std::ref(bufs), std::ref(sock));
-    std::thread ip_bridge(run_ip_brigde, std::ref(bufs), std::ref(sock));
-
-    gui.join();
-    ip_bridge.join();
-    phy_bridge.join();
-    stats_bridge.join();
-
+    if (getuid() != 0)
+    {
+        logs::main.critical("Please run with sudo or as root");
+        return 0;
+    }
+    else
+    {
+        std::jthread gui(run_gui, std::ref(bufs), std::ref(all_sockets), std::ref(sock));
+        std::jthread dsp_bridge(run_dsp_bridge, std::ref(bufs), std::ref(sock));
+        std::jthread stats_bridge(run_stats_bridge, std::ref(bufs), std::ref(sock));
+        std::jthread ip_brigde(run_ip_brigde, std::ref(bufs), std::ref(sock));
+    }
     return 0;
 }
