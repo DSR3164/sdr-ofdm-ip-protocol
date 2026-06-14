@@ -62,7 +62,7 @@ void phy_dev(App &app, Buffers &data) // Phy layer
 
         ImGui::SeparatorText("Status Flags");
         ImVec4 color_yes = ImVec4(0.0f, 1.0f, 0.4f, 1.0f);
-        ImVec4 color_no  = ImVec4(1.0f, 0.4f, 0.4f, 1.0f);
+        ImVec4 color_no = ImVec4(1.0f, 0.4f, 0.4f, 1.0f);
 
         ImGui::Text("CP Found:        ");
         ImGui::SameLine();
@@ -79,7 +79,6 @@ void phy_dev(App &app, Buffers &data) // Phy layer
         ImGui::Text("Prev Packet Lost:");
         ImGui::SameLine();
         ImGui::TextColored(snapshot.is_previous_packet_lost ? color_no : color_yes, snapshot.is_previous_packet_lost ? "YES" : "NO");
-
     }
     ImGui::End();
 
