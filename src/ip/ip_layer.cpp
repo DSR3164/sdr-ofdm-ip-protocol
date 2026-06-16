@@ -6,6 +6,7 @@
 #include "ip/ip_layer.hpp"
 #include "ip/ip_nat.hpp"
 #include "ip/tun_layer.hpp"
+#include "zmq.hpp"
 
 #include <SDL2/SDL_stdinc.h>
 #include <algorithm>
@@ -317,7 +318,7 @@ void run_tun_rx(SharedData &data)
 
 int run_ip_gui_bridge(SharedData &data, socketData &socket)
 {
-    static IPC server;
+    static IPC server(zmq::socket_type::pub);
     bool init = false;
     logs::tun.info("GUI bridge thread initialized");
 
