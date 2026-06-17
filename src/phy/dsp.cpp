@@ -86,7 +86,7 @@ namespace
 
             fftwf_plan local_plan = nullptr;
             {
-                std::lock_guard<std::mutex> lock(fftw_planner_mutex);
+                std::scoped_lock lock(fftw_planner_mutex);
                 local_plan = fftwf_plan_dft_1d(size, in, out, direction ? FFTW_FORWARD : FFTW_BACKWARD, FFTW_MEASURE);
             }
             plan = local_plan;
@@ -336,7 +336,7 @@ namespace
 
             plato[n] = norm;
 
-            if (norm > max_norm and norm > threshold)
+            if (norm > max_norm && norm > threshold)
             {
                 max_norm = norm;
                 best_idx = n;
@@ -427,7 +427,7 @@ namespace
             float denom = 0.5f * (R_cp + R);
             float metric = std::norm(P) / (denom * denom + 1e-12f);
 
-            if (metric > max_metric and metric > 0.85)
+            if (metric > max_metric && metric > 0.85)
             {
                 max_metric = metric;
                 max_index = d;
@@ -578,7 +578,7 @@ namespace
                     equalized[k] *= rot;
 
             for (int k = 0; k < N; ++k)
-                if (!is_pilot[k] and !is_guard[k])
+                if (!is_pilot[k] && !is_guard[k])
                     output.push_back(equalized[k]);
         }
     }
@@ -704,7 +704,7 @@ namespace
             return;
         }
 
-        if (N < 4 or pilot_spacing < 2)
+        if (N < 4 || pilot_spacing < 2)
             return;
 
         buffer.clear();
@@ -845,6 +845,7 @@ int run_dsp_rx(SharedData &data)
 
     const int N = dsp.ofdm_cfg.n_subcarriers;
     const int CP = dsp.ofdm_cfg.n_cp;
+    const int boundary = buff_size + CP;
 
     std::vector<int16_t> temp_a(buff_size * 2, 0);
     std::vector<int16_t> temp_b(buff_size * 2, 0);
@@ -883,8 +884,6 @@ int run_dsp_rx(SharedData &data)
         for_processing.insert(for_processing.end(), raw_b.begin(), raw_b.end());
         data.dsp_sockets_raw.write(for_processing);
 
-        const int boundary = static_cast<int>(raw_a.size()) + CP;
-
         plato.resize(for_processing.size());
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
@@ -917,7 +916,7 @@ int run_dsp_rx(SharedData &data)
         const size_t needed_after_zc = 10 * (N + CP);
         const size_t total_len = for_processing.size();
 
-        if (zc_idx >= boundary or zc_end + needed_after_zc > total_len or zc_idx < 0)
+        if (zc_idx < 0 || zc_idx >= boundary || zc_end + needed_after_zc > total_len)
         {
             raw_a = std::move(raw_b);
             raw_b.resize(buff_size);
