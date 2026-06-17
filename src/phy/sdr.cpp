@@ -49,6 +49,8 @@ SDR::SDR(const SDRConfig &config, std::atomic<bool> &stop_condition)
  */
 bool SDR::init()
 {
+    if (cond.load())
+        return false;
     if (cfg.enable_rx and cfg.enable_tx)
         SDR::add_args();
     sdr = SoapySDR::Device::make(args);
