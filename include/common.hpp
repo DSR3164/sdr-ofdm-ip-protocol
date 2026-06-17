@@ -47,9 +47,9 @@ struct DSP {
     float sample_rate = 1.92e6;
     struct OFDMConfig {
         Modulation mod = Modulation::QAM16;
-        int n_subcarriers = 128;
-        int pilot_spacing = 19;
-        int n_cp = 32;
+        size_t n_subcarriers = 128;
+        size_t pilot_spacing = 19;
+        size_t n_cp = 32;
     } ofdm_cfg;
 };
 

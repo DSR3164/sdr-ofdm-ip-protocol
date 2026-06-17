@@ -343,7 +343,7 @@ namespace
             if (norm > max_norm and norm > threshold)
             {
                 max_norm = norm;
-                best_idx = (int)n;
+                best_idx = n;
             }
         }
 
@@ -458,15 +458,15 @@ namespace
 
     void calculate_pilots_and_guard(DSP::OFDMConfig ofdm_config, std::vector<int> &pilots, std::vector<int> &data, std::vector<bool> &is_pilot, std::vector<bool> &is_guard)
     {
-        size_t N = static_cast<size_t>(ofdm_config.n_subcarriers);
-        int PS = ofdm_config.pilot_spacing;
+        size_t N = ofdm_config.n_subcarriers;
+        size_t PS = ofdm_config.pilot_spacing;
 
         data.clear();
         pilots.clear();
         is_pilot.resize(N, false);
         is_guard.resize(N, false);
 
-        int counter = 0;
+        size_t counter = 0;
         for (size_t k = 0; k < N; ++k)
         {
             if (k == 0 || (k >= 37 && k <= 91))
@@ -617,13 +617,13 @@ namespace
 
         fftwf_execute(ifft.plan);
 
-        for (int n = 0; n < data.ofdm_cfg.n_subcarriers; ++n)
+        for (size_t n = 0; n < data.ofdm_cfg.n_subcarriers; ++n)
         {
             ifft.out[n][0] /= (float)(data.ofdm_cfg.n_subcarriers / (3.0 * 16000.0));
             ifft.out[n][1] /= (float)(data.ofdm_cfg.n_subcarriers / (3.0 * 16000.0));
         }
 
-        for (int n = 0; n < data.ofdm_cfg.n_subcarriers; ++n)
+        for (size_t n = 0; n < data.ofdm_cfg.n_subcarriers; ++n)
             zadoff_chu.push_back(std::complex<float>(ifft.out[n][0], ifft.out[n][1]));
 
         return zadoff_chu;
@@ -654,7 +654,7 @@ namespace
     {
         int N = data.ofdm_cfg.n_subcarriers;
         int CP = data.ofdm_cfg.n_cp;
-        float fs = static_cast<float>(data.sample_rate);
+        float fs = data.sample_rate;
         int start = data.max_index + N;
 
         int symbol_len = N + CP;
@@ -917,9 +917,9 @@ int run_dsp_rx(SharedData &data)
         data.snap.zc_pos = zc_idx;
         data.snap.cfo = coarse;
 
-        const int zc_end = zc_idx + zc_len;
-        const int needed_after_zc = 10 * (N + CP);
-        const int total_len = static_cast<int>(for_processing.size());
+        const size_t zc_end = zc_idx + zc_len;
+        const size_t needed_after_zc = 10 * (N + CP);
+        const size_t total_len = for_processing.size();
 
         if (zc_idx >= boundary or zc_end + needed_after_zc > total_len or zc_idx < 0)
         {
