@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <fftw3.h>
 #include <mutex>
+#include <numbers>
 #include <spdlog/fmt/bundled/color.h>
 #include <spdlog/spdlog.h>
 #include <vector>
@@ -14,6 +15,8 @@ namespace
     constexpr size_t MAX_DATA_SYMBOLS = SDRConfig{}.buffer_size / (DSP{}.ofdm_cfg.n_cp + DSP{}.ofdm_cfg.n_subcarriers) - 2;
     constexpr float dac_max_value = 16384.0f;
 
+    constexpr auto pi = std::numbers::pi_v<float>;
+    constexpr auto tau = std::numbers::pi_v<float> * 2.0f;
     constexpr float bpsk_scale = dac_max_value / 20.9f;
     constexpr float qpsk_scale = dac_max_value / 26.9f;
     constexpr float qam16_scale = dac_max_value / 26.9f;
@@ -175,7 +178,7 @@ namespace
                              bits[i] * -2.0 + 1.0,
                              bits[i] * -2.0 + 1.0
                          )
-                         / sqrtf(2);
+                         / std::sqrt(2.0f);
     }
 
     void qpsk_mapper_3gpp(const std::vector<uint8_t> &bits, std::vector<std::complex<float>> &symbols)
@@ -185,7 +188,7 @@ namespace
                              bits[2 * i + 0] * -2.0 + 1.0,
                              bits[2 * i + 1] * -2.0 + 1.0
                          )
-                         / sqrtf(2.0);
+                         / std::sqrt(2.0f);
     }
 
     void qam16_mapper_3gpp(const std::vector<uint8_t> &bits, std::vector<std::complex<float>> &symbols)
@@ -195,7 +198,7 @@ namespace
                              (1 - 2 * bits[4 * i + 0]) * (2 - (1 - 2 * bits[4 * i + 2])),
                              (1 - 2 * bits[4 * i + 1]) * (2 - (1 - 2 * bits[4 * i + 3]))
                          )
-                         / sqrtf(10.0);
+                         / std::sqrt(10.0f);
     }
 
     void qam64_mapper_3gpp(const std::vector<uint8_t> &bits, std::vector<std::complex<float>> &symbols)
@@ -205,7 +208,7 @@ namespace
                              (1 - 2 * bits[6 * i + 0]) * (4 - (1 - 2 * bits[6 * i + 2]) * (2 - (1 - 2 * bits[6 * i + 4]))),
                              (1 - 2 * bits[6 * i + 1]) * (4 - (1 - 2 * bits[6 * i + 3]) * (2 - (1 - 2 * bits[6 * i + 5])))
                          )
-                         / sqrtf(42.0);
+                         / std::sqrt(42.0f);
     }
 
     void demodulate(Modulation mod, const std::vector<std::complex<float>> &symbols, std::vector<uint8_t> &bits, std::vector<float> &llr)
@@ -524,10 +527,10 @@ namespace
                 float a2 = std::arg(H2);
 
                 float da = a2 - a1;
-                if (da > M_PIf)
-                    da -= 2 * M_PIf;
-                if (da < -M_PIf)
-                    da += 2 * M_PIf;
+                if (da > pi)
+                    da -= tau;
+                if (da < -pi)
+                    da += tau;
 
                 float m1 = std::abs(H1);
                 float m2 = std::abs(H2);
@@ -593,7 +596,7 @@ namespace
 
         for (int n = 0; n < L; ++n)
         {
-            float phase = -M_PIf * q * n * (n + 1) / L;
+            float phase = -pi * q * n * (n + 1) / L;
             zc[n] = std::exp(std::complex<float>(0, phase));
         }
 
@@ -637,13 +640,13 @@ namespace
         for (int i = 0; i < Lcp; ++i)
             P += r[max_index + i] * std::conj(r[max_index + i + N]);
 
-        float epsilon = std::arg(P) / (2 * M_PIf);
+        float epsilon = std::arg(P) / (tau);
 
         float cfo_hz = epsilon * fs / N;
 
         for (size_t n = 0; n < r.size(); ++n)
         {
-            float phase = 2 * M_PIf * cfo_hz * n / fs;
+            float phase = tau * cfo_hz * n / fs;
             r[n] *= std::complex<float>(std::cos(phase), std::sin(phase));
         }
 
@@ -668,14 +671,14 @@ namespace
             for (int n = 0; n < CP; ++n)
                 corr += std::conj(signal[sym_start + n]) * signal[sym_start + n + N];
 
-            float epsilon = std::arg(corr) / (2 * M_PIf);
+            float epsilon = std::arg(corr) / (tau);
             float delta_f = epsilon * fs / N;
 
             data.cfo = delta_f;
 
             for (int n = 0; n < N + CP; ++n)
             {
-                float phase = -2 * M_PIf * delta_f * (sym_start + n) / fs;
+                float phase = -tau * delta_f * (sym_start + n) / fs;
                 signal[sym_start + n] *= std::complex<float>(std::cos(phase), std::sin(phase));
             }
         }
