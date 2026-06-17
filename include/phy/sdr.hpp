@@ -86,9 +86,7 @@ class SDR {
     explicit SDR(const SDRConfig &config, std::atomic<bool> &stop_condition);
     ~SDR()
     {
-        if (deinit())
-        {
-        };
+        (void)deinit();
     }
 
     SDR(const SDR &) = delete;
