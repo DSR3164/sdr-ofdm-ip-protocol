@@ -807,6 +807,7 @@ namespace
         int Ncp = ofdm_config.n_cp;
         int N = ofdm_config.n_subcarriers;
         int pilot_spacing = ofdm_config.pilot_spacing;
+        size_t bits_size = bits.size();
         Modulation modulation_type = ofdm_config.mod;
         FrameHeader header;
 
@@ -816,7 +817,7 @@ namespace
         std::vector<bool> is_guard;
         calculate_pilots_and_guard(ofdm_config, pilots, data, is_pilot, is_guard);
 
-        size_t data_symbols = (bits.size() / get_bits_per_symbol(modulation_type)) / data.size();
+        size_t data_symbols = (bits_size / get_bits_per_symbol(modulation_type)) / data.size();
 
         if (data_symbols > MAX_DATA_SYMBOLS)
         {
@@ -828,7 +829,7 @@ namespace
             return;
 
         buffer.clear();
-        std::vector<std::complex<float>> symbols(bits.size());
+        std::vector<std::complex<float>> symbols(bits_size);
         std::vector<std::complex<float>> schmidl(N);
         auto zc = generate_zc(127, 5);
         switch (modulation_type)
@@ -838,30 +839,30 @@ namespace
             break;
         }
         case Modulation::QPSK: {
-            if (bits.size() % 2 != 0)
-                bits.resize(bits.size() + (2 - bits.size() % 2), 0);
-            symbols.resize(bits.size() / 2);
+            if (bits_size % 2 != 0)
+                bits.resize(bits_size + (2 - bits_size % 2), 0);
+            symbols.resize(bits_size / 2);
             qpsk_mapper_3gpp(bits, symbols);
             break;
         }
         case Modulation::QAM16: {
-            if (bits.size() % 4 != 0)
-                bits.resize(bits.size() + (4 - bits.size() % 4), 0);
-            symbols.resize(bits.size() / 4);
+            if (bits_size % 4 != 0)
+                bits.resize(bits_size + (4 - bits_size % 4), 0);
+            symbols.resize(bits_size / 4);
             qam16_mapper_3gpp(bits, symbols);
             break;
         }
         case Modulation::QAM64: {
-            if (bits.size() % 6 != 0)
-                bits.resize(bits.size() + (6 - bits.size() % 6), 0);
-            symbols.resize(bits.size() / 6);
+            if (bits_size % 6 != 0)
+                bits.resize(bits_size + (6 - bits_size % 6), 0);
+            symbols.resize(bits_size / 6);
             qam64_mapper_3gpp(bits, symbols);
             break;
         }
         default: {
-            if (bits.size() % 4 != 0)
-                bits.resize(bits.size() + (4 - bits.size() % 4), 0);
-            symbols.resize(bits.size() / 4);
+            if (bits_size % 4 != 0)
+                bits.resize(bits_size + (4 - bits_size % 4), 0);
+            symbols.resize(bits_size / 4);
             qpsk_mapper_3gpp(bits, symbols);
             break;
         }
@@ -1162,6 +1163,7 @@ int run_dsp_tx(SharedData &data)
 
         scramble(bits);
         ofdm(bits, buffer, data.dsp);
+        logs::dsp.trace("GET {} bits | {} bytes", bits.size(), bits.size() / 8);
         logs::dsp.trace("[{}] modulate {} samples", fmt::format(fmt::fg(fmt::color::cyan), "OFDM"), buffer.size());
         data.sdr_dsp_tx.write(buffer);
     }
