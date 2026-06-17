@@ -985,7 +985,7 @@ int run_dsp_rx(SharedData &data)
     std::vector<std::complex<float>> raw_b(buff_size);
     std::vector<std::complex<float>> header_symbols_raw(N);
     std::vector<std::complex<float>> header_symbols_equalized(N);
-    std::vector<uint8_t> header_bits
+    std::vector<uint8_t> header_bits;
 
     std::vector<std::complex<float>> for_processing;
     std::vector<std::complex<float>> processed(buff_size * 2);
