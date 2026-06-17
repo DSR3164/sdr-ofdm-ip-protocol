@@ -602,6 +602,7 @@ namespace
         std::vector<std::complex<float>> zadoff_chu;
         auto zc = generate_zc(127, 5);
         zadoff_chu.reserve(data.ofdm_cfg.n_subcarriers);
+        const auto scale = get_scale(Modulation::BPSK);
         ifft.in[0][0] = 0;
         ifft.in[0][1] = 0;
 
@@ -615,8 +616,8 @@ namespace
 
         for (size_t n = 0; n < data.ofdm_cfg.n_subcarriers; ++n)
         {
-            ifft.out[n][0] /= (float)(data.ofdm_cfg.n_subcarriers / (3.0 * 16000.0));
-            ifft.out[n][1] /= (float)(data.ofdm_cfg.n_subcarriers / (3.0 * 16000.0));
+            ifft.out[n][0] *= scale;
+            ifft.out[n][1] *= scale;
         }
 
         for (size_t n = 0; n < data.ofdm_cfg.n_subcarriers; ++n)
