@@ -71,17 +71,12 @@ namespace
     }
 
     struct FFTWPlan {
-        std::vector<float> window;
         fftwf_complex *in = nullptr;
         fftwf_complex *out = nullptr;
         fftwf_plan plan = nullptr;
 
         FFTWPlan(int size, bool direction = true)
-            : window(size)
         {
-            for (int i = 0; i < size; ++i)
-                window[i] = 0.5f - 0.5f * std::cos(2.0f * float(M_PI) * float(i) / float(size - 1));
-
             in = reinterpret_cast<fftwf_complex *>(fftwf_malloc(sizeof(fftwf_complex) * size));
             out = reinterpret_cast<fftwf_complex *>(fftwf_malloc(sizeof(fftwf_complex) * size));
             if (!in || !out)
@@ -112,8 +107,7 @@ namespace
 
         // move constructor
         FFTWPlan(FFTWPlan &&other) noexcept
-            : window(std::move(other.window)),
-              in(other.in),
+            : in(other.in),
               out(other.out),
               plan(other.plan)
         {
@@ -133,7 +127,6 @@ namespace
                 if (out)
                     fftwf_free(out);
 
-                window = std::move(other.window);
                 in = other.in;
                 out = other.out;
                 plan = other.plan;
