@@ -67,8 +67,8 @@ inline bool has_any_except(Flags flags, Flags excluded)
 }
 
 struct SDRConfig {
-    int buffer_size = 1920;
     float sample_rate = 1.92e6f;
+    int buffer_size = static_cast<int>(sample_rate / 1e3f);
     float tx_freq = 2200e6f; // FDD: set rx_freq to tx_freq + 3MHz on the other node
     float rx_freq = 2200e6f; // FDD: adjust per node, see Configuration in README
     float tx_gain = 89.0f;
