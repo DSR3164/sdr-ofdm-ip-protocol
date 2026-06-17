@@ -149,17 +149,20 @@ namespace
 
     struct FrameHeader {
         Modulation modulation = Modulation::QAM64;
-        size_t ofdm_symbols_count = 6;
+        uint8_t ofdm_symbols_count = 10;                                                 // Default ofdm symbols count
+        uint16_t bits_count = 65 * ofdm_symbols_count * get_bits_per_symbol(modulation); // Max bits per frame
     };
 
     std::vector<uint8_t> packFrameHeader(const FrameHeader &fh)
     {
-        std::vector<uint8_t> bits(16);
+        std::vector<uint8_t> bits(32);
         uint8_t mod_val = static_cast<uint8_t>(fh.modulation);
         bits[0] = (mod_val >> 1) & 1;
         bits[1] = mod_val & 1;
-        for (int i = 0; i < 14; ++i)
-            bits[2 + i] = (fh.ofdm_symbols_count >> (13 - i)) & 1;
+        for (int i = 0; i < 4; ++i)
+            bits[2 + i] = (fh.ofdm_symbols_count >> (3 - i)) & 1;
+        for (int i = 0; i < 16; ++i)
+            bits[6 + i] = (fh.bits_count >> (15 - i)) & 1;
         return bits;
     }
 
@@ -167,23 +170,31 @@ namespace
     {
         FrameHeader header;
         uint8_t mod_val = 0;
-        uint16_t count_val = 0;
+        Modulation mod;
+        uint16_t bits_count_val = 0;
+        uint16_t ofdm_count_val = 0;
         mod_val |= (bits[0] & 1) << 1;
         mod_val |= (bits[1] & 1);
 
-        header.modulation = static_cast<Modulation>(mod_val);
+        mod = static_cast<Modulation>(mod_val);
 
-        for (int i = 0; i < 14; ++i)
-            count_val |= (bits[2 + i] & 1) << (13 - i);
+        for (int i = 0; i < 4; ++i)
+            ofdm_count_val |= (bits[2 + i] & 1) << (3 - i);
+        for (int i = 0; i < 16; ++i)
+            bits_count_val |= (bits[6 + i] & 1) << (15 - i);
 
-        if (count_val == 0 || count_val > 14)
+        if (bits_count_val == 0 || bits_count_val > header.bits_count)
         {
-            logs::dsp.warn("Header mismatch: {} | {}", mod_to_string(header.modulation), count_val);
-            header.ofdm_symbols_count = 10;
-            header.modulation = Modulation::QAM64;
+            logs::dsp.debug("Header mismatch: {} | {}", mod_to_string(mod), bits_count_val);
             return header;
         }
-        header.ofdm_symbols_count = count_val;
+        else
+        {
+            header.modulation = mod;
+            header.bits_count = bits_count_val;
+            header.ofdm_symbols_count = ofdm_count_val;
+            logs::dsp.trace("Get {} symbols in header", header.bits_count);
+        }
         return header;
     }
 
@@ -201,7 +212,7 @@ namespace
         auto bytes = bits_to_bytes<uint8_t>(received_bits, 8);
         auto deinter = deinterleaving(bytes);
         auto frame = viterbi_decoder(deinter);
-        frame.resize(2);
+        frame.resize(4);
         auto bits = byte_to_bits(frame, 8);
         return bits;
     }
@@ -874,6 +885,7 @@ namespace
 
         int symbols_per_ofdm = static_cast<int>(data.size());
         int num_ofdm_symbols = (total_symbols + symbols_per_ofdm - 1) / symbols_per_ofdm;
+        header.bits_count = bits_size;
         header.ofdm_symbols_count = num_ofdm_symbols;
         header.modulation = dsp_config.ofdm_cfg.mod;
         auto h = generate_frame_header(ofdm_config, header, data, pilots);
@@ -995,6 +1007,7 @@ int run_dsp_rx(SharedData &data)
     std::vector<std::complex<float>> zadoff_chu = ofdm_zadoff_chu_symbol(dsp);
     std::vector<float> llr;
     const int zc_len = static_cast<int>(zadoff_chu.size());
+    size_t data_count = 0;
 
     const float *zptr = reinterpret_cast<const float *>(zadoff_chu.data());
     for (size_t n = 0; n < zadoff_chu.size() * 2; ++n)
@@ -1064,7 +1077,6 @@ int run_dsp_rx(SharedData &data)
         cfo_est(for_processing, dsp);
 
         int next = 0;
-        int last = 0;
 
         if (static_cast<int>(for_processing.size()) > zc_idx + zc_len + N)
             next = zc_idx + zc_len + dsp.offset;
@@ -1090,6 +1102,7 @@ int run_dsp_rx(SharedData &data)
         header_bits = decode(header_bits);
         header = unpackFrameHeader(header_bits);
         rx_config.mod = header.modulation;
+        data_count = header.bits_count;
 
         next += N;
         for (size_t s = 0; s < header.ofdm_symbols_count; ++s)
@@ -1110,16 +1123,15 @@ int run_dsp_rx(SharedData &data)
                 processed[i + s * static_cast<size_t>(N)] = std::complex<float>(fft.out[i][0], fft.out[i][1]);
 
             next += N;
-            last = next;
         }
-        if (last > 0)
-            processed.resize(last);
 
         ofdm_equalize(processed, equalized, dsp.ofdm_cfg);
 
         data.dsp_sockets_symbols.write(equalized);
         demodulate(rx_config.mod, equalized, bits, llr);
         descramble(bits);
+        if (data_count > 0)
+            bits.resize(data_count);
         data.phy_ip.write(bits, true);
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
