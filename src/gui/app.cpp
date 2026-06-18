@@ -25,6 +25,7 @@ App::App(const std::string &title, int width, int height)
     std::filesystem::path exe_dir = std::filesystem::canonical(std::filesystem::path(SDL_GetBasePath()));
     static std::string ini_path = (exe_dir.parent_path() / "config" / "imgui.ini").string();
     ImGuiIO &io = ImGui::GetIO();
+    io.Fonts->AddFontFromFileTTF((exe_dir.parent_path() / "resources" / "fonts" / "CascadiaMono-VariableFont_wght.ttf").string().c_str(), 16.0f);
     io.IniFilename = ini_path.c_str();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
