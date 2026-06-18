@@ -12,10 +12,13 @@ struct TransitionTarget {
 std::vector<uint32_t> hamming_encoder(const std::vector<uint8_t> &bytes);
 std::vector<uint8_t> hamming_decoder(const std::vector<uint32_t> &encoded_bytes);
 std::vector<uint8_t> interleaving(const std::vector<uint8_t> &input);
+std::vector<uint8_t> interleaving_(const std::vector<uint8_t> &input);
 std::vector<uint8_t> deinterleaving(const std::vector<uint8_t> &input);
+std::vector<float> deinterleaving_float(const std::vector<float> &input);
 
 std::vector<uint8_t> conv_encoder(const std::vector<uint8_t> &bytes);
 std::vector<uint8_t> viterbi_decoder(const std::vector<uint8_t> &bytes);
+std::vector<uint8_t> viterbi_decoder_llr(const std::vector<float> &llr);
 
 constexpr uint8_t g_1 = 7;
 constexpr uint8_t g_2 = 5;

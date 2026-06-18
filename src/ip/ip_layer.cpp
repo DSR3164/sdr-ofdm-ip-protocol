@@ -72,7 +72,8 @@ size_t calculate_mtu(const SharedData &data)
     if (bits_per_stream / 8 <= (sizeof(FrameHeader) + 2))
         return 0;
 
-    return (bits_per_stream / 2) / 8 - 20;
+    int result = (bits_per_stream / 2) / 8 - 20;
+    return result & ~7;
 }
 
 void run_tun_tx(SharedData &data)
@@ -107,6 +108,8 @@ void run_tun_tx(SharedData &data)
     const auto mtu = calculate_mtu(data);
     logs::tun.info("MTU: {}", mtu);
 
+    size_t max_frame_bytes = sizeof(FrameHeader) + mtu;
+
     while (!data.stop.load())
     {
         struct pollfd pfd = { tun_fd, POLLIN, 0 };
@@ -136,7 +139,6 @@ void run_tun_tx(SharedData &data)
 
             if (nbytes > 0)
             {
-
                 logs::tun.trace("Get packet {} bytes, id: {}", nbytes, ip.id);
                 std::vector<uint8_t> payload(buffer, buffer + nbytes);
 
@@ -168,9 +170,12 @@ void run_tun_tx(SharedData &data)
                     frame.insert(frame.end(), hdr_ptr, hdr_ptr + sizeof(FrameHeader));
                     frame.insert(frame.end(), payload.begin() + offset, payload.begin() + offset + chunk_size);
 
+                    if (frame.size() < max_frame_bytes)
+                        frame.resize(max_frame_bytes, 0);
+
                     auto encoded = conv_encoder(frame);
-                    encoded = interleaving(encoded);
                     auto bits = byte_to_bits(encoded, 8);
+                    bits = interleaving_(bits);
 
                     data.ip_phy.write(bits, true);
                     std::this_thread::sleep_for(std::chrono::milliseconds(6));
@@ -198,19 +203,20 @@ void run_tun_rx(SharedData &data)
     std::unordered_map<uint16_t, ReassemblyBuffer> assembly_map;
     auto last_cleanup = std::chrono::steady_clock::now();
 
+    const auto mtu = calculate_mtu(data);
+    const size_t EXPECTED_LLR_SIZE = +(sizeof(FrameHeader) + mtu) * 8 * 2;
+
     while (!data.stop.load())
     {
         data.phy_ip.read(llr, true);
 
-        // Временная заглушка
-        frame.resize(llr.size());
-        for (size_t i = 0; i < llr.size(); ++i)
-            frame[i] = llr[i] < 0.0f ? 1 : 0;
-        // До полной имплементации Soft-decision
+        if (llr.size() >= EXPECTED_LLR_SIZE)
+            llr.resize(EXPECTED_LLR_SIZE);
+        else
+            continue;
 
-        block = bits_to_bytes<uint8_t>(frame, 8);
-        block = deinterleaving(block);
-        frame = viterbi_decoder(block);
+        llr = deinterleaving_float(llr);
+        frame = viterbi_decoder_llr(llr);
 
         if (frame.size() < sizeof(FrameHeader) + 2)
             continue;
