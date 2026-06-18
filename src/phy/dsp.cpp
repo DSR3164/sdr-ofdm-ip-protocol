@@ -1008,6 +1008,8 @@ int run_dsp_rx(SharedData &data)
     std::vector<float> llr;
     const int zc_len = static_cast<int>(zadoff_chu.size());
     size_t data_count = 0;
+    size_t symbols_count = 0;
+    size_t bits_per_symbol = 1;
 
     const float *zptr = reinterpret_cast<const float *>(zadoff_chu.data());
     for (size_t n = 0; n < zadoff_chu.size() * 2; ++n)
@@ -1066,7 +1068,7 @@ int run_dsp_rx(SharedData &data)
         const int needed_after_zc = 10 * (N + CP);
         const int total_len = static_cast<int>(for_processing.size());
 
-        if (zc_idx >= boundary or zc_end + needed_after_zc > total_len or zc_idx < 0)
+        if (zc_idx < 0 or zc_idx >= boundary or zc_end + needed_after_zc > total_len)
         {
             raw_a = std::move(raw_b);
             raw_b.resize(buff_size);
@@ -1103,6 +1105,8 @@ int run_dsp_rx(SharedData &data)
         header = unpackFrameHeader(header_bits);
         rx_config.mod = header.modulation;
         data_count = header.bits_count;
+        bits_per_symbol = get_bits_per_symbol(rx_config.mod);
+        symbols_count = (data_count + bits_per_symbol - 1) / bits_per_symbol;
 
         next += N;
         for (size_t s = 0; s < header.ofdm_symbols_count; ++s)
@@ -1126,6 +1130,9 @@ int run_dsp_rx(SharedData &data)
         }
 
         ofdm_equalize(processed, equalized, dsp.ofdm_cfg);
+
+        if (symbols_count > 0)
+            equalized.resize(symbols_count);
 
         data.dsp_sockets_symbols.write(equalized);
         demodulate(rx_config.mod, equalized, bits, llr);
