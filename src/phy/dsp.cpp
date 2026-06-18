@@ -712,40 +712,29 @@ namespace
         std::vector<std::complex<float>> symbols(bits.size());
         std::vector<std::complex<float>> schmidl(N);
         auto zc = generate_zc(127, 5);
+        auto bps = get_bits_per_symbol(modulation_type);
+
+        if (bits.size() % bps != 0)
+            bits.resize(bits.size() + (bps - bits.size() % bps), 0);
+        symbols.resize(bits.size() / bps);
+
         switch (modulation_type)
         {
-        case Modulation::BPSK: {
+        case Modulation::BPSK:
             bpsk_mapper_3gpp(bits, symbols);
             break;
-        }
-        case Modulation::QPSK: {
-            if (bits.size() % 2 != 0)
-                bits.resize(bits.size() + (2 - bits.size() % 2), 0);
-            symbols.resize(bits.size() / 2);
+        case Modulation::QPSK:
             qpsk_mapper_3gpp(bits, symbols);
             break;
-        }
-        case Modulation::QAM16: {
-            if (bits.size() % 4 != 0)
-                bits.resize(bits.size() + (4 - bits.size() % 4), 0);
-            symbols.resize(bits.size() / 4);
+        case Modulation::QAM16:
             qam16_mapper_3gpp(bits, symbols);
             break;
-        }
-        case Modulation::QAM64: {
-            if (bits.size() % 6 != 0)
-                bits.resize(bits.size() + (6 - bits.size() % 6), 0);
-            symbols.resize(bits.size() / 6);
+        case Modulation::QAM64:
             qam64_mapper_3gpp(bits, symbols);
             break;
-        }
-        default: {
-            if (bits.size() % 4 != 0)
-                bits.resize(bits.size() + (4 - bits.size() % 4), 0);
-            symbols.resize(bits.size() / 4);
+        default:
             qpsk_mapper_3gpp(bits, symbols);
             break;
-        }
         }
 
         static FFTWPlan ifft(N, false);
