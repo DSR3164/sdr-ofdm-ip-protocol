@@ -18,7 +18,8 @@ enum class Flags : uint16_t
     REMODULATION = 1 << 5,
     SEND = 1 << 6,
     EXIT = 1 << 7,
-    IS_ACTIVE = 1 << 8,
+    FOUND = 1 << 8,
+    IS_ACTIVE = 1 << 9
 };
 
 inline Flags operator|(Flags a, Flags b)

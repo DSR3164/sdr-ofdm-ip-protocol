@@ -16,9 +16,9 @@ int run_sdr(SharedData &data)
     std::vector<int16_t> writebuffer(data.sdr.get_buffer_size() * 2);
     Flags apply = Flags::APPLY_BANDWIDTH | Flags::APPLY_FREQUENCY | Flags::APPLY_GAIN | Flags::APPLY_SAMPLE_RATE;
 
-    if (!has_flag(sdr.get_flags(), Flags::IS_ACTIVE) && sdr.get_wait_flag())
+    if (!has_flag(sdr.get_flags(), Flags::FOUND) && sdr.get_wait_flag())
         sdr.wait_connection();
-    else if (!has_flag(sdr.get_flags(), Flags::IS_ACTIVE) && !sdr.get_wait_flag())
+    else if (!has_flag(sdr.get_flags(), Flags::FOUND) && !sdr.get_wait_flag())
     {
         logs::sdr.critical("No SDR devices detected, closing application");
         data.stop.store(true);

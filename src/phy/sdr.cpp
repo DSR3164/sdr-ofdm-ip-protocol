@@ -106,6 +106,7 @@ bool SDR::init()
     logs::sdr.debug("SDR TX Carrier range: {:.2f} MHz -> {:.2f} GHz", tx_carrier_range[0].minimum() / 1e6, tx_carrier_range[0].maximum() / 1e9);
 
     logs::sdr.info("Create SDR: {}", args["uri"]);
+    flags |= Flags::IS_ACTIVE;
 
     return true;
 }
@@ -192,6 +193,7 @@ bool SDR::deinit()
         logs::sdr.info("Delete SDR: {}", args["uri"]);
         SoapySDR::Device::unmake(sdr);
         flags &= ~Flags::IS_ACTIVE;
+        flags &= ~Flags::FOUND;
         sdr = nullptr;
     }
     return true;
@@ -227,13 +229,13 @@ void SDR::scan()
         args = list[0];
         logs::sdr.info("Found SDR: {}", args["uri"]);
         if (cfg.init_on_start)
-            flags |= Flags::IS_ACTIVE;
+            flags |= Flags::FOUND;
     }
 }
 
 void SDR::wait_connection()
 {
-    while (!has_flag(flags, Flags::IS_ACTIVE))
+    while (!has_flag(flags, Flags::FOUND))
     {
         if (connection_retries == 1)
             logs::sdr.warn("No SDR devices detected. Waiting for any available connection...");
