@@ -9,6 +9,13 @@
 #include <implot.h>
 #include <span>
 #include <string>
+#include <type_traits>
+
+template <typename T>
+struct is_complex : std::false_type {};
+
+template <typename T>
+struct is_complex<std::complex<T>> : std::true_type {};
 
 struct WaterfallData {
     int fft_size;
@@ -83,7 +90,12 @@ class App {
     void begin_plot_2d(const std::string &label, const std::string &label_i, const std::string &label_q, std::span<const R> data)
     {
         PlotSpec<T> plot_2d(2);
-        int count = data.size() / 2;
+        int count;
+        if constexpr (is_complex<R>::value)
+            count = data.size();
+        else
+            count = data.size() / 2;
+
         const T *raw_ptr = reinterpret_cast<const T *>(data.data());
         if (ImPlot::BeginPlot(label.c_str(), ImGui::GetContentRegionAvail()))
         {
@@ -98,7 +110,11 @@ class App {
     {
         PlotSpec<T> plot_scatter(2, ImPlotMarker_Square, 1.0f);
         const T *raw_ptr = reinterpret_cast<const T *>(data.data());
-        int count = data.size() / 2;
+        int count;
+        if constexpr (is_complex<R>::value)
+            count = data.size();
+        else
+            count = data.size() / 2;
 
         if (ImPlot::BeginPlot(label.c_str(), ImVec2(ImGui::GetContentRegionAvail()), ImPlotFlags_Equal))
         {
