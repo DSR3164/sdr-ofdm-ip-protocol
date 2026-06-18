@@ -291,21 +291,30 @@ void App::run_stats_plot(const std::deque<StatsSnapshot> &stats)
     if (stats.empty())
         return;
 
-    static std::vector<float> x_axis;
-    static std::vector<float> proc_time_y;
-    static std::vector<float> cfo_y;
-
     size_t size = stats.size();
-    x_axis.resize(size);
-    proc_time_y.resize(size);
-    cfo_y.resize(size);
 
-    for (size_t i = 0; i < size; ++i)
-    {
-        x_axis[i] = static_cast<float>(i);
-        proc_time_y[i] = stats[i].processing_time_us;
-        cfo_y[i] = stats[i].cfo;
-    }
+    static std::vector<float> proc_time_y(size, 0.0f);
+    static std::vector<float> cfo_y(size, 0.0f);
+    static std::vector<float> proc_time_y_smooth(size, 0.0f);
+    static std::vector<float> cfo_y_smooth(size, 0.0f);
+
+    const float alpha = 0.01;
+
+    proc_time_y.push_back(stats.back().processing_time_us);
+    cfo_y.push_back(stats.back().cfo);
+
+    if (proc_time_y.size() > size)
+        proc_time_y.erase(proc_time_y.begin());
+    if (cfo_y.size() > size)
+        cfo_y.erase(cfo_y.begin());
+
+    proc_time_y_smooth.push_back(alpha * stats.back().processing_time_us + (1.0f - alpha) * proc_time_y_smooth[proc_time_y_smooth.size() - 1]);
+    cfo_y_smooth.push_back(alpha * stats.back().cfo + (1.0f - alpha) * cfo_y_smooth[cfo_y_smooth.size() - 1]);
+
+    if (proc_time_y_smooth.size() > size)
+        proc_time_y_smooth.erase(proc_time_y_smooth.begin());
+    if (cfo_y_smooth.size() > size)
+        cfo_y_smooth.erase(cfo_y_smooth.begin());
 
     if (ImGui::Begin("Signal Metrics"))
     {
@@ -316,7 +325,8 @@ void App::run_stats_plot(const std::deque<StatsSnapshot> &stats)
                 if (ImPlot::BeginPlot("##ProcTime", ImVec2(-1, 250)))
                 {
                     ImPlot::SetupAxes("Ticks", "Time (us)", ImPlotAxisFlags_None, ImPlotAxisFlags_AutoFit);
-                    ImPlot::PlotLine("Time", x_axis.data(), proc_time_y.data(), static_cast<int>(size));
+                    ImPlot::PlotLine("Time", proc_time_y.data(), static_cast<int>(size));
+                    ImPlot::PlotLine("Time mean", proc_time_y_smooth.data(), static_cast<int>(size));
                     ImPlot::EndPlot();
                 }
                 ImGui::EndTabItem();
@@ -327,7 +337,8 @@ void App::run_stats_plot(const std::deque<StatsSnapshot> &stats)
                 if (ImPlot::BeginPlot("##CFOMonitor", ImVec2(-1, 250)))
                 {
                     ImPlot::SetupAxes("Ticks", "CFO (Hz)", ImPlotAxisFlags_None, ImPlotAxisFlags_AutoFit);
-                    ImPlot::PlotLine("CFO", x_axis.data(), cfo_y.data(), static_cast<int>(size));
+                    ImPlot::PlotLine("CFO", cfo_y.data(), static_cast<int>(size));
+                    ImPlot::PlotLine("CFO mean", cfo_y_smooth.data(), static_cast<int>(size));
                     ImPlot::EndPlot();
                 }
                 ImGui::EndTabItem();
