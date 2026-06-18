@@ -177,7 +177,7 @@ void run_tun_tx(SharedData &data)
                     auto bits = byte_to_bits(encoded, 8);
 
                     data.ip_phy.write(bits, true);
-                    std::this_thread::sleep_for(std::chrono::milliseconds(6));
+                    std::this_thread::sleep_for(std::chrono::milliseconds(2));
                     logs::tun.trace("Sent chunk: seq {}, id {}, size {}, flags {:02X}", packet_seq - 1, packet_id, chunk_size, hflag);
                     offset += chunk_size;
                 }
