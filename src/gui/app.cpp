@@ -309,8 +309,8 @@ void App::run_waterfall(const std::string &label, WaterfallData &waterfall, cons
     ImGui::Text("History: %d rows", waterfall.history_rows);
     ImGui::SliderInt("Update Rate(ms)", &waterfall.update_interval_ms, 1, 100);
 
-    static float min_db = -40.0f;
-    static float max_db = -10.0f;
+    static float min_db = -20.0f;
+    static float max_db = 10.0f;
 
     ImGui::SliderFloat("Min dB", &min_db, -200.0f, 200.0f);
     ImGui::SliderFloat("Max dB", &max_db, -200.0f, 200.0f);
