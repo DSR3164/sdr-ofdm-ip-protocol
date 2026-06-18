@@ -242,7 +242,7 @@ void App::begin_debug()
 
 void run_gui(Buffers &buf, std::vector<std::string> &sockets, socketData &sock)
 {
-    App app("Development", 1280, 720);
+    App app("SOIP", 1280, 720);
 
     while (app.is_open())
     {
