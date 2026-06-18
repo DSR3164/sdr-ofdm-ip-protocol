@@ -875,6 +875,10 @@ int run_dsp_rx(SharedData &data)
         for (size_t i = 0; i < n; ++i, p += 2)
             dst[i] = { static_cast<float>(p[0]), static_cast<float>(p[1]) };
     };
+
+    while (!has_flag(data.sdr.get_flags(), Flags::IS_ACTIVE))
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
     while (!data.stop.load())
     {
         data.sdr_dsp_rx.read(temp_b, true);
@@ -1002,6 +1006,9 @@ int run_dsp_tx(SharedData &data)
     logs::dsp.info("[{}] Starting", fmt::format(fmt::fg(fmt::color::cyan), "TX"));
     std::vector<uint8_t> bits;
     std::vector<int16_t> buffer;
+
+    while (!has_flag(data.sdr.get_flags(), Flags::IS_ACTIVE))
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     while (!data.stop.load())
     {

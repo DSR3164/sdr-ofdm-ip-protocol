@@ -82,6 +82,9 @@ int run_dsp_gui_bridge(SharedData &data, socketData &socket)
     std::vector<std::complex<float>> raw;
     std::vector<std::complex<float>> symbols;
 
+    while (!has_flag(data.sdr.get_flags(), Flags::IS_ACTIVE))
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
     while (!init && !data.stop.load())
     {
         if (!server.start_server(socket.phy_socket))
@@ -117,6 +120,9 @@ int run_dsp_stats_bridge(SharedData &data, socketData &socket)
 
     std::vector<uint8_t> stats(sizeof(StatsSnapshot));
     StatsSnapshot tmp;
+
+    while (!has_flag(data.sdr.get_flags(), Flags::IS_ACTIVE))
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     while (!init && !data.stop.load())
     {

@@ -108,6 +108,9 @@ void run_tun_tx(SharedData &data)
     const auto mtu = calculate_mtu(data);
     logs::tun.info("MTU: {}", mtu);
 
+    while (!has_flag(data.sdr.get_flags(), Flags::IS_ACTIVE))
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
     while (!data.stop.load())
     {
         struct pollfd pfd = { tun_fd, POLLIN, 0 };
@@ -198,6 +201,9 @@ void run_tun_rx(SharedData &data)
     bool last_id_valid = false;
     std::unordered_map<uint16_t, ReassemblyBuffer> assembly_map;
     auto last_cleanup = std::chrono::steady_clock::now();
+
+    while (!has_flag(data.sdr.get_flags(), Flags::IS_ACTIVE))
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     while (!data.stop.load())
     {
@@ -334,6 +340,9 @@ int run_ip_gui_bridge(SharedData &data, socketData &socket)
             init = true;
         }
     }
+
+    while (!has_flag(data.sdr.get_flags(), Flags::IS_ACTIVE))
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     while (!data.stop.load())
     {
