@@ -21,7 +21,8 @@ App::App(const std::string &title, int width, int height)
 
     ImGui::CreateContext();
     ImPlot::CreateContext();
-
+    setup_theme();
+    setup_plotTheme();
     std::filesystem::path exe_dir = std::filesystem::canonical(std::filesystem::path(SDL_GetBasePath()));
     static std::string ini_path = (exe_dir.parent_path() / "config" / "imgui.ini").string();
     ImGuiIO &io = ImGui::GetIO();
@@ -43,6 +44,102 @@ App::~App()
     SDL_GL_DeleteContext(gl_context);
     SDL_DestroyWindow(window);
     SDL_Quit();
+}
+
+void App::setup_theme()
+{
+    ImGuiStyle &style = ImGui::GetStyle();
+    ImVec4 *colors = style.Colors;
+
+    ImVec4 bg = ImVec4(0.09f, 0.10f, 0.11f, 1.00f);
+    ImVec4 bg_panel = ImVec4(0.12f, 0.13f, 0.15f, 1.00f);
+    ImVec4 bg_widget = ImVec4(0.16f, 0.17f, 0.19f, 1.00f);
+    ImVec4 border = ImVec4(0.22f, 0.23f, 0.25f, 1.00f);
+    ImVec4 text = ImVec4(0.86f, 0.87f, 0.88f, 1.00f);
+    ImVec4 text_dim = ImVec4(0.55f, 0.57f, 0.60f, 1.00f);
+    ImVec4 accent = ImVec4(0.20f, 0.75f, 0.85f, 1.00f);
+    ImVec4 accent_hi = ImVec4(0.30f, 0.85f, 0.95f, 1.00f);
+
+    colors[ImGuiCol_WindowBg] = bg;
+    colors[ImGuiCol_ChildBg] = bg;
+    colors[ImGuiCol_PopupBg] = bg_panel;
+    colors[ImGuiCol_Border] = border;
+    colors[ImGuiCol_FrameBg] = bg_widget;
+    colors[ImGuiCol_FrameBgHovered] = ImVec4(0.20f, 0.21f, 0.23f, 1.00f);
+    colors[ImGuiCol_FrameBgActive] = ImVec4(0.22f, 0.23f, 0.25f, 1.00f);
+    colors[ImGuiCol_TitleBg] = bg;
+    colors[ImGuiCol_TitleBgActive] = bg_panel;
+    colors[ImGuiCol_TitleBgCollapsed] = bg;
+    colors[ImGuiCol_MenuBarBg] = bg_panel;
+    colors[ImGuiCol_ScrollbarBg] = bg;
+    colors[ImGuiCol_ScrollbarGrab] = bg_widget;
+    colors[ImGuiCol_ScrollbarGrabHovered] = border;
+    colors[ImGuiCol_ScrollbarGrabActive] = accent;
+    colors[ImGuiCol_CheckMark] = accent;
+    colors[ImGuiCol_SliderGrab] = accent;
+    colors[ImGuiCol_SliderGrabActive] = accent_hi;
+    colors[ImGuiCol_Button] = bg_widget;
+    colors[ImGuiCol_ButtonHovered] = ImVec4(0.20f, 0.21f, 0.23f, 1.00f);
+    colors[ImGuiCol_ButtonActive] = accent;
+    colors[ImGuiCol_Header] = bg_widget;
+    colors[ImGuiCol_HeaderHovered] = ImVec4(0.20f, 0.21f, 0.23f, 1.00f);
+    colors[ImGuiCol_HeaderActive] = accent;
+    colors[ImGuiCol_Separator] = border;
+    colors[ImGuiCol_SeparatorHovered] = accent;
+    colors[ImGuiCol_SeparatorActive] = accent_hi;
+    colors[ImGuiCol_ResizeGrip] = border;
+    colors[ImGuiCol_ResizeGripHovered] = accent;
+    colors[ImGuiCol_ResizeGripActive] = accent_hi;
+    colors[ImGuiCol_Tab] = bg_panel;
+    colors[ImGuiCol_TabHovered] = bg_widget;
+    colors[ImGuiCol_TabActive] = bg_widget;
+    colors[ImGuiCol_TabUnfocused] = bg;
+    colors[ImGuiCol_TabUnfocusedActive] = bg_panel;
+    colors[ImGuiCol_DockingPreview] = ImVec4(accent.x, accent.y, accent.z, 0.30f);
+    colors[ImGuiCol_DockingEmptyBg] = bg;
+    colors[ImGuiCol_Text] = text;
+    colors[ImGuiCol_TextDisabled] = text_dim;
+
+    style.WindowRounding = 3.0f;
+    style.FrameRounding = 2.0f;
+    style.PopupRounding = 3.0f;
+    style.ScrollbarRounding = 2.0f;
+    style.GrabRounding = 2.0f;
+    style.TabRounding = 3.0f;
+
+    style.WindowPadding = ImVec2(8, 8);
+    style.FramePadding = ImVec2(6, 4);
+    style.ItemSpacing = ImVec2(6, 4);
+    style.ItemInnerSpacing = ImVec2(4, 4);
+    style.ScrollbarSize = 12.0f;
+    style.GrabMinSize = 8.0f;
+
+    style.WindowBorderSize = 1.0f;
+    style.FrameBorderSize = 0.0f;
+}
+
+void App::setup_plotTheme()
+{
+    ImPlot::StyleColorsDark();
+    ImPlotStyle &pstyle = ImPlot::GetStyle();
+
+    pstyle.PlotBorderSize = 1.0f;
+
+    pstyle.Colors[ImPlotCol_FrameBg] = ImVec4(0.09f, 0.10f, 0.11f, 1.0f);
+    pstyle.Colors[ImPlotCol_PlotBg] = ImVec4(0.07f, 0.08f, 0.09f, 1.0f);
+    pstyle.Colors[ImPlotCol_PlotBorder] = ImVec4(0.22f, 0.23f, 0.25f, 1.0f);
+    pstyle.Colors[ImPlotCol_LegendBg] = ImVec4(0.12f, 0.13f, 0.15f, 0.9f);
+    pstyle.Colors[ImPlotCol_AxisGrid] = ImVec4(0.22f, 0.23f, 0.25f, 0.5f);
+
+    static const ImVec4 telemetry_map[] = {
+        ImVec4(0.20f, 0.75f, 0.85f, 1.0f),
+        ImVec4(0.95f, 0.55f, 0.20f, 1.0f),
+        ImVec4(0.55f, 0.85f, 0.35f, 1.0f),
+        ImVec4(0.85f, 0.35f, 0.55f, 1.0f),
+        ImVec4(0.75f, 0.75f, 0.30f, 1.0f),
+    };
+    ImPlot::AddColormap("Telemetry", telemetry_map, 5);
+    pstyle.Colormap = ImPlot::GetColormapIndex("Telemetry");
 }
 
 void App::start_frame()
@@ -127,9 +224,7 @@ void App::control_wd(std::vector<std::string> &sockets, socketData &sock)
             ImGui::EndMenu();
         }
         else
-        {
             control_menu_was_open = false;
-        }
         ImGui::EndMainMenuBar();
     }
 }

@@ -13,5 +13,7 @@
 !config/sdr.conf
 !.github/workflows/ci.yaml
 
+!*.ttf
+
 third_party
 build

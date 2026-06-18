@@ -53,6 +53,8 @@ class App {
     bool is_phy_run() { return phy_run; }
     bool is_ip_run() { return ip_run; }
     bool is_chos_sock() { return choose_socket; }
+    void setup_theme();
+    void setup_plotTheme();
     void start_frame();
     void stop_frame();
     void control_wd(std::vector<std::string> &sockets, socketData &sock);
