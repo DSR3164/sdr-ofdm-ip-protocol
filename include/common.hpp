@@ -47,9 +47,9 @@ struct DSP {
     float sample_rate = 1.92e6;
     struct OFDMConfig {
         Modulation mod = Modulation::QAM16;
-        int n_subcarriers = 128;
-        int pilot_spacing = 19;
-        int n_cp = 32;
+        size_t n_subcarriers = 128;
+        size_t pilot_spacing = 19;
+        size_t n_cp = 32;
     } ofdm_cfg;
 };
 
@@ -242,6 +242,8 @@ struct StatsHistory {
 };
 
 struct SharedData {
+    std::atomic<bool> stop{ false };
+
     SDR sdr;
     DSP dsp;
 
@@ -262,8 +264,6 @@ struct SharedData {
     int tun_fd;
     char tun_name[16] = "";
 
-    std::atomic<bool> stop{ false };
-
     void stop_all_buffers()
     {
         ip_phy.stop();
@@ -276,7 +276,7 @@ struct SharedData {
     }
 
     SharedData(SDRConfig cfg = SDRConfig{})
-        : sdr(cfg),
+        : sdr(cfg, stop),
           dsp_sockets_raw(cfg.buffer_size * 2),
           dsp_sockets_symbols(cfg.buffer_size * 2)
     {

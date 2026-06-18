@@ -108,6 +108,9 @@ void run_tun_tx(SharedData &data)
     const auto mtu = calculate_mtu(data);
     logs::tun.info("MTU: {}", mtu);
 
+    while (!has_flag(data.sdr.get_flags(), Flags::IS_ACTIVE))
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
     while (!data.stop.load())
     {
         struct pollfd pfd = { tun_fd, POLLIN, 0 };
@@ -174,7 +177,7 @@ void run_tun_tx(SharedData &data)
                     auto bits = byte_to_bits(encoded, 8);
 
                     data.ip_phy.write(bits, true);
-                    std::this_thread::sleep_for(std::chrono::milliseconds(6));
+                    std::this_thread::sleep_for(std::chrono::milliseconds(2));
                     logs::tun.trace("Sent chunk: seq {}, id {}, size {}, flags {:02X}", packet_seq - 1, packet_id, chunk_size, hflag);
                     offset += chunk_size;
                 }
@@ -194,9 +197,13 @@ void run_tun_rx(SharedData &data)
     std::vector<uint8_t> block;
 
     uint16_t last_id = 0;
+    uint16_t last_seq = 0;
     bool last_id_valid = false;
     std::unordered_map<uint16_t, ReassemblyBuffer> assembly_map;
     auto last_cleanup = std::chrono::steady_clock::now();
+
+    while (!has_flag(data.sdr.get_flags(), Flags::IS_ACTIVE))
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     while (!data.stop.load())
     {
@@ -247,10 +254,14 @@ void run_tun_rx(SharedData &data)
         auto &res_buf = assembly_map[id];
         res_buf.last_update = std::chrono::steady_clock::now();
 
+        if (diff == 0 && (last_seq == 0 || current_seq == last_seq))
+            logs::tun.warn("DUP! {}", current_id);
+
         if (hdr.flags & FLAG_FIRST)
         {
             res_buf.data.clear();
             res_buf.last_seq = current_seq;
+            last_seq = current_seq;
         }
 
         res_buf.data.insert(res_buf.data.end(), fragment_data, fragment_data + payload_len);
@@ -329,6 +340,9 @@ int run_ip_gui_bridge(SharedData &data, socketData &socket)
             init = true;
         }
     }
+
+    while (!has_flag(data.sdr.get_flags(), Flags::IS_ACTIVE))
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     while (!data.stop.load())
     {

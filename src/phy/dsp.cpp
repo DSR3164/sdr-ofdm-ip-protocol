@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <fftw3.h>
 #include <mutex>
+#include <numbers>
 #include <spdlog/fmt/bundled/color.h>
 #include <spdlog/spdlog.h>
 #include <vector>
@@ -14,6 +15,8 @@ namespace
     constexpr size_t MAX_DATA_SYMBOLS = SDRConfig{}.buffer_size / (DSP{}.ofdm_cfg.n_cp + DSP{}.ofdm_cfg.n_subcarriers) - 2;
     constexpr float dac_max_value = 16384.0f;
 
+    constexpr auto pi = std::numbers::pi_v<float>;
+    constexpr auto tau = std::numbers::pi_v<float> * 2.0f;
     constexpr float bpsk_scale = dac_max_value / 20.9f;
     constexpr float qpsk_scale = dac_max_value / 26.9f;
     constexpr float qam16_scale = dac_max_value / 26.9f;
@@ -68,17 +71,12 @@ namespace
     }
 
     struct FFTWPlan {
-        std::vector<float> window;
         fftwf_complex *in = nullptr;
         fftwf_complex *out = nullptr;
         fftwf_plan plan = nullptr;
 
         FFTWPlan(int size, bool direction = true)
-            : window(size)
         {
-            for (int i = 0; i < size; ++i)
-                window[i] = 0.5f - 0.5f * std::cos(2.0f * float(M_PI) * float(i) / float(size - 1));
-
             in = reinterpret_cast<fftwf_complex *>(fftwf_malloc(sizeof(fftwf_complex) * size));
             out = reinterpret_cast<fftwf_complex *>(fftwf_malloc(sizeof(fftwf_complex) * size));
             if (!in || !out)
@@ -88,7 +86,7 @@ namespace
 
             fftwf_plan local_plan = nullptr;
             {
-                std::lock_guard<std::mutex> lock(fftw_planner_mutex);
+                std::scoped_lock lock(fftw_planner_mutex);
                 local_plan = fftwf_plan_dft_1d(size, in, out, direction ? FFTW_FORWARD : FFTW_BACKWARD, FFTW_MEASURE);
             }
             plan = local_plan;
@@ -109,8 +107,7 @@ namespace
 
         // move constructor
         FFTWPlan(FFTWPlan &&other) noexcept
-            : window(std::move(other.window)),
-              in(other.in),
+            : in(other.in),
               out(other.out),
               plan(other.plan)
         {
@@ -130,7 +127,6 @@ namespace
                 if (out)
                     fftwf_free(out);
 
-                window = std::move(other.window);
                 in = other.in;
                 out = other.out;
                 plan = other.plan;
@@ -175,7 +171,7 @@ namespace
                              bits[i] * -2.0 + 1.0,
                              bits[i] * -2.0 + 1.0
                          )
-                         / sqrtf(2);
+                         / std::sqrt(2.0f);
     }
 
     void qpsk_mapper_3gpp(const std::vector<uint8_t> &bits, std::vector<std::complex<float>> &symbols)
@@ -185,7 +181,7 @@ namespace
                              bits[2 * i + 0] * -2.0 + 1.0,
                              bits[2 * i + 1] * -2.0 + 1.0
                          )
-                         / sqrtf(2.0);
+                         / std::sqrt(2.0f);
     }
 
     void qam16_mapper_3gpp(const std::vector<uint8_t> &bits, std::vector<std::complex<float>> &symbols)
@@ -195,7 +191,7 @@ namespace
                              (1 - 2 * bits[4 * i + 0]) * (2 - (1 - 2 * bits[4 * i + 2])),
                              (1 - 2 * bits[4 * i + 1]) * (2 - (1 - 2 * bits[4 * i + 3]))
                          )
-                         / sqrtf(10.0);
+                         / std::sqrt(10.0f);
     }
 
     void qam64_mapper_3gpp(const std::vector<uint8_t> &bits, std::vector<std::complex<float>> &symbols)
@@ -205,7 +201,7 @@ namespace
                              (1 - 2 * bits[6 * i + 0]) * (4 - (1 - 2 * bits[6 * i + 2]) * (2 - (1 - 2 * bits[6 * i + 4]))),
                              (1 - 2 * bits[6 * i + 1]) * (4 - (1 - 2 * bits[6 * i + 3]) * (2 - (1 - 2 * bits[6 * i + 5])))
                          )
-                         / sqrtf(42.0);
+                         / std::sqrt(42.0f);
     }
 
     void demodulate(Modulation mod, const std::vector<std::complex<float>> &symbols, std::vector<uint8_t> &bits, std::vector<float> &llr)
@@ -340,10 +336,10 @@ namespace
 
             plato[n] = norm;
 
-            if (norm > max_norm and norm > threshold)
+            if (norm > max_norm && norm > threshold)
             {
                 max_norm = norm;
-                best_idx = (int)n;
+                best_idx = n;
             }
         }
 
@@ -431,7 +427,7 @@ namespace
             float denom = 0.5f * (R_cp + R);
             float metric = std::norm(P) / (denom * denom + 1e-12f);
 
-            if (metric > max_metric and metric > 0.85)
+            if (metric > max_metric && metric > 0.85)
             {
                 max_metric = metric;
                 max_index = d;
@@ -458,15 +454,15 @@ namespace
 
     void calculate_pilots_and_guard(DSP::OFDMConfig ofdm_config, std::vector<int> &pilots, std::vector<int> &data, std::vector<bool> &is_pilot, std::vector<bool> &is_guard)
     {
-        size_t N = static_cast<size_t>(ofdm_config.n_subcarriers);
-        int PS = ofdm_config.pilot_spacing;
+        size_t N = ofdm_config.n_subcarriers;
+        size_t PS = ofdm_config.pilot_spacing;
 
         data.clear();
         pilots.clear();
         is_pilot.resize(N, false);
         is_guard.resize(N, false);
 
-        int counter = 0;
+        size_t counter = 0;
         for (size_t k = 0; k < N; ++k)
         {
             if (k == 0 || (k >= 37 && k <= 91))
@@ -524,10 +520,10 @@ namespace
                 float a2 = std::arg(H2);
 
                 float da = a2 - a1;
-                if (da > M_PIf)
-                    da -= 2 * M_PIf;
-                if (da < -M_PIf)
-                    da += 2 * M_PIf;
+                if (da > pi)
+                    da -= tau;
+                if (da < -pi)
+                    da += tau;
 
                 float m1 = std::abs(H1);
                 float m2 = std::abs(H2);
@@ -582,7 +578,7 @@ namespace
                     equalized[k] *= rot;
 
             for (int k = 0; k < N; ++k)
-                if (!is_pilot[k] and !is_guard[k])
+                if (!is_pilot[k] && !is_guard[k])
                     output.push_back(equalized[k]);
         }
     }
@@ -593,7 +589,7 @@ namespace
 
         for (int n = 0; n < L; ++n)
         {
-            float phase = -M_PIf * q * n * (n + 1) / L;
+            float phase = -pi * q * n * (n + 1) / L;
             zc[n] = std::exp(std::complex<float>(0, phase));
         }
 
@@ -606,6 +602,7 @@ namespace
         std::vector<std::complex<float>> zadoff_chu;
         auto zc = generate_zc(127, 5);
         zadoff_chu.reserve(data.ofdm_cfg.n_subcarriers);
+        const auto scale = get_scale(Modulation::BPSK);
         ifft.in[0][0] = 0;
         ifft.in[0][1] = 0;
 
@@ -617,13 +614,13 @@ namespace
 
         fftwf_execute(ifft.plan);
 
-        for (int n = 0; n < data.ofdm_cfg.n_subcarriers; ++n)
+        for (size_t n = 0; n < data.ofdm_cfg.n_subcarriers; ++n)
         {
-            ifft.out[n][0] /= (float)(data.ofdm_cfg.n_subcarriers / (3.0 * 16000.0));
-            ifft.out[n][1] /= (float)(data.ofdm_cfg.n_subcarriers / (3.0 * 16000.0));
+            ifft.out[n][0] *= scale;
+            ifft.out[n][1] *= scale;
         }
 
-        for (int n = 0; n < data.ofdm_cfg.n_subcarriers; ++n)
+        for (size_t n = 0; n < data.ofdm_cfg.n_subcarriers; ++n)
             zadoff_chu.push_back(std::complex<float>(ifft.out[n][0], ifft.out[n][1]));
 
         return zadoff_chu;
@@ -637,13 +634,13 @@ namespace
         for (int i = 0; i < Lcp; ++i)
             P += r[max_index + i] * std::conj(r[max_index + i + N]);
 
-        float epsilon = std::arg(P) / (2 * M_PIf);
+        float epsilon = std::arg(P) / (tau);
 
         float cfo_hz = epsilon * fs / N;
 
         for (size_t n = 0; n < r.size(); ++n)
         {
-            float phase = 2 * M_PIf * cfo_hz * n / fs;
+            float phase = tau * cfo_hz * n / fs;
             r[n] *= std::complex<float>(std::cos(phase), std::sin(phase));
         }
 
@@ -654,7 +651,7 @@ namespace
     {
         int N = data.ofdm_cfg.n_subcarriers;
         int CP = data.ofdm_cfg.n_cp;
-        float fs = static_cast<float>(data.sample_rate);
+        float fs = data.sample_rate;
         int start = data.max_index + N;
 
         int symbol_len = N + CP;
@@ -668,14 +665,14 @@ namespace
             for (int n = 0; n < CP; ++n)
                 corr += std::conj(signal[sym_start + n]) * signal[sym_start + n + N];
 
-            float epsilon = std::arg(corr) / (2 * M_PIf);
+            float epsilon = std::arg(corr) / (tau);
             float delta_f = epsilon * fs / N;
 
             data.cfo = delta_f;
 
             for (int n = 0; n < N + CP; ++n)
             {
-                float phase = -2 * M_PIf * delta_f * (sym_start + n) / fs;
+                float phase = -tau * delta_f * (sym_start + n) / fs;
                 signal[sym_start + n] *= std::complex<float>(std::cos(phase), std::sin(phase));
             }
         }
@@ -708,47 +705,36 @@ namespace
             return;
         }
 
-        if (N < 4 or pilot_spacing < 2)
+        if (N < 4 || pilot_spacing < 2)
             return;
 
         buffer.clear();
         std::vector<std::complex<float>> symbols(bits.size());
         std::vector<std::complex<float>> schmidl(N);
         auto zc = generate_zc(127, 5);
+        auto bps = get_bits_per_symbol(modulation_type);
+
+        if (bits.size() % bps != 0)
+            bits.resize(bits.size() + (bps - bits.size() % bps), 0);
+        symbols.resize(bits.size() / bps);
+
         switch (modulation_type)
         {
-        case Modulation::BPSK: {
+        case Modulation::BPSK:
             bpsk_mapper_3gpp(bits, symbols);
             break;
-        }
-        case Modulation::QPSK: {
-            if (bits.size() % 2 != 0)
-                bits.resize(bits.size() + (2 - bits.size() % 2), 0);
-            symbols.resize(bits.size() / 2);
+        case Modulation::QPSK:
             qpsk_mapper_3gpp(bits, symbols);
             break;
-        }
-        case Modulation::QAM16: {
-            if (bits.size() % 4 != 0)
-                bits.resize(bits.size() + (4 - bits.size() % 4), 0);
-            symbols.resize(bits.size() / 4);
+        case Modulation::QAM16:
             qam16_mapper_3gpp(bits, symbols);
             break;
-        }
-        case Modulation::QAM64: {
-            if (bits.size() % 6 != 0)
-                bits.resize(bits.size() + (6 - bits.size() % 6), 0);
-            symbols.resize(bits.size() / 6);
+        case Modulation::QAM64:
             qam64_mapper_3gpp(bits, symbols);
             break;
-        }
-        default: {
-            if (bits.size() % 4 != 0)
-                bits.resize(bits.size() + (4 - bits.size() % 4), 0);
-            symbols.resize(bits.size() / 4);
+        default:
             qpsk_mapper_3gpp(bits, symbols);
             break;
-        }
         }
 
         static FFTWPlan ifft(N, false);
@@ -849,6 +835,7 @@ int run_dsp_rx(SharedData &data)
 
     const int N = dsp.ofdm_cfg.n_subcarriers;
     const int CP = dsp.ofdm_cfg.n_cp;
+    const int boundary = buff_size + CP;
 
     std::vector<int16_t> temp_a(buff_size * 2, 0);
     std::vector<int16_t> temp_b(buff_size * 2, 0);
@@ -877,6 +864,10 @@ int run_dsp_rx(SharedData &data)
         for (size_t i = 0; i < n; ++i, p += 2)
             dst[i] = { static_cast<float>(p[0]), static_cast<float>(p[1]) };
     };
+
+    while (!has_flag(data.sdr.get_flags(), Flags::IS_ACTIVE))
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
     while (!data.stop.load())
     {
         data.sdr_dsp_rx.read(temp_b, true);
@@ -886,8 +877,6 @@ int run_dsp_rx(SharedData &data)
         for_processing.insert(for_processing.end(), raw_a.begin(), raw_a.end());
         for_processing.insert(for_processing.end(), raw_b.begin(), raw_b.end());
         data.dsp_sockets_raw.write(for_processing);
-
-        const int boundary = static_cast<int>(raw_a.size()) + CP;
 
         plato.resize(for_processing.size());
 
@@ -917,11 +906,11 @@ int run_dsp_rx(SharedData &data)
         data.snap.zc_pos = zc_idx;
         data.snap.cfo = coarse;
 
-        const int zc_end = zc_idx + zc_len;
-        const int needed_after_zc = 10 * (N + CP);
-        const int total_len = static_cast<int>(for_processing.size());
+        const size_t zc_end = zc_idx + zc_len;
+        const size_t needed_after_zc = 10 * (N + CP);
+        const size_t total_len = for_processing.size();
 
-        if (zc_idx >= boundary or zc_end + needed_after_zc > total_len or zc_idx < 0)
+        if (zc_idx < 0 || zc_idx >= boundary || zc_end + needed_after_zc > total_len)
         {
             raw_a = std::move(raw_b);
             raw_b.resize(buff_size);
@@ -1006,6 +995,9 @@ int run_dsp_tx(SharedData &data)
     logs::dsp.info("[{}] Starting", fmt::format(fmt::fg(fmt::color::cyan), "TX"));
     std::vector<uint8_t> bits;
     std::vector<int16_t> buffer;
+
+    while (!has_flag(data.sdr.get_flags(), Flags::IS_ACTIVE))
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     while (!data.stop.load())
     {

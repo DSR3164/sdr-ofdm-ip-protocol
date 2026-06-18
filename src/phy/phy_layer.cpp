@@ -16,9 +16,9 @@ int run_sdr(SharedData &data)
     std::vector<int16_t> writebuffer(data.sdr.get_buffer_size() * 2);
     Flags apply = Flags::APPLY_BANDWIDTH | Flags::APPLY_FREQUENCY | Flags::APPLY_GAIN | Flags::APPLY_SAMPLE_RATE;
 
-    if (!has_flag(sdr.get_flags(), Flags::IS_ACTIVE) && sdr.get_wait_flag())
-        sdr.wait_connection(data.stop);
-    else if (!has_flag(sdr.get_flags(), Flags::IS_ACTIVE) && !sdr.get_wait_flag())
+    if (!has_flag(sdr.get_flags(), Flags::FOUND) && sdr.get_wait_flag())
+        sdr.wait_connection();
+    else if (!has_flag(sdr.get_flags(), Flags::FOUND) && !sdr.get_wait_flag())
     {
         logs::sdr.critical("No SDR devices detected, closing application");
         data.stop.store(true);
@@ -53,7 +53,7 @@ int run_sdr(SharedData &data)
         {
             logs::sdr.warn("ERR read {}", ret_rx);
 #ifdef HAS_DYNAMIC_ENUMERATE
-            if (!sdr.check_connection(data.stop))
+            if (!sdr.check_connection())
 #endif
             {
                 data.stop.store(true);
@@ -81,6 +81,9 @@ int run_dsp_gui_bridge(SharedData &data, socketData &socket)
     bool init = false;
     std::vector<std::complex<float>> raw;
     std::vector<std::complex<float>> symbols;
+
+    while (!has_flag(data.sdr.get_flags(), Flags::IS_ACTIVE))
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     while (!init && !data.stop.load())
     {
@@ -117,6 +120,9 @@ int run_dsp_stats_bridge(SharedData &data, socketData &socket)
 
     std::vector<uint8_t> stats(sizeof(StatsSnapshot));
     StatsSnapshot tmp;
+
+    while (!has_flag(data.sdr.get_flags(), Flags::IS_ACTIVE))
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     while (!init && !data.stop.load())
     {
