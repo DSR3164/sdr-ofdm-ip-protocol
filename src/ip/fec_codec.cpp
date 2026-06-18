@@ -57,7 +57,7 @@ std::vector<uint8_t> conv_encoder(const std::vector<uint8_t> &bytes)
 
 std::vector<uint8_t> viterbi_decoder(const std::vector<uint8_t> &bytes)
 {
-    size_t T = (bytes.size() * 8);
+    size_t T = (bytes.size() * 8) / 2;
 
     std::array<std::array<TransitionTarget, 2>, num_states> transitions;
 
@@ -79,7 +79,7 @@ std::vector<uint8_t> viterbi_decoder(const std::vector<uint8_t> &bytes)
     cur_metrics[0] = 0;
     std::fill(cur_metrics.begin() + 1, cur_metrics.end(), VINF);
 
-    std::vector<uint8_t> history(T * num_states, -1);
+    std::vector<int> history(T * num_states, -1);
 
     size_t byte_in_pos = 0;
     int bit_in_pos = 0;
@@ -133,7 +133,7 @@ std::vector<uint8_t> viterbi_decoder(const std::vector<uint8_t> &bytes)
 
     uint8_t cur_state = 0;
 
-    std::vector<uint8_t> decoded_bytes(T / 8, 0);
+    std::vector<uint8_t> decoded_bytes((T + 7) / 8, 0);
 
     int byte_pos = static_cast<int>(decoded_bytes.size()) - 1;
     int bit_pos = 0;
@@ -160,7 +160,7 @@ std::vector<uint8_t> viterbi_decoder(const std::vector<uint8_t> &bytes)
 
 std::vector<uint8_t> viterbi_decoder_llr(const std::vector<float> &llr)
 {
-    size_t T = llr.size();
+    size_t T = llr.size() / 2;
     std::array<std::array<TransitionTarget, 2>, num_states> transitions;
     for (uint8_t state = 0; state < num_states; ++state)
     {
@@ -176,7 +176,7 @@ std::vector<uint8_t> viterbi_decoder_llr(const std::vector<float> &llr)
     std::array<int, num_states> cur_metrics;
     cur_metrics[0] = 0;
     std::fill(cur_metrics.begin() + 1, cur_metrics.end(), VINF);
-    std::vector<uint8_t> history(T * num_states, -1);
+    std::vector<int> history(T * num_states, -1);
 
     for (size_t t = 0; t < T; ++t)
     {
@@ -204,7 +204,7 @@ std::vector<uint8_t> viterbi_decoder_llr(const std::vector<float> &llr)
     }
 
     uint8_t cur_state = 0;
-    std::vector<uint8_t> decoded_bytes(T / 8, 0);
+    std::vector<uint8_t> decoded_bytes((T + 7) / 8, 0);
     int byte_pos = static_cast<int>(decoded_bytes.size()) - 1;
     int bit_pos = 0;
     for (int t = (int)T - 1; t >= 0; --t)
