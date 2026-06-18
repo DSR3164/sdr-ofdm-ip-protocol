@@ -6,6 +6,7 @@
 #include <GL/glew.h>
 #include <backends/imgui_impl_opengl3.h>
 #include <backends/imgui_impl_sdl2.h>
+#include <fcntl.h>
 #include <fftw3.h>
 #include <filesystem>
 #include <imgui.h>
@@ -229,13 +230,112 @@ void App::control_wd(std::vector<std::string> &sockets, socketData &sock)
     }
 }
 
-void App::begin_debug()
+void App::begin_debug(Buffers &data)
 {
     ImGuiIO &io = ImGui::GetIO();
+
+    // Stats
+    static StatsSnapshot snapshot{};
+    static std::deque<StatsSnapshot> stats;
+    std::vector<uint8_t> raw_stats;
+
+    if (data.stats.read(raw_stats) == 0)
+        if (raw_stats.size() == sizeof(StatsSnapshot))
+        {
+            std::memcpy(&snapshot, raw_stats.data(), sizeof(StatsSnapshot));
+
+            stats.push_back(snapshot);
+            if (stats.size() > 1000)
+                stats.pop_front();
+        }
+
+    run_stats_plot(stats);
+
     if (ImGui::Begin("Debug Panel"))
     {
-        ImGui::SeparatorText("Statistics");
+        ImGui::SeparatorText("GUI Stats");
         ImGui::Text("FPS: %.f (%0.3f ms)", io.Framerate, 1000.0f / io.Framerate);
+
+        ImGui::SeparatorText("Timing & Frequency");
+        ImGui::Text("Processing time: %.2f us", snapshot.processing_time_us);
+        ImGui::Text("CFO:             %.2f Hz", snapshot.cfo);
+
+        ImGui::SeparatorText("Sync Positions");
+        ImGui::Text("CP Position:     %d", snapshot.cp_pos);
+        ImGui::Text("ZC Position:     %d", snapshot.zc_pos);
+
+        ImGui::SeparatorText("Status Flags");
+        ImVec4 color_yes = ImVec4(0.0f, 1.0f, 0.4f, 1.0f);
+        ImVec4 color_no = ImVec4(1.0f, 0.4f, 0.4f, 1.0f);
+
+        ImGui::Text("CP Found:        ");
+        ImGui::SameLine();
+        ImGui::TextColored(snapshot.cp_found ? color_yes : color_no, snapshot.cp_found ? "YES" : "NO");
+
+        ImGui::Text("ZC Found:        ");
+        ImGui::SameLine();
+        ImGui::TextColored(snapshot.zc_found ? color_yes : color_no, snapshot.zc_found ? "YES" : "NO");
+
+        ImGui::Text("Is Packet:       ");
+        ImGui::SameLine();
+        ImGui::TextColored(snapshot.is_packet ? color_yes : color_no, snapshot.is_packet ? "YES" : "NO");
+
+        ImGui::Text("Prev Packet Lost:");
+        ImGui::SameLine();
+        ImGui::TextColored(snapshot.is_previous_packet_lost ? color_no : color_yes, snapshot.is_previous_packet_lost ? "YES" : "NO");
+    }
+    ImGui::End();
+}
+
+void App::run_stats_plot(const std::deque<StatsSnapshot> &stats)
+{
+    if (stats.empty())
+        return;
+
+    static std::vector<float> x_axis;
+    static std::vector<float> proc_time_y;
+    static std::vector<float> cfo_y;
+
+    size_t size = stats.size();
+    x_axis.resize(size);
+    proc_time_y.resize(size);
+    cfo_y.resize(size);
+
+    for (size_t i = 0; i < size; ++i)
+    {
+        x_axis[i] = static_cast<float>(i);
+        proc_time_y[i] = stats[i].processing_time_us;
+        cfo_y[i] = stats[i].cfo;
+    }
+
+    if (ImGui::Begin("Signal Metrics"))
+    {
+        if (ImGui::BeginTabBar("MetricsTabBar"))
+        {
+            if (ImGui::BeginTabItem("Processing Time"))
+            {
+                if (ImPlot::BeginPlot("##ProcTime", ImVec2(-1, 250)))
+                {
+                    ImPlot::SetupAxes("Ticks", "Time (us)", ImPlotAxisFlags_None, ImPlotAxisFlags_AutoFit);
+                    ImPlot::PlotLine("Time", x_axis.data(), proc_time_y.data(), static_cast<int>(size));
+                    ImPlot::EndPlot();
+                }
+                ImGui::EndTabItem();
+            }
+
+            if (ImGui::BeginTabItem("CFO Monitor"))
+            {
+                if (ImPlot::BeginPlot("##CFOMonitor", ImVec2(-1, 250)))
+                {
+                    ImPlot::SetupAxes("Ticks", "CFO (Hz)", ImPlotAxisFlags_None, ImPlotAxisFlags_AutoFit);
+                    ImPlot::PlotLine("CFO", x_axis.data(), cfo_y.data(), static_cast<int>(size));
+                    ImPlot::EndPlot();
+                }
+                ImGui::EndTabItem();
+            }
+
+            ImGui::EndTabBar();
+        }
     }
     ImGui::End();
 }
@@ -260,7 +360,7 @@ void run_gui(Buffers &buf, std::vector<std::string> &sockets, socketData &sock)
         }
 
         if (app.is_debug_run())
-            app.begin_debug();
+            app.begin_debug(buf);
 
         if (app.is_gui_run())
             gui_dev(app);
@@ -315,7 +415,7 @@ void App::run_waterfall(const std::string &label, WaterfallData &waterfall, cons
     ImGui::SliderFloat("Min dB", &min_db, -200.0f, 200.0f);
     ImGui::SliderFloat("Max dB", &max_db, -200.0f, 200.0f);
 
-    static int colormap_idx = 5;
+    static int colormap_idx = 1;
     const char *colormap_names[] = { "Viridis", "Plasma", "Hot", "Cool", "Pink", "Jet" };
     const int colormap_values[] = {
         ImPlotColormap_Viridis,

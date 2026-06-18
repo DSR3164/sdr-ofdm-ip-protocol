@@ -5,6 +5,7 @@
 
 #include <SDL2/SDL.h>
 #include <cstdint>
+#include <deque>
 #include <implot.h>
 #include <span>
 #include <string>
@@ -58,7 +59,8 @@ class App {
     void start_frame();
     void stop_frame();
     void control_wd(std::vector<std::string> &sockets, socketData &sock);
-    void begin_debug();
+    void begin_debug(Buffers &data);
+    void run_stats_plot(const std::deque<StatsSnapshot> &stats);
     void run_heatmap(const std::string &label, const float *data, int rows, int cols, float scale_min, float scale_max);
     void run_waterfall(const std::string &label, WaterfallData &waterfall, const std::vector<std::complex<float>> &data);
     void set_vsync_state(bool vsync_state) { (vsync_state) ? SDL_GL_SetSwapInterval(1) : SDL_GL_SetSwapInterval(0); }
