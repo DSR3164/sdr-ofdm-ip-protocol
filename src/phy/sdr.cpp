@@ -7,30 +7,32 @@
 
 void soapy_log_handler(const SoapySDRLogLevel logLevel, const char *message)
 {
+    static auto tag = fmt::format(fmt::fg(fmt::color::blue_violet), "SoapySDR");
     switch (logLevel)
     {
     case SOAPY_SDR_FATAL:
-        logs::sdr.critical("SoapySDR: {}", message);
+        logs::sdr.critical("[{}] {}", tag, message);
         break;
     case SOAPY_SDR_ERROR:
-        logs::sdr.error("SoapySDR: {}", message);
+        logs::sdr.error("[{}] {}", tag, message);
         break;
     case SOAPY_SDR_WARNING:
-        logs::sdr.warn("SoapySDR: {}", message);
+        logs::sdr.warn("[{}] {}", tag, message);
         break;
     case SOAPY_SDR_INFO:
-        logs::sdr.info("SoapySDR: {}", message);
+        logs::sdr.info("[{}] {}", tag, message);
         break;
     default:
-        logs::sdr.debug("SoapySDR: {}", message);
+        logs::sdr.debug("[{}] {}", tag, message);
         break;
     }
 }
 
-SDR::SDR(const SDRConfig &config)
+SDR::SDR(const SDRConfig &config, std::atomic<bool> &stop_condition)
+    : cond(stop_condition),
+      cfg(config)
 {
     SoapySDR::registerLogHandler(soapy_log_handler);
-    cfg = config;
     scan();
 }
 
@@ -47,6 +49,8 @@ SDR::SDR(const SDRConfig &config)
  */
 bool SDR::init()
 {
+    if (cond.load())
+        return false;
     if (cfg.enable_rx and cfg.enable_tx)
         SDR::add_args();
     sdr = SoapySDR::Device::make(args);
@@ -95,12 +99,14 @@ bool SDR::init()
     auto rx_carrier_range = sdr->getFrequencyRange(SOAPY_SDR_RX, 0);
     auto tx_carrier_range = sdr->getFrequencyRange(SOAPY_SDR_TX, 0);
 
+    logs::sdr.debug("SDR Sample Rate: {:.3f} MHz", sdr->getSampleRate(SOAPY_SDR_RX, 0) / 1e6);
     logs::sdr.debug("SDR RX Gain range: {:.2f} dB -> {:.2f} dB", rx_gain_range.minimum(), rx_gain_range.maximum());
     logs::sdr.debug("SDR TX Gain range: {:.2f} dB -> {:.2f} dB", tx_gain_range.minimum(), tx_gain_range.maximum());
     logs::sdr.debug("SDR RX Carrier range: {:.2f} MHz -> {:.2f} GHz", rx_carrier_range[0].minimum() / 1e6, rx_carrier_range[0].maximum() / 1e9);
     logs::sdr.debug("SDR TX Carrier range: {:.2f} MHz -> {:.2f} GHz", tx_carrier_range[0].minimum() / 1e6, tx_carrier_range[0].maximum() / 1e9);
 
     logs::sdr.info("Create SDR: {}", args["uri"]);
+    flags |= Flags::IS_ACTIVE;
 
     return true;
 }
@@ -187,6 +193,7 @@ bool SDR::deinit()
         logs::sdr.info("Delete SDR: {}", args["uri"]);
         SoapySDR::Device::unmake(sdr);
         flags &= ~Flags::IS_ACTIVE;
+        flags &= ~Flags::FOUND;
         sdr = nullptr;
     }
     return true;
@@ -222,17 +229,17 @@ void SDR::scan()
         args = list[0];
         logs::sdr.info("Found SDR: {}", args["uri"]);
         if (cfg.init_on_start)
-            flags |= Flags::IS_ACTIVE;
+            flags |= Flags::FOUND;
     }
 }
 
-void SDR::wait_connection(std::atomic<bool> &condition)
+void SDR::wait_connection()
 {
-    while (!has_flag(flags, Flags::IS_ACTIVE))
+    while (!has_flag(flags, Flags::FOUND))
     {
         if (connection_retries == 1)
             logs::sdr.warn("No SDR devices detected. Waiting for any available connection...");
-        if (condition.load())
+        if (cond.load())
         {
             logs::sdr.info("Closing SDR thread");
             return;
@@ -244,7 +251,7 @@ void SDR::wait_connection(std::atomic<bool> &condition)
     connection_retries = 0;
 }
 
-bool SDR::check_connection(std::atomic<bool> &condition)
+bool SDR::check_connection()
 {
     if (!sdr || !has_flag(flags, Flags::IS_ACTIVE))
         return false;
@@ -267,7 +274,7 @@ bool SDR::check_connection(std::atomic<bool> &condition)
         if (deinit())
         {
             logs::sdr.critical("SDR {} was disconnected, {}", args["uri"], msg);
-            wait_connection(condition);
+            wait_connection();
             if (!init())
                 return false;
         }
