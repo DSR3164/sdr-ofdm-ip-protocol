@@ -1,6 +1,7 @@
 #pragma once
 
 #include "phy/sdr.hpp"
+#include "ip/fec_codec.hpp"
 
 #include <atomic>
 #include <cmath>
@@ -263,6 +264,8 @@ struct SharedData {
     std::string ip_addr;
     int tun_fd;
     char tun_name[16] = "";
+
+    PunctConfig punct_cfg;
 
     void stop_all_buffers()
     {

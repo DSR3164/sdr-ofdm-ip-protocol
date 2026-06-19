@@ -185,35 +185,39 @@ std::vector<float> deinterleaving_float(const std::vector<float> &input)
     return deint;
 }
 
-std::vector<uint8_t> puncture(const std::vector<uint8_t> &coded_bits)
+PunctConfig make_punct_config(CodeRate rate)
+{
+    switch (rate)
+    {
+    case CodeRate::R_1_2:
+        return PunctConfig{ 2, 2, { true, true, false, false, false, false } };
+    case CodeRate::R_3_4:
+        return PunctConfig{ 6, 4, { true, true, false, true, true, false } };
+    }
+    return PunctConfig{ 2, 2, { true, true, false, false, false, false } };
+}
+
+std::vector<uint8_t> puncture(const std::vector<uint8_t> &coded_bits, const PunctConfig &cfg)
 {
     std::vector<uint8_t> out;
-    out.reserve(coded_bits.size() / punct_period * 4 + 4);
+    out.reserve(coded_bits.size());
 
     for (size_t i = 0; i < coded_bits.size(); ++i)
-    {
-        if (punct_mask[i % punct_period])
+        if (cfg.mask[i % cfg.period])
             out.push_back(coded_bits[i]);
-    }
+
     return out;
 }
 
-std::vector<float> depuncture(const std::vector<float> &llr)
+std::vector<float> depuncture(const std::vector<float> &llr, const PunctConfig &cfg)
 {
-    // total positions = how many original bits this corresponds to
-    size_t n_kept = 0;
-    for (bool k : punct_mask)
-        if (k)
-            n_kept++;
-
-    size_t periods = (llr.size() + n_kept - 1) / n_kept;
-    std::vector<float> out(periods * punct_period, 0.0f); // 0 LLR = "no info"
+    size_t periods = (llr.size() + cfg.kept - 1) / cfg.kept;
+    std::vector<float> out(periods * cfg.period, 0.0f);
 
     size_t in_idx = 0;
     for (size_t i = 0; i < out.size() && in_idx < llr.size(); ++i)
-    {
-        if (punct_mask[i % punct_period])
+        if (cfg.mask[i % cfg.period])
             out[i] = llr[in_idx++];
-    }
+
     return out;
 }

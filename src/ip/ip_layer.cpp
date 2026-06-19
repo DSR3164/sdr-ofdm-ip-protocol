@@ -72,7 +72,7 @@ size_t calculate_mtu(const SharedData &data)
     if (bits_per_stream / 8 <= (sizeof(FrameHeader) + 2))
         return 0;
 
-    int result = (bits_per_stream * punct_period / (n * punct_kept)) / 8 - 20;
+    int result = (bits_per_stream * data.punct_cfg.period / (n * data.punct_cfg.kept)) / 8 - 20;
     return result & ~7;
 }
 
@@ -177,7 +177,7 @@ void run_tun_tx(SharedData &data)
                     auto bits = byte_to_bits(encoded, 8);
 
                     bits = interleaving_(bits);
-                    bits = puncture(bits);
+                    bits = puncture(bits, data.punct_cfg);
 
                     logs::tun.debug("[TX] bits size: {}", bits.size());
 
@@ -216,7 +216,7 @@ void run_tun_rx(SharedData &data)
     size_t mother_bits_padded = mother_bytes * 8;
 
     std::vector<uint8_t> dummy(mother_bits_padded, 0);
-    const size_t EXPECTED_LLR_SIZE = puncture(dummy).size();
+    const size_t EXPECTED_LLR_SIZE = puncture(dummy, data.punct_cfg).size();
 
     while (!data.stop.load())
     {
@@ -229,7 +229,7 @@ void run_tun_rx(SharedData &data)
 
         logs::tun.debug("[RX] bits size: {}", llr.size());
 
-        llr = depuncture(llr);
+        llr = depuncture(llr, data.punct_cfg);
         llr = deinterleaving_float(llr);
         frame = viterbi_decoder_llr(llr);
 

@@ -10,24 +10,29 @@ struct TransitionTarget {
     uint8_t b2;
 };
 
-// Puncturing pattern for rate 3/4 (from rate 1/2 mother code)
-// period = 3 input symbols -> 6 coded bits -> keep 4
-constexpr int punct_period = 6;
-constexpr int punct_kept = 4;
-constexpr std::array<bool, punct_period> punct_mask = {
-    true, true, false, true, true, false
+enum class CodeRate
+{
+    R_1_2,
+    R_3_4
 };
-// index:  X1    Y1    X2    Y2    X3    Y3
-// kept:   X1    Y1          Y2    X3
+
+// Runtime puncturing config, selected at startup from CLI.
+struct PunctConfig {
+    int period;
+    int kept;
+    std::array<bool, 6> mask; // max period size we support = 6, unused tail ignored
+};
+
+// Returns the puncturing config for the given rate.
+PunctConfig make_punct_config(CodeRate rate);
 
 std::vector<uint8_t> interleaving_(const std::vector<uint8_t> &input);
 std::vector<float> deinterleaving_float(const std::vector<float> &input);
-
 std::vector<uint8_t> conv_encoder(const std::vector<uint8_t> &bytes);
 std::vector<uint8_t> viterbi_decoder_llr(const std::vector<float> &llr);
 
-std::vector<uint8_t> puncture(const std::vector<uint8_t> &coded_bits);
-std::vector<float> depuncture(const std::vector<float> &llr);
+std::vector<uint8_t> puncture(const std::vector<uint8_t> &coded_bits, const PunctConfig &cfg);
+std::vector<float> depuncture(const std::vector<float> &llr, const PunctConfig &cfg);
 
 constexpr uint8_t g_1 = 7;
 constexpr uint8_t g_2 = 5;
