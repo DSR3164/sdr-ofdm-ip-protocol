@@ -18,7 +18,8 @@ enum class Flags : uint16_t
     REMODULATION = 1 << 5,
     SEND = 1 << 6,
     EXIT = 1 << 7,
-    IS_ACTIVE = 1 << 8,
+    FOUND = 1 << 8,
+    IS_ACTIVE = 1 << 9
 };
 
 inline Flags operator|(Flags a, Flags b)
@@ -67,28 +68,26 @@ inline bool has_any_except(Flags flags, Flags excluded)
 }
 
 struct SDRConfig {
-    int buffer_size = 1920;
-    double sample_rate = 1.92e6;
-    double tx_freq = 2200e6; // FDD: set rx_freq to tx_freq + 3MHz on the other node
-    double rx_freq = 2200e6; // FDD: adjust per node, see Configuration in README
+    float sample_rate = 1.92e6f;
+    int buffer_size = static_cast<int>(sample_rate / 1e3f);
+    float tx_freq = 2200e6f; // FDD: set rx_freq to tx_freq + 3MHz on the other node
+    float rx_freq = 2200e6f; // FDD: adjust per node, see Configuration in README
     float tx_gain = 89.0f;
     float rx_gain = 25.0f;
     bool enable_tx = true;
     bool enable_rx = true;
-    float tx_bandwidth = 1e6;
-    float rx_bandwidth = 10e6;
+    float tx_bandwidth = 1e6f;
+    float rx_bandwidth = 10e6f;
     bool init_on_start = true;
     bool exit_on_error = true;
 };
 
 class SDR {
   public:
-    explicit SDR(const SDRConfig &config);
+    explicit SDR(const SDRConfig &config, std::atomic<bool> &stop_condition);
     ~SDR()
     {
-        if (deinit())
-        {
-        };
+        (void)deinit();
     }
 
     SDR(const SDR &) = delete;
@@ -97,24 +96,24 @@ class SDR {
     [[nodiscard]] bool init();
     [[nodiscard]] bool reinit();
     [[nodiscard]] bool deinit();
-    [[nodiscard]] bool check_connection(std::atomic<bool> &condition);
+    [[nodiscard]] bool check_connection();
     void scan();
-    void wait_connection(std::atomic<bool> &condition);
+    void wait_connection();
     int add_args();
     void apply_runtime();
 
     int readstream(std::vector<int16_t> &send);
     int writestream(std::vector<int16_t> &send);
 
-    void set_rx_freq(double f)
+    void set_rx_freq(float f)
     {
-        logs::sdr.info("RX carrier: {:.3f} GHz", f / 1e9);
+        logs::sdr.info("RX carrier: {:.3f} GHz", f / 1e9f);
         cfg.rx_freq = f;
         flags |= Flags::APPLY_FREQUENCY;
     }
-    void set_tx_freq(double f)
+    void set_tx_freq(float f)
     {
-        logs::sdr.info("TX carrier: {:.3f} GHz", f / 1e9);
+        logs::sdr.info("TX carrier: {:.3f} GHz", f / 1e9f);
         cfg.tx_freq = f;
         flags |= Flags::APPLY_FREQUENCY;
     }
@@ -134,7 +133,7 @@ class SDR {
     bool get_wait_flag() const { return cfg.init_on_start; };
     bool get_exit_flag() const { return cfg.exit_on_error; };
     int get_buffer_size() const { return cfg.buffer_size; }
-    double get_sample_rate() const { return cfg.sample_rate; }
+    float get_sample_rate() const { return cfg.sample_rate; }
     Flags get_flags() const { return flags; }
     bool add_flag(Flags flag)
     {
@@ -145,6 +144,7 @@ class SDR {
     static constexpr int RX = SOAPY_SDR_RX;
     static constexpr int TX = SOAPY_SDR_TX;
   private:
+    std::atomic<bool> &cond;
     SDRConfig cfg;
     Flags flags = Flags::None;
 

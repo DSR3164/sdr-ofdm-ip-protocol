@@ -20,6 +20,9 @@ int run_control_bridge_client(SharedData &data, socketData &socket)
     bool init = false;
     std::vector<ControlSignals> c_signals(1);
 
+    while (!has_flag(data.sdr.get_flags(), Flags::IS_ACTIVE))
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
     while (!data.stop.load())
     {
         if (socket.control_socket != last_connected_path && !socket.control_socket.empty())
@@ -78,6 +81,9 @@ int run_ip_gui_bridge(SharedData &data, socketData &socket)
         }
     }
 
+    while (!has_flag(data.sdr.get_flags(), Flags::IS_ACTIVE))
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
     while (!data.stop.load() && data.is_gui_run.load())
     {
         std::vector<uint8_t> bytes;
@@ -116,6 +122,9 @@ int run_dsp_gui_bridge(SharedData &data, socketData &socket)
         }
     }
 
+    while (!has_flag(data.sdr.get_flags(), Flags::IS_ACTIVE))
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
     logs::dsp.info("Socket created successfully {}", socket.phy_socket);
 
     while (!data.stop.load() && data.is_gui_run.load())
@@ -152,6 +161,9 @@ int run_dsp_stats_bridge(SharedData &data, socketData &socket)
         }
     }
 
+    while (!has_flag(data.sdr.get_flags(), Flags::IS_ACTIVE))
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
     logs::dsp.info("Socket created successfully {}", socket.stats_socket);
 
     while (!data.stop.load() && data.is_gui_run.load())
@@ -182,7 +194,7 @@ void run_gui_bridge_supervisor(SharedData &data, socketData &socket)
             }
         }
         else
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 }
 
@@ -234,12 +246,12 @@ int run_control_bridge_server(socketData &socket)
 
         if (quit)
         {
-            std::vector<ControlSignals> c_signals(1, ControlSignals{false});
+            std::vector<ControlSignals> c_signals(1, ControlSignals{ false });
             server->send_frame(MsgType::Control, c_signals);
             return 0;
         }
 
-        std::vector<ControlSignals> c_signals(1, ControlSignals{true});
+        std::vector<ControlSignals> c_signals(1, ControlSignals{ true });
         server->send_frame(MsgType::Control, c_signals);
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }

@@ -97,6 +97,20 @@ cd build
 cmake --build . -j$(nproc)
 ```
 
+## How to Speed Up the Re-Build(Highly Recommended)
+
+This project automatically fetches heavy third-party libraries (ImGui, ZeroMQ, spdlog). To avoid re-compiling them from scratch every time you clean your build directory, it is highly recommended to instal ccache.
+
+```bash
+sudo apt install -y ccache
+```
+
+Configure ccache size (Optional): By default, ccache limits the cache size to 5GB. For a smoother experience across multiple branches or builds, increase it to 20GB:
+
+```bash
+ccache -M 20G
+```
+
 ---
 
 ## Configuration

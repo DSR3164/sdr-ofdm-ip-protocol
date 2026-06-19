@@ -1,6 +1,7 @@
 #pragma once
 
 #include "phy/sdr.hpp"
+#include "ip/fec_codec.hpp"
 
 #include <atomic>
 #include <cmath>
@@ -45,9 +46,9 @@ struct DSP {
     float sample_rate = 1.92e6;
     struct OFDMConfig {
         Modulation mod = Modulation::QAM16;
-        int n_subcarriers = 128;
-        int pilot_spacing = 19;
-        int n_cp = 32;
+        size_t n_subcarriers = 128;
+        size_t pilot_spacing = 19;
+        size_t n_cp = 32;
     } ofdm_cfg;
 };
 
@@ -240,11 +241,13 @@ struct StatsHistory {
 };
 
 struct SharedData {
+    std::atomic<bool> stop{ false };
+
     SDR sdr;
     DSP dsp;
 
     DoubleBuffer<uint8_t> ip_phy;
-    DoubleBuffer<uint8_t> phy_ip;
+    DoubleBuffer<float> phy_ip;
 
     DoubleBuffer<int16_t> sdr_dsp_tx;
     DoubleBuffer<int16_t> sdr_dsp_rx;
@@ -262,6 +265,7 @@ struct SharedData {
 
     std::atomic<bool> stop{ false };
     std::atomic<bool> is_gui_run{ false };
+    PunctConfig punct_cfg;
 
     void stop_all_buffers()
     {
@@ -275,7 +279,7 @@ struct SharedData {
     }
 
     SharedData(SDRConfig cfg = SDRConfig{})
-        : sdr(cfg),
+        : sdr(cfg, stop),
           dsp_sockets_raw(cfg.buffer_size * 2),
           dsp_sockets_symbols(cfg.buffer_size * 2)
     {

@@ -495,7 +495,7 @@ void WaterfallData::process_samples(const std::vector<std::complex<float>> &samp
         int idx = (i + half) % fft_size;
         float re = fft_out[idx][0];
         float im = fft_out[idx][1];
-        float db = 10.0f * std::log10f(norm_sq * (re * re + im * im) + 1e-12f);
+        float db = 10.0f * std::log10(norm_sq * (re * re + im * im) + 1e-12f);
 
         if (db > local_max_db[i])
         {

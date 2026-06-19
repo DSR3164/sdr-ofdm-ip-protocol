@@ -32,6 +32,7 @@ struct LogConfig {
 
 struct CliConfig {
     Modulation modulation = Modulation::QAM64;
+    CodeRate code_rate = CodeRate::R_3_4;
     std::optional<Node> node;
     std::optional<double> rx_freq;
     std::optional<double> tx_freq;
