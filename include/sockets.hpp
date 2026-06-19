@@ -55,9 +55,11 @@ class IPC {
           _socket(_context, type)
     {
     }
+    ~IPC() = default;
 
     bool start_server(const std::string &path);
     bool connect_to(const std::string &path);
+    bool disconnect_from(const std::string &path);
 
     static uint64_t now_ns()
     {

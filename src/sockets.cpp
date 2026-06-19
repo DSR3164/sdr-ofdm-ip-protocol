@@ -195,3 +195,18 @@ bool IPC::connect_to(const std::string &path)
         return false;
     }
 }
+
+bool IPC::disconnect_from(const std::string &path)
+{
+    try
+    {
+        _socket.disconnect(path);
+        logs::socket.info("SUB socket disconnected from {}", path);
+        return true;
+    }
+    catch (const zmq::error_t &e)
+    {
+        logs::socket.error("Failed to connect to {}: {}", path, e.what());
+        return false;
+    }
+}

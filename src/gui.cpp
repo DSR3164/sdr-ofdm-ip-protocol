@@ -2,11 +2,9 @@
 #include "sockets.hpp"
 #include "gui/app.hpp"
 
-#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <string>
-#include <thread>
 #include <vector>
 
 std::atomic_bool quit{ false };
@@ -33,6 +31,8 @@ int run_ip_brigde(Buffers &data, socketData &socket)
         if (socket.ip_socket != last_connected_path && !socket.ip_socket.empty())
         {
             init = false;
+            if (!last_connected_path.empty())
+                client.disconnect_from(last_connected_path);
             last_connected_path = socket.ip_socket;
             logs::gui.info("IP Bridge connecting to: {}", socket.ip_socket);
 
@@ -84,6 +84,8 @@ int run_dsp_bridge(Buffers &bufs, socketData &socket)
         if (socket.phy_socket != last_connected_path && !socket.phy_socket.empty())
         {
             init = false;
+            if (!last_connected_path.empty())
+                client.disconnect_from(last_connected_path);
             last_connected_path = socket.phy_socket;
             logs::gui.info("PHY Bridge connecting to: {}", socket.phy_socket);
 
@@ -141,6 +143,8 @@ int run_stats_bridge(Buffers &bufs, socketData &socket)
         if (socket.stats_socket != last_connected_path && !socket.stats_socket.empty())
         {
             init = false;
+            if (!last_connected_path.empty())
+                client.disconnect_from(last_connected_path);
             last_connected_path = socket.stats_socket;
             logs::gui.info("PHY Stats Bridge connecting to: {}", socket.stats_socket);
 
