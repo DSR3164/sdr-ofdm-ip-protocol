@@ -95,7 +95,6 @@ std::vector<uint8_t> viterbi_decoder_llr(const std::vector<float> &llr)
         {
             if (cur_metrics[prev_state] == VINF)
             {
-                logs::tun.trace("[VIT] skip state={} at t={}", prev_state, t);
                 continue;
             }
             for (uint8_t input_bit = 0; input_bit < 2; ++input_bit)

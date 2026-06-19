@@ -128,11 +128,8 @@ bool enable_client(const std::string &tun_name)
         close(sock);
         return false;
     }
-    close(sock);
 
-    std::string cmd = "sudo nmcli device modify " + tun_name + " ipv4.dns '8.8.8.8'";
-
-    std::system(cmd.c_str());
+    std::ofstream("/etc/resolv.conf", std::ios::trunc) << "nameserver 8.8.8.8\n";
 
     logs::tun.info("Client route + DNS configured via {}", tun_name);
     return true;
