@@ -13,8 +13,6 @@
 #include <utility>
 #include <vector>
 
-extern std::atomic<bool> *stop_ptr;
-
 enum class Modulation
 {
     BPSK,
