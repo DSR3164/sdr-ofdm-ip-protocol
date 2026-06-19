@@ -202,16 +202,16 @@ namespace
     {
         auto bytes = bits_to_bytes<uint8_t>(data, 8);
         auto encoded = conv_encoder(bytes);
-        auto inter = interleaving(encoded);
-        auto bits = byte_to_bits(inter, 8);
+        auto bits = byte_to_bits(encoded, 8);
+        auto inter = interleaving_(bits);
         return bits;
     }
 
-    std::vector<uint8_t> decode(const std::vector<uint8_t> &received_bits)
+    std::vector<uint8_t> decode(std::vector<float> &llr)
     {
-        auto bytes = bits_to_bytes<uint8_t>(received_bits, 8);
-        auto deinter = deinterleaving(bytes);
-        auto frame = viterbi_decoder(deinter);
+        llr.resize(9 * 8);
+        auto deinter = deinterleaving_float(llr);
+        auto frame = viterbi_decoder_llr(deinter);
         frame.resize(4);
         auto bits = byte_to_bits(frame, 8);
         return bits;
@@ -840,6 +840,7 @@ namespace
         size_t bits_size = bits.size();
         Modulation modulation_type = ofdm_config.mod;
         FrameHeader header;
+        header.bits_count = bits_size;
 
         std::vector<int> pilots;
         std::vector<int> data;
@@ -904,7 +905,6 @@ namespace
 
         int symbols_per_ofdm = static_cast<int>(data.size());
         int num_ofdm_symbols = (total_symbols + symbols_per_ofdm - 1) / symbols_per_ofdm;
-        header.bits_count = bits_size;
         header.ofdm_symbols_count = num_ofdm_symbols;
         header.modulation = dsp_config.ofdm_cfg.mod;
         auto h = generate_frame_header(ofdm_config, header, data, pilots);
@@ -1119,8 +1119,8 @@ int run_dsp_rx(SharedData &data)
 
         ofdm_equalize(header_symbols_raw, header_symbols_equalized, rx_config);
         demodulate(Modulation::BPSK, header_symbols_equalized, header_bits, llr);
-        descramble(header_bits);
-        header_bits = decode(header_bits);
+        descramble_llr(llr);
+        header_bits = decode(llr);
         header = unpackFrameHeader(header_bits);
         rx_config.mod = header.modulation;
         data_count = header.bits_count;
@@ -1156,6 +1156,10 @@ int run_dsp_rx(SharedData &data)
         data.dsp_sockets_symbols.write(equalized);
         demodulate(dsp.ofdm_cfg.mod, equalized, bits, llr);
         descramble_llr(llr);
+
+        if (data_count > 0)
+            llr.resize(data_count);
+
         data.phy_ip.write(llr, true);
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
@@ -1196,10 +1200,10 @@ int run_dsp_tx(SharedData &data)
     while (!data.stop.load())
     {
         data.ip_phy.read(bits, true);
+        logs::dsp.trace("Get {} bits | {} bytes from [MAC]", bits.size(), bits.size() / 8);
 
         scramble(bits);
         ofdm(bits, buffer, data.dsp);
-        logs::dsp.trace("GET {} bits | {} bytes", bits.size(), bits.size() / 8);
         logs::dsp.trace("[{}] modulate {} samples", fmt::format(fmt::fg(fmt::color::cyan), "OFDM"), buffer.size());
         data.sdr_dsp_tx.write(buffer);
     }
