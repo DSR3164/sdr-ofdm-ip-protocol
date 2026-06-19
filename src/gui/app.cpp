@@ -4,7 +4,6 @@
 #include "gui/phy_dev.hpp"
 
 #include <GL/glew.h>
-#include <atomic>
 #include <backends/imgui_impl_opengl3.h>
 #include <backends/imgui_impl_sdl2.h>
 #include <fftw3.h>
@@ -12,6 +11,8 @@
 #include <imgui.h>
 #include <string>
 #include <vector>
+
+extern float lat;
 
 App::App(const std::string &title, int width, int height)
 {
@@ -255,6 +256,7 @@ void App::begin_debug(Buffers &data)
     {
         ImGui::SeparatorText("GUI Stats");
         ImGui::Text("FPS: %.f (%0.3f ms)", io.Framerate, 1000.0f / io.Framerate);
+        ImGui::Text("Latency  %.2f mcs | %.2f ms", lat / 1e3, lat / 1e6);
 
         ImGui::SeparatorText("Timing & Frequency");
         ImGui::Text("Processing time: %.2f us", snapshot.processing_time_us);

@@ -4,14 +4,11 @@
 #include <implot.h>
 #include <vector>
 
-extern float lat;
-
 void phy_dev(App &app, Buffers &data) // Phy layer
 {
     static WaterfallData waterfall(1920, 100);
     static std::vector<std::complex<float>> symbols(1920);
     static std::vector<std::complex<float>> raw(3840);
-    static ImGuiIO &io = ImGui::GetIO();
     static ImPlotSpec specs;
     static ImPlotSpec specs2;
     static std::string label = "Raw signal";
@@ -32,11 +29,7 @@ void phy_dev(App &app, Buffers &data) // Phy layer
     const float *raw_ptr = reinterpret_cast<const float *>(symbols.data());
 
     if (ImGui::Begin("Constellation"))
-    {
-        ImGui::Text("Latency  %.2f mcs | %.2f ms", lat / 1e3, lat / 1e6);
-        ImGui::Text("FPS: %.1f (%.3f ms)", io.Framerate, 1000.0f / io.Framerate);
         app.begin_scatter<float, std::complex<float>>(label, symbols);
-    }
     ImGui::End();
     if (ImGui::Begin("Time domain raw"))
         app.begin_plot_2d<float, std::complex<float>>(label, "I", "Q", raw);
