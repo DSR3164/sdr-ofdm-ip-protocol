@@ -182,6 +182,6 @@ std::vector<float> deinterleaving_float(const std::vector<float> &input)
     for (size_t i = 0; i < c; ++i)
         for (size_t j = 0; j < r; ++j)
             deint[j * c + i] = input[idx++];
-        
+
     return deint;
 }
