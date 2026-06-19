@@ -128,7 +128,6 @@ bool enable_client(const std::string &tun_name)
         close(sock);
         return false;
     }
-    close(sock);
 
     std::ofstream("/etc/resolv.conf", std::ios::trunc) << "nameserver 8.8.8.8\n";
 

@@ -55,236 +55,169 @@ std::vector<uint8_t> conv_encoder(const std::vector<uint8_t> &bytes)
     return encoded_bytes;
 }
 
-std::vector<uint8_t> viterbi_decoder(const std::vector<uint8_t> &bytes)
+std::vector<uint8_t> viterbi_decoder_llr(const std::vector<float> &llr)
 {
-    size_t T = (bytes.size() * 8);
+    if (llr.empty())
+        return {};
+
+    size_t T = llr.size() / 2;
+
+    logs::tun.trace("[VIT] llr.size() = {}", llr.size());
+    logs::tun.trace("[VIT] T = {}", T);
 
     std::array<std::array<TransitionTarget, 2>, num_states> transitions;
-
     for (uint8_t state = 0; state < num_states; ++state)
     {
         for (uint8_t input_bit = 0; input_bit < 2; ++input_bit)
         {
             uint8_t win = (state << 1) | input_bit;
-
             uint8_t b1 = (__builtin_popcount(win & g_1)) % 2;
             uint8_t b2 = (__builtin_popcount(win & g_2)) % 2;
-
             uint8_t next_state = win & ((1 << m) - 1);
             transitions[state][input_bit] = { next_state, b1, b2 };
         }
     }
-
     std::array<int, num_states> cur_metrics;
     cur_metrics[0] = 0;
     std::fill(cur_metrics.begin() + 1, cur_metrics.end(), VINF);
-
-    std::vector<uint8_t> history(T * num_states, -1);
-
-    size_t byte_in_pos = 0;
-    int bit_in_pos = 0;
+    std::vector<int> history(T * num_states, -1);
 
     for (size_t t = 0; t < T; ++t)
     {
-        uint8_t b1 = (bytes[byte_in_pos] >> (7 - bit_in_pos)) & 1U;
-        if (++bit_in_pos == 8)
+        if (t * 2 + 1 >= llr.size())
         {
-            bit_in_pos = 0;
-            byte_in_pos++;
+            logs::tun.error("[VIT] OOB llr access: t={}, idx2={}, size={}", t, t * 2 + 1, llr.size());
+            return {};
         }
-
-        uint8_t b2 = 0;
-        if (byte_in_pos < bytes.size())
-            b2 = (bytes[byte_in_pos] >> (7 - bit_in_pos)) & 1U;
-        if (++bit_in_pos == 8)
-        {
-            bit_in_pos = 0;
-            byte_in_pos++;
-        }
-
         std::array<int, num_states> next_metrics;
         std::fill(next_metrics.begin(), next_metrics.end(), VINF);
-
         for (uint8_t prev_state = 0; prev_state < num_states; ++prev_state)
         {
             if (cur_metrics[prev_state] == VINF)
+            {
                 continue;
+            }
             for (uint8_t input_bit = 0; input_bit < 2; ++input_bit)
             {
                 uint8_t next_state = transitions[prev_state][input_bit].next_state;
-
                 uint8_t u1 = transitions[prev_state][input_bit].b1;
                 uint8_t u2 = transitions[prev_state][input_bit].b2;
-
-                int ham_s = (b1 != u1) + (b2 != u2);
-
+                float ham_s = (u1 == 0 ? -llr[t * 2] : llr[t * 2]) + (u2 == 0 ? -llr[t * 2 + 1] : llr[t * 2 + 1]);
                 int candidate = cur_metrics[prev_state] + ham_s;
-
                 if (candidate < next_metrics[next_state])
                 {
                     next_metrics[next_state] = candidate;
-                    history[t * num_states + next_state] = prev_state;
+                    size_t idx = t * num_states + next_state;
+
+                    if (idx >= history.size())
+                    {
+                        logs::tun.error("[VIT] history OOB idx={} size={}", idx, history.size());
+                        return {};
+                    }
+
+                    history[idx] = prev_state;
                 }
             }
         }
-
         cur_metrics = next_metrics;
     }
 
     uint8_t cur_state = 0;
-
-    std::vector<uint8_t> decoded_bytes(T / 8, 0);
-
-    int byte_pos = static_cast<int>(decoded_bytes.size()) - 1;
-    int bit_pos = 0;
+    std::vector<uint8_t> decoded_bytes((T + 7) / 8, 0);
 
     for (int t = (int)T - 1; t >= 0; --t)
     {
-        uint8_t prev_state = history[t * num_states + cur_state];
+        size_t idx = t * num_states + cur_state;
+        if (idx >= history.size())
+        {
+            logs::tun.error("[VIT] TRACEBACK OOB idx={} cur_state={} t={}", idx, cur_state, t);
+            return {};
+        }
+
+        int16_t prev_state = history[idx];
+        if (prev_state < 0 || prev_state >= num_states)
+        {
+            logs::tun.error("[VIT] INVALID STATE prev_state={} t={}", prev_state, t);
+            return {};
+        }
+
+        int bit_index = t;
+        int byte_pos = bit_index / 8;
+        int bit_pos = bit_index % 8;
 
         uint8_t input_bit = cur_state & 1U;
-
-        decoded_bytes[byte_pos] |= (input_bit << bit_pos);
-
-        if (++bit_pos == 8)
-        {
-            bit_pos = 0;
-            byte_pos--;
-        }
+        decoded_bytes[byte_pos] |= (input_bit << (7 - bit_pos));
 
         cur_state = prev_state;
     }
-
     return decoded_bytes;
 }
 
-std::vector<uint32_t> hamming_encoder(const std::vector<uint8_t> &bytes)
+std::vector<uint8_t> interleaving_(const std::vector<uint8_t> &input)
 {
-    if (bytes.size() < 1)
-        return {};
+    size_t c = 8;
+    size_t n = input.size();
+    size_t r = n / c;
 
-    std::vector<uint8_t> padded = bytes;
+    std::vector<uint8_t> deint_llr;
+    deint_llr.reserve(n);
 
-    while (padded.size() % 3 != 0)
-        padded.push_back(0);
+    for (size_t i = 0; i < c; ++i)
+        for (size_t j = 0; j < r; ++j)
+            deint_llr.push_back(input[j * c + i]);
 
-    std::vector<uint32_t> encoded_bytes;
-    encoded_bytes.reserve(padded.size() / 3);
-
-    for (size_t i = 0; i + 2 < padded.size(); i += 3)
-    {
-        uint32_t data24 = (static_cast<uint32_t>(padded[i]) << 16) | (static_cast<uint32_t>(padded[i + 1]) << 8) | padded[i + 2];
-
-        uint32_t block = 0;
-        uint8_t checksum = 0;
-        int data_bit_pos = 23;
-
-        for (int j = 1; j <= 30; ++j)
-        {
-            if ((j & (j - 1)) == 0)
-                continue;
-            if (data_bit_pos >= 0)
-            {
-                if ((data24 >> data_bit_pos) & 1)
-                {
-                    block |= (1 << (j - 1));
-                    checksum ^= j;
-                }
-                data_bit_pos--;
-            }
-        }
-
-        for (int j = 0; j < 5; ++j)
-            if ((checksum >> j) & 1)
-                block |= (1U << ((1 << j) - 1));
-
-        encoded_bytes.push_back(block);
-    }
-
-    return encoded_bytes;
+    return deint_llr;
 }
 
-std::vector<uint8_t> hamming_decoder(const std::vector<uint32_t> &encoded_bytes)
+std::vector<float> deinterleaving_float(const std::vector<float> &input)
 {
-    if (encoded_bytes.size() < 1)
-        return {};
+    size_t c = 8;
+    size_t n = input.size();
+    size_t r = n / c;
 
-    std::vector<uint32_t> blocks = encoded_bytes;
+    std::vector<float> deint(n);
+    size_t idx = 0;
 
-    std::vector<uint8_t> decoded_bytes;
-    decoded_bytes.reserve(blocks.size() * 3);
+    for (size_t i = 0; i < c; ++i)
+        for (size_t j = 0; j < r; ++j)
+            deint[j * c + i] = input[idx++];
 
-    for (size_t i = 0; i < blocks.size(); ++i)
-    {
-        uint8_t syndrome = 0;
-        uint32_t block = 0;
-
-        int data_bit_pos = 23;
-
-        for (int j = 1; j <= 30; ++j)
-            if ((blocks[i] >> (j - 1)) & 1)
-                syndrome ^= j;
-
-        if (syndrome != 0)
-            blocks[i] ^= (1U << (syndrome - 1));
-
-        for (int j = 1; j <= 30; ++j)
-        {
-            if ((j & (j - 1)) == 0)
-                continue;
-            if (data_bit_pos < 0)
-                break;
-            if ((blocks[i] >> (j - 1)) & 1)
-                block |= (1U << data_bit_pos);
-            data_bit_pos--;
-        }
-        decoded_bytes.push_back((block >> 16) & 0xFF);
-        decoded_bytes.push_back((block >> 8) & 0xFF);
-        decoded_bytes.push_back(block & 0xFF);
-    }
-
-    return decoded_bytes;
+    return deint;
 }
 
-std::vector<uint8_t> interleaving(const std::vector<uint8_t> &input)
+PunctConfig make_punct_config(CodeRate rate)
 {
-    if (input.empty())
-        return {};
-    constexpr size_t B = 8;
-    const size_t N = input.size();
-
-    std::vector<uint8_t> output(N, 0);
-    for (size_t g = 0; g < N * B; ++g)
+    switch (rate)
     {
-        size_t sw = g / B, sb = B - 1 - (g % B);
-        uint8_t bit = (input[sw] >> sb) & 1U;
-        size_t col = g / N, row = g % N;
-        size_t dg = col * N + row;
-        size_t dw = dg / B, db = B - 1 - (dg % B);
-        output[dw] |= (bit << db);
+    case CodeRate::R_1_2:
+        return PunctConfig{ 2, 2, { true, true, false, false, false, false } };
+    case CodeRate::R_3_4:
+        return PunctConfig{ 6, 4, { true, true, false, true, true, false } };
     }
-    return output;
+    return PunctConfig{ 2, 2, { true, true, false, false, false, false } };
 }
 
-std::vector<uint8_t> deinterleaving(const std::vector<uint8_t> &input)
+std::vector<uint8_t> puncture(const std::vector<uint8_t> &coded_bits, const PunctConfig &cfg)
 {
-    if (input.empty())
-        return {};
-    constexpr size_t B = 8;
-    const size_t N = input.size();
+    std::vector<uint8_t> out;
+    out.reserve(coded_bits.size());
 
-    std::vector<uint8_t> output(N, 0);
-    for (size_t g = 0; g < N * B; ++g)
-    {
-        size_t col = g / N, row = g % N;
+    for (size_t i = 0; i < coded_bits.size(); ++i)
+        if (cfg.mask[i % cfg.period])
+            out.push_back(coded_bits[i]);
 
-        size_t sg = col * N + row;
-        size_t sw = sg / B, sb = B - 1 - (sg % B);
+    return out;
+}
 
-        uint8_t bit = (input[sw] >> sb) & 1U;
+std::vector<float> depuncture(const std::vector<float> &llr, const PunctConfig &cfg)
+{
+    size_t periods = (llr.size() + cfg.kept - 1) / cfg.kept;
+    std::vector<float> out(periods * cfg.period, 0.0f);
 
-        size_t dw = g / B, db = B - 1 - (g % B);
-        output[dw] |= (bit << db);
-    }
-    return output;
+    size_t in_idx = 0;
+    for (size_t i = 0; i < out.size() && in_idx < llr.size(); ++i)
+        if (cfg.mask[i % cfg.period])
+            out[i] = llr[in_idx++];
+
+    return out;
 }

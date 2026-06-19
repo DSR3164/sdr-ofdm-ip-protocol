@@ -1,6 +1,7 @@
 #pragma once
 
 #include "phy/sdr.hpp"
+#include "ip/fec_codec.hpp"
 
 #include <atomic>
 #include <cmath>
@@ -248,7 +249,7 @@ struct SharedData {
     DSP dsp;
 
     DoubleBuffer<uint8_t> ip_phy;
-    DoubleBuffer<uint8_t> phy_ip;
+    DoubleBuffer<float> phy_ip;
 
     DoubleBuffer<int16_t> sdr_dsp_tx;
     DoubleBuffer<int16_t> sdr_dsp_rx;
@@ -263,6 +264,8 @@ struct SharedData {
     std::string ip_addr;
     int tun_fd;
     char tun_name[16] = "";
+
+    PunctConfig punct_cfg;
 
     void stop_all_buffers()
     {

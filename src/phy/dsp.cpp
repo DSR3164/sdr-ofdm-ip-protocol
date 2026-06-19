@@ -1,5 +1,7 @@
 #include "logger.hpp"
 #include "phy/dsp.hpp"
+#include "ip/bit_utils.hpp"
+#include "ip/fec_codec.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -141,6 +143,76 @@ namespace
         FFTWPlan &operator=(const FFTWPlan &) = delete;
     };
 
+    struct FrameHeader {
+        Modulation modulation = Modulation::QAM64;
+        uint8_t ofdm_symbols_count = 10;                                                 // Default ofdm symbols count
+        uint16_t bits_count = 65 * ofdm_symbols_count * get_bits_per_symbol(modulation); // Max bits per frame
+    };
+
+    std::vector<uint8_t> packFrameHeader(const FrameHeader &fh)
+    {
+        std::vector<uint8_t> bits(32);
+        uint8_t mod_val = static_cast<uint8_t>(fh.modulation);
+        bits[0] = (mod_val >> 1) & 1;
+        bits[1] = mod_val & 1;
+        for (int i = 0; i < 4; ++i)
+            bits[2 + i] = (fh.ofdm_symbols_count >> (3 - i)) & 1;
+        for (int i = 0; i < 16; ++i)
+            bits[6 + i] = (fh.bits_count >> (15 - i)) & 1;
+        return bits;
+    }
+
+    FrameHeader unpackFrameHeader(std::vector<uint8_t> &bits)
+    {
+        FrameHeader header;
+        uint8_t mod_val = 0;
+        Modulation mod;
+        uint16_t bits_count_val = 0;
+        uint16_t ofdm_count_val = 0;
+        mod_val |= (bits[0] & 1) << 1;
+        mod_val |= (bits[1] & 1);
+
+        mod = static_cast<Modulation>(mod_val);
+
+        for (int i = 0; i < 4; ++i)
+            ofdm_count_val |= (bits[2 + i] & 1) << (3 - i);
+        for (int i = 0; i < 16; ++i)
+            bits_count_val |= (bits[6 + i] & 1) << (15 - i);
+
+        if (bits_count_val == 0 || bits_count_val > header.bits_count)
+        {
+            logs::dsp.debug("Header mismatch: {} | {}", mod_to_string(mod), bits_count_val);
+            return header;
+        }
+        else
+        {
+            header.modulation = mod;
+            header.bits_count = bits_count_val;
+            header.ofdm_symbols_count = ofdm_count_val;
+            logs::dsp.trace("Get {} symbols in header", header.bits_count);
+        }
+        return header;
+    }
+
+    std::vector<uint8_t> encode(const std::vector<uint8_t> &data)
+    {
+        auto bytes = bits_to_bytes<uint8_t>(data, 8);
+        auto encoded = conv_encoder(bytes);
+        auto bits = byte_to_bits(encoded, 8);
+        auto inter = interleaving_(bits);
+        return inter;
+    }
+
+    std::vector<uint8_t> decode(std::vector<float> &llr)
+    {
+        llr.resize(9 * 8);
+        auto deinter = deinterleaving_float(llr);
+        auto frame = viterbi_decoder_llr(deinter);
+        frame.resize(4);
+        auto bits = byte_to_bits(frame, 8);
+        return bits;
+    }
+
     void scramble(std::vector<uint8_t> &bits, uint8_t seed = 0x5B)
     {
         if (seed == 0 || seed > 0x7F)
@@ -162,6 +234,25 @@ namespace
     void descramble(std::vector<uint8_t> &bits, uint8_t seed = 0x5B)
     {
         scramble(bits, seed);
+    }
+
+    void descramble_llr(std::vector<float> &llr_values, uint8_t seed = 0x5B)
+    {
+        if (seed == 0 || seed > 0x7F)
+        {
+            logs::dsp.warn("Scramble seed must be in range [0x01, 0x7F]");
+            return;
+        }
+
+        uint8_t lfsr = seed;
+
+        for (float &llr : llr_values)
+        {
+            uint8_t feedback = ((lfsr >> 6) ^ (lfsr >> 3)) & 1;
+            lfsr = ((lfsr << 1) | feedback) & 0x7F;
+            if (feedback)
+                llr = -llr;
+        }
     }
 
     void bpsk_mapper_3gpp(const std::vector<uint8_t> &bits, std::vector<std::complex<float>> &symbols)
@@ -683,13 +774,70 @@ namespace
         return static_cast<int16_t>(std::clamp(x, -16384.0f, 16384.0f));
     }
 
+    std::vector<std::complex<float>> generate_frame_header(DSP::OFDMConfig &config, FrameHeader frameheader, std::vector<int> &data, std::vector<int> &pilots)
+    {
+        size_t N = config.n_subcarriers;
+        size_t Ncp = config.n_cp;
+        static FFTWPlan ifft(N, false);
+        std::vector<std::complex<float>> header;
+        std::vector<std::complex<float>> bpsk_symbols(N);
+        const auto pilot = get_pilot(Modulation::BPSK);
+        auto raw = packFrameHeader(frameheader);
+        auto bits = encode(raw);
+        bits.resize(bpsk_symbols.size(), 0);
+
+        scramble(bits);
+        bpsk_mapper_3gpp(bits, bpsk_symbols);
+
+        for (size_t i = 0; i < N; ++i)
+        {
+            ifft.in[i][0] = 0.0f;
+            ifft.in[i][1] = 0.0f;
+        }
+
+        for (size_t k : pilots)
+        {
+            ifft.in[k][0] = pilot.real();
+            ifft.in[k][1] = pilot.imag();
+        }
+
+        for (size_t i = 0; i < data.size(); ++i)
+        {
+            size_t k = data[i];
+
+            ifft.in[k][0] = std::real(bpsk_symbols[i]);
+            ifft.in[k][1] = std::imag(bpsk_symbols[i]);
+        }
+
+        fftwf_execute(ifft.plan);
+
+        for (size_t n = 0; n < N; ++n)
+        {
+            ifft.out[n][0] *= bpsk_scale;
+            ifft.out[n][1] *= bpsk_scale;
+        }
+
+        // Cyclic Prefix
+        for (size_t n = N - Ncp; n < N; ++n)
+            header.push_back(std::complex<float>(ifft.out[n][0], ifft.out[n][1]));
+
+        // Data
+        for (size_t n = 0; n < N; ++n)
+            header.push_back(std::complex<float>(ifft.out[n][0], ifft.out[n][1]));
+
+        return header;
+    };
+
     void ofdm(std::vector<uint8_t> &bits, std::vector<int16_t> &buffer, DSP &dsp_config)
     {
         auto &ofdm_config = dsp_config.ofdm_cfg;
         int Ncp = ofdm_config.n_cp;
         int N = ofdm_config.n_subcarriers;
         int pilot_spacing = ofdm_config.pilot_spacing;
+        size_t bits_size = bits.size();
         Modulation modulation_type = ofdm_config.mod;
+        FrameHeader header;
+        header.bits_count = bits_size;
 
         std::vector<int> pilots;
         std::vector<int> data;
@@ -697,7 +845,7 @@ namespace
         std::vector<bool> is_guard;
         calculate_pilots_and_guard(ofdm_config, pilots, data, is_pilot, is_guard);
 
-        size_t data_symbols = (bits.size() / get_bits_per_symbol(modulation_type)) / data.size();
+        size_t data_symbols = (bits_size / get_bits_per_symbol(modulation_type)) / data.size();
 
         if (data_symbols > MAX_DATA_SYMBOLS)
         {
@@ -709,7 +857,7 @@ namespace
             return;
 
         buffer.clear();
-        std::vector<std::complex<float>> symbols(bits.size());
+        std::vector<std::complex<float>> symbols(bits_size);
         std::vector<std::complex<float>> schmidl(N);
         auto zc = generate_zc(127, 5);
         auto bps = get_bits_per_symbol(modulation_type);
@@ -743,6 +891,9 @@ namespace
 
         int symbols_per_ofdm = static_cast<int>(data.size());
         int num_ofdm_symbols = (total_symbols + symbols_per_ofdm - 1) / symbols_per_ofdm;
+        header.ofdm_symbols_count = num_ofdm_symbols;
+        header.modulation = dsp_config.ofdm_cfg.mod;
+        auto h = generate_frame_header(ofdm_config, header, data, pilots);
 
         const float scale = get_scale(modulation_type);
         const std::complex<float> pilot = get_pilot(modulation_type);
@@ -754,6 +905,12 @@ namespace
         {
             buffer.push_back(static_cast<int16_t>(ofdm_zc_symbol[i].real()));
             buffer.push_back(static_cast<int16_t>(ofdm_zc_symbol[i].imag()));
+        }
+
+        for (size_t i = 0; i < h.size(); ++i)
+        {
+            buffer.push_back(static_cast<int16_t>(h[i].real()));
+            buffer.push_back(static_cast<int16_t>(h[i].imag()));
         }
 
         for (int sym = 0; sym < num_ofdm_symbols; ++sym)
@@ -819,6 +976,9 @@ int run_dsp_rx(SharedData &data)
     dsp.sample_rate = data.sdr.get_sample_rate();
     auto buff_size = data.sdr.get_buffer_size();
     float zc_energy = 0.0f;
+    FrameHeader header;
+    DSP::OFDMConfig rx_config;
+    rx_config.mod = Modulation::QPSK;
 
     FFTWPlan fft(dsp.ofdm_cfg.n_subcarriers, true);
     std::chrono::steady_clock::time_point start;
@@ -842,6 +1002,9 @@ int run_dsp_rx(SharedData &data)
 
     std::vector<std::complex<float>> raw_a(buff_size);
     std::vector<std::complex<float>> raw_b(buff_size);
+    std::vector<std::complex<float>> header_symbols_raw(N);
+    std::vector<std::complex<float>> header_symbols_equalized(N);
+    std::vector<uint8_t> header_bits;
 
     std::vector<std::complex<float>> for_processing;
     std::vector<std::complex<float>> processed(buff_size * 2);
@@ -850,6 +1013,9 @@ int run_dsp_rx(SharedData &data)
     std::vector<std::complex<float>> zadoff_chu = ofdm_zadoff_chu_symbol(dsp);
     std::vector<float> llr;
     const int zc_len = static_cast<int>(zadoff_chu.size());
+    size_t data_count = 0;
+    size_t symbols_count = 0;
+    size_t bits_per_symbol = 1;
 
     const float *zptr = reinterpret_cast<const float *>(zadoff_chu.data());
     for (size_t n = 0; n < zadoff_chu.size() * 2; ++n)
@@ -921,7 +1087,6 @@ int run_dsp_rx(SharedData &data)
         cfo_est(for_processing, dsp);
 
         int next = 0;
-        int last = 0;
 
         if (static_cast<int>(for_processing.size()) > zc_idx + zc_len + N)
             next = zc_idx + zc_len + dsp.offset;
@@ -931,7 +1096,28 @@ int run_dsp_rx(SharedData &data)
             continue;
         }
 
-        for (size_t s = 0; s < 10; ++s)
+        next += CP;
+        for (size_t i = 0; i < static_cast<size_t>(N); ++i)
+        {
+            fft.in[i][0] = std::real(for_processing[next + i]);
+            fft.in[i][1] = std::imag(for_processing[next + i]);
+        }
+        fftwf_execute(fft.plan);
+        for (size_t i = 0; i < static_cast<size_t>(N); ++i)
+            header_symbols_raw[i] = std::complex<float>(fft.out[i][0], fft.out[i][1]);
+
+        ofdm_equalize(header_symbols_raw, header_symbols_equalized, rx_config);
+        demodulate(Modulation::BPSK, header_symbols_equalized, header_bits, llr);
+        descramble_llr(llr);
+        header_bits = decode(llr);
+        header = unpackFrameHeader(header_bits);
+        rx_config.mod = header.modulation;
+        data_count = header.bits_count;
+        bits_per_symbol = get_bits_per_symbol(rx_config.mod);
+        symbols_count = (data_count + bits_per_symbol - 1) / bits_per_symbol;
+
+        next += N;
+        for (size_t s = 0; s < header.ofdm_symbols_count; ++s)
         {
             if (static_cast<int>(for_processing.size()) - next < N + CP)
                 break;
@@ -949,17 +1135,21 @@ int run_dsp_rx(SharedData &data)
                 processed[i + s * static_cast<size_t>(N)] = std::complex<float>(fft.out[i][0], fft.out[i][1]);
 
             next += N;
-            last = next;
         }
-        if (last > 0)
-            processed.resize(last);
 
         ofdm_equalize(processed, equalized, dsp.ofdm_cfg);
 
+        if (symbols_count > 0)
+            equalized.resize(symbols_count);
+
         data.dsp_sockets_symbols.write(equalized);
         demodulate(dsp.ofdm_cfg.mod, equalized, bits, llr);
-        descramble(bits);
-        data.phy_ip.write(bits, true);
+        descramble_llr(llr);
+
+        if (data_count > 0)
+            llr.resize(data_count);
+
+        data.phy_ip.write(llr, true);
 
         std::atomic_signal_fence(std::memory_order_seq_cst);
         end = std::chrono::steady_clock::now();
@@ -1002,6 +1192,7 @@ int run_dsp_tx(SharedData &data)
     while (!data.stop.load())
     {
         data.ip_phy.read(bits, true);
+        logs::dsp.trace("Get {} bits | {} bytes from [MAC]", bits.size(), bits.size() / 8);
 
         scramble(bits);
         ofdm(bits, buffer, data.dsp);

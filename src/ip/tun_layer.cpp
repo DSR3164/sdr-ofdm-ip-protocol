@@ -1,5 +1,4 @@
 #include "logger.hpp"
-#include "ip/ip_layer.hpp"
 
 #include <arpa/inet.h>
 #include <cstdio>
@@ -27,9 +26,7 @@ int allocate_tun(char *dev)
     memset(&ifr, 0, sizeof(ifr));
     ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
     if (*dev)
-    {
         strncpy(ifr.ifr_name, dev, IFNAMSIZ);
-    }
 
     int err = ioctl(fd, TUNSETIFF, (void *)&ifr);
     if (err < 0)

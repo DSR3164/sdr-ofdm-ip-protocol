@@ -34,6 +34,7 @@ std::optional<CliConfig> parse_cli(int argc, char *argv[])
     options.add_options()
     ("c,config", "Path to config file", cxxopts::value<std::string>()->default_value("../config/sdr.conf"))
     ("m,modulation", "Modulation scheme (BPSK, QPSK, QAM16, QAM64)", cxxopts::value<std::string>()->default_value("QAM64"))
+    ("rate", "FEC code rate (1/2 or 3/4)", cxxopts::value<std::string>()->default_value("3/4"))
     ("n,node", "Base Node settings (A / B)", cxxopts::value<std::string>())
     ("r,rx", "Set RX frequency (Hz)", cxxopts::value<double>()->implicit_value("2200000000"))
     ("t,tx", "Set TX frequency (Hz)", cxxopts::value<double>()->implicit_value("2230000000"))
@@ -131,6 +132,17 @@ std::optional<CliConfig> parse_cli(int argc, char *argv[])
         return std::nullopt;
     }
 
+    const auto rate_str = result["rate"].as<std::string>();
+    if (rate_str == "1/2")
+        cfg.code_rate = CodeRate::R_1_2;
+    else if (rate_str == "3/4")
+        cfg.code_rate = CodeRate::R_3_4;
+    else
+    {
+        std::cerr << "Unknown code rate: '" << rate_str << "', expected 1/2 or 3/4" << std::endl;
+        return std::nullopt;
+    }
+
     if (result.count("n") && (result.count("rx") || result.count("tx")))
     {
         std::cerr << "Cannot use --node together with --rx/--tx" << std::endl;
@@ -164,6 +176,7 @@ std::optional<CliConfig> parse_cli(int argc, char *argv[])
 void set_cli_opts(SharedData &data, CliConfig &cfg)
 {
     data.dsp.ofdm_cfg.mod = cfg.modulation;
+    data.punct_cfg = make_punct_config(cfg.code_rate);
 
     logs::sdr.set_level(cfg.log.sdr);
     logs::tun.set_level(cfg.log.tun);

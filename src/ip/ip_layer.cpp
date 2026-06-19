@@ -72,7 +72,8 @@ size_t calculate_mtu(const SharedData &data)
     if (bits_per_stream / 8 <= (sizeof(FrameHeader) + 2))
         return 0;
 
-    return (bits_per_stream / 2) / 8 - 20;
+    int result = (bits_per_stream * data.punct_cfg.period / (n * data.punct_cfg.kept)) / 8 - 20;
+    return result & ~7;
 }
 
 void run_tun_tx(SharedData &data)
@@ -101,15 +102,13 @@ void run_tun_tx(SharedData &data)
 
     struct IP ip;
 
-    uint8_t buffer[1460];
-    std::vector<uint32_t> encoded_bytes;
+    uint8_t buffer[1500];
     FrameHeader hdr;
 
     const auto mtu = calculate_mtu(data);
     logs::tun.info("MTU: {}", mtu);
 
-    while (!has_flag(data.sdr.get_flags(), Flags::IS_ACTIVE))
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    size_t max_frame_bytes = sizeof(FrameHeader) + mtu;
 
     while (!data.stop.load())
     {
@@ -140,7 +139,6 @@ void run_tun_tx(SharedData &data)
 
             if (nbytes > 0)
             {
-
                 logs::tun.trace("Get packet {} bytes, id: {}", nbytes, ip.id);
                 std::vector<uint8_t> payload(buffer, buffer + nbytes);
 
@@ -172,13 +170,21 @@ void run_tun_tx(SharedData &data)
                     frame.insert(frame.end(), hdr_ptr, hdr_ptr + sizeof(FrameHeader));
                     frame.insert(frame.end(), payload.begin() + offset, payload.begin() + offset + chunk_size);
 
+                    if (frame.size() < max_frame_bytes)
+                        frame.resize(max_frame_bytes, 0);
+
                     auto encoded = conv_encoder(frame);
-                    encoded = interleaving(encoded);
                     auto bits = byte_to_bits(encoded, 8);
+
+                    bits = interleaving_(bits);
+                    bits = puncture(bits, data.punct_cfg);
+
+                    logs::tun.debug("[TX] bits size: {}", bits.size());
 
                     data.ip_phy.write(bits, true);
                     std::this_thread::sleep_for(std::chrono::milliseconds(2));
-                    logs::tun.trace("Sent chunk: seq {}, id {}, size {}, flags {:02X}", packet_seq - 1, packet_id, chunk_size, hflag);
+
+                    logs::tun.trace("Sent {} chunk: seq {}, id {}, size {}, flags {:02X}", encoded.size(), packet_seq - 1, packet_id, chunk_size, hflag);
                     offset += chunk_size;
                 }
             }
@@ -193,25 +199,39 @@ void run_tun_rx(SharedData &data)
 {
     auto &tun_name = data.tun_name;
     auto &tun_fd = data.tun_fd;
+    std::vector<float> llr;
     std::vector<uint8_t> frame;
     std::vector<uint8_t> block;
 
     uint16_t last_id = 0;
-    uint16_t last_seq = 0;
     bool last_id_valid = false;
     std::unordered_map<uint16_t, ReassemblyBuffer> assembly_map;
     auto last_cleanup = std::chrono::steady_clock::now();
 
-    while (!has_flag(data.sdr.get_flags(), Flags::IS_ACTIVE))
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    const auto mtu = calculate_mtu(data);
+    // const size_t EXPECTED_LLR_SIZE = +(sizeof(FrameHeader) + mtu) * 8 * 2 + 8;
+
+    size_t mother_bits = ((sizeof(FrameHeader) + mtu) * 8 + m) * n;
+    size_t mother_bytes = (mother_bits + 7) / 8;
+    size_t mother_bits_padded = mother_bytes * 8;
+
+    std::vector<uint8_t> dummy(mother_bits_padded, 0);
+    const size_t EXPECTED_LLR_SIZE = puncture(dummy, data.punct_cfg).size();
 
     while (!data.stop.load())
     {
-        data.phy_ip.read(frame, true);
+        data.phy_ip.read(llr, true);
 
-        block = bits_to_bytes<uint8_t>(frame, 8);
-        block = deinterleaving(block);
-        frame = viterbi_decoder(block);
+        if (llr.size() >= EXPECTED_LLR_SIZE)
+            llr.resize(EXPECTED_LLR_SIZE);
+        else
+            continue;
+
+        logs::tun.debug("[RX] bits size: {}", llr.size());
+
+        llr = depuncture(llr, data.punct_cfg);
+        llr = deinterleaving_float(llr);
+        frame = viterbi_decoder_llr(llr);
 
         if (frame.size() < sizeof(FrameHeader) + 2)
             continue;
@@ -254,14 +274,10 @@ void run_tun_rx(SharedData &data)
         auto &res_buf = assembly_map[id];
         res_buf.last_update = std::chrono::steady_clock::now();
 
-        if (diff == 0 && (last_seq == 0 || current_seq == last_seq))
-            logs::tun.warn("DUP! {}", current_id);
-
         if (hdr.flags & FLAG_FIRST)
         {
             res_buf.data.clear();
             res_buf.last_seq = current_seq;
-            last_seq = current_seq;
         }
 
         res_buf.data.insert(res_buf.data.end(), fragment_data, fragment_data + payload_len);
@@ -273,16 +289,17 @@ void run_tun_rx(SharedData &data)
             auto crc_rx = std::vector<uint8_t>(full_packet.end() - 2, full_packet.end());
             full_packet.erase(full_packet.end() - 2, full_packet.end());
 
+            std::vector<uint8_t> gui_frame;
+            gui_frame.insert(gui_frame.end(), (uint8_t *)&hdr, (uint8_t *)&hdr + sizeof(FrameHeader));
+            gui_frame.insert(gui_frame.end(), full_packet.begin(), full_packet.end());
+
+            data.ip_sockets_bytes.write(gui_frame);
+
             auto crc = calculateCRC16(full_packet);
             if (crc != crc_rx)
             {
                 logs::tun.debug("[{}] CRC mismatch for packet ID {}, dropping", tun_name, id);
                 assembly_map.erase(id);
-                std::vector<uint8_t> gui_frame;
-                gui_frame.insert(gui_frame.end(), (uint8_t *)&hdr, (uint8_t *)&hdr + sizeof(FrameHeader));
-                gui_frame.insert(gui_frame.end(), full_packet.begin(), full_packet.end());
-                data.ip_sockets_bytes.write(gui_frame);
-
                 continue;
             }
 
@@ -340,9 +357,6 @@ int run_ip_gui_bridge(SharedData &data, socketData &socket)
             init = true;
         }
     }
-
-    while (!has_flag(data.sdr.get_flags(), Flags::IS_ACTIVE))
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     while (!data.stop.load())
     {
