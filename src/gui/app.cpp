@@ -4,6 +4,7 @@
 #include "gui/phy_dev.hpp"
 
 #include <GL/glew.h>
+#include <atomic>
 #include <backends/imgui_impl_opengl3.h>
 #include <backends/imgui_impl_sdl2.h>
 #include <fftw3.h>
@@ -350,7 +351,7 @@ void App::run_stats_plot(const std::deque<StatsSnapshot> &stats)
     ImGui::End();
 }
 
-void run_gui(Buffers &buf, std::vector<std::string> &sockets, socketData &sock)
+void run_gui(Buffers &buf, std::vector<std::string> &sockets, socketData &sock, std::atomic_bool &quit)
 {
     App app("SOIP", 1280, 720);
 
@@ -380,6 +381,9 @@ void run_gui(Buffers &buf, std::vector<std::string> &sockets, socketData &sock)
 
         if (app.is_ip_run())
             ip_dev(app, buf);
+
+        if (!app.is_open())
+            quit = true;
 
         app.stop_frame();
     }

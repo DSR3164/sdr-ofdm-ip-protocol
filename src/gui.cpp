@@ -2,26 +2,33 @@
 #include "sockets.hpp"
 #include "gui/app.hpp"
 
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <thread>
 #include <vector>
+
+std::atomic_bool quit{ false };
 
 float lat = 1.0f;
 
 int run_ip_brigde(Buffers &data, socketData &socket)
 {
     while (socket.ip_socket.empty())
+    {
+        if (quit)
+            return 0;
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
 
     std::string last_connected_path = "";
     IPC client(zmq::socket_type::sub);
     ipc_header header;
     bool init = false;
-    static ImPlotSpec specs;
     std::vector<uint8_t> bytes;
 
-    while (true)
+    while (!quit)
     {
         if (socket.ip_socket != last_connected_path && !socket.ip_socket.empty())
         {
@@ -60,7 +67,11 @@ int run_ip_brigde(Buffers &data, socketData &socket)
 int run_dsp_bridge(Buffers &bufs, socketData &socket)
 {
     while (socket.phy_socket.empty())
+    {
+        if (quit)
+            return 0;
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
 
     IPC client(zmq::socket_type::sub);
     std::string last_connected_path = "";
@@ -68,7 +79,7 @@ int run_dsp_bridge(Buffers &bufs, socketData &socket)
     bool init = false;
     std::vector<std::complex<float>> temp(1920 * 2, 0);
 
-    while (true)
+    while (!quit)
     {
         if (socket.phy_socket != last_connected_path && !socket.phy_socket.empty())
         {
@@ -113,7 +124,11 @@ int run_dsp_bridge(Buffers &bufs, socketData &socket)
 int run_stats_bridge(Buffers &bufs, socketData &socket)
 {
     while (socket.stats_socket.empty())
+    {
+        if (quit)
+            return 0;
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
 
     IPC client(zmq::socket_type::sub);
     std::string last_connected_path = "";
@@ -121,7 +136,7 @@ int run_stats_bridge(Buffers &bufs, socketData &socket)
     bool init = false;
     std::vector<uint8_t> temp(sizeof(StatsSnapshot));
 
-    while (true)
+    while (!quit)
     {
         if (socket.stats_socket != last_connected_path && !socket.stats_socket.empty())
         {
@@ -173,12 +188,17 @@ int main()
         logs::main.critical("Please run with sudo or as root");
         return 0;
     }
-    else
+
     {
-        std::jthread gui(run_gui, std::ref(bufs), std::ref(all_sockets), std::ref(sock));
-        std::jthread dsp_bridge(run_dsp_bridge, std::ref(bufs), std::ref(sock));
-        std::jthread stats_bridge(run_stats_bridge, std::ref(bufs), std::ref(sock));
-        std::jthread ip_brigde(run_ip_brigde, std::ref(bufs), std::ref(sock));
+        ThreadJoiner gui{ "gui", std::jthread(run_gui, std::ref(bufs), std::ref(all_sockets), std::ref(sock), std::ref(quit)), "gui" };
+        ThreadJoiner dsp_bridge{ "dsp_bridge", std::jthread(run_dsp_bridge, std::ref(bufs), std::ref(sock)), "gui" };
+        ThreadJoiner ip_brigde{ "ip_brigde", std::jthread(run_ip_brigde, std::ref(bufs), std::ref(sock)), "gui" };
+        ThreadJoiner stats_bridge{ "stats_bridge", std::jthread(run_stats_bridge, std::ref(bufs), std::ref(sock)), "gui" };
+
+        while (!quit)
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
+
+    logs::gui.info("All threads joined. Exiting.");
     return 0;
 }

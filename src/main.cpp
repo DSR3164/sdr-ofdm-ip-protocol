@@ -43,22 +43,22 @@ int main(int argc, char *argv[])
         logs::main.critical("Please run with sudo or as root");
         return 0;
     }
-    else
+
+    socketData socket;
+
     {
-        socketData socket;
-
-        ThreadJoiner ip_gui_bridge{ "ip_gui_bridge", std::jthread(run_ip_gui_bridge, std::ref(data), std::ref(socket)) };
-        ThreadJoiner dsp_gui_bridge{ "dsp_gui_bridge", std::jthread(run_dsp_gui_bridge, std::ref(data), std::ref(socket)) };
-        ThreadJoiner dsp_stats_gui_bridge{ "dsp_stats_gui_bridge", std::jthread(run_dsp_stats_bridge, std::ref(data), std::ref(socket)) };
-        ThreadJoiner tun_tx{ "tun_tx", std::jthread(run_tun_tx, std::ref(data)) };
-        ThreadJoiner rx_thread{ "tun_rx", std::jthread(run_tun_rx, std::ref(data)) };
-        ThreadJoiner sdr{ "sdr", std::jthread(run_sdr, std::ref(data)) };
-        ThreadJoiner dsp_tx{ "dsp_tx", std::jthread(run_dsp_tx, std::ref(data)) };
-        ThreadJoiner dsp_rx{ "dsp_rx", std::jthread(run_dsp_rx, std::ref(data)) };
-
-        while (!data.stop.load())
-            std::this_thread::sleep_for(std::chrono::seconds(1));
+        ThreadJoiner ip_gui_bridge{ "ip_gui_bridge", std::jthread(run_ip_gui_bridge, std::ref(data), std::ref(socket)), "main" };
+        ThreadJoiner dsp_gui_bridge{ "dsp_gui_bridge", std::jthread(run_dsp_gui_bridge, std::ref(data), std::ref(socket)), "main" };
+        ThreadJoiner dsp_stats_gui_bridge{ "dsp_stats_gui_bridge", std::jthread(run_dsp_stats_bridge, std::ref(data), std::ref(socket)), "main" };
+        ThreadJoiner tun_tx{ "tun_tx", std::jthread(run_tun_tx, std::ref(data)), "main" };
+        ThreadJoiner rx_thread{ "tun_rx", std::jthread(run_tun_rx, std::ref(data)), "main" };
+        ThreadJoiner sdr{ "sdr", std::jthread(run_sdr, std::ref(data)), "main" };
+        ThreadJoiner dsp_tx{ "dsp_tx", std::jthread(run_dsp_tx, std::ref(data)), "main" };
+        ThreadJoiner dsp_rx{ "dsp_rx", std::jthread(run_dsp_rx, std::ref(data)), "main" };
     }
+
+    while (!data.stop.load())
+        std::this_thread::sleep_for(std::chrono::seconds(1));
 
     logs::main.info("All threads joined. Exiting.");
     return 0;

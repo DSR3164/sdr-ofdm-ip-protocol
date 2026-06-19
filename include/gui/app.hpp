@@ -149,4 +149,4 @@ class App {
 
 socketData choose_socket(const std::string &sock);
 
-void run_gui(Buffers &buf, std::vector<std::string> &sockets, socketData &sock);
+void run_gui(Buffers &buf, std::vector<std::string> &sockets, socketData &sock, std::atomic_bool &quit);
