@@ -200,7 +200,7 @@ namespace
         auto encoded = conv_encoder(bytes);
         auto bits = byte_to_bits(encoded, 8);
         auto inter = interleaving_(bits);
-        return bits;
+        return inter;
     }
 
     std::vector<uint8_t> decode(std::vector<float> &llr)
