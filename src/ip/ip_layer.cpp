@@ -6,7 +6,6 @@
 #include "ip/ip_layer.hpp"
 #include "ip/ip_nat.hpp"
 #include "ip/tun_layer.hpp"
-#include "zmq.hpp"
 
 #include <SDL2/SDL_stdinc.h>
 #include <algorithm>
@@ -308,41 +307,4 @@ void run_tun_rx(SharedData &data)
             }
         }
     }
-}
-
-int run_ip_gui_bridge(SharedData &data, socketData &socket)
-{
-    static IPC server(zmq::socket_type::pub);
-    bool init = false;
-    logs::tun.info("GUI bridge thread initialized");
-
-    while (!init && !data.stop.load())
-    {
-        if (!server.start_server(socket.ip_socket))
-        {
-            logs::socket.error("Failed to start IP to GUI bridge");
-            std::this_thread::sleep_for(std::chrono::milliseconds(200));
-        }
-        else
-        {
-            logs::socket.info("IP to GUI bridge server started");
-            init = true;
-        }
-    }
-
-    while (!data.stop.load())
-    {
-        std::vector<uint8_t> bytes;
-
-        if (data.ip_sockets_bytes.read(bytes) == 0)
-        {
-            if (!server.send_frame(MsgType::Vector, bytes))
-                logs::socket.error("Frame send failed");
-        }
-        else
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-
-    logs::tun.info("GUI bridge stopped");
-    return 0;
 }

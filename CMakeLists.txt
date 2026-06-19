@@ -188,6 +188,7 @@ add_library(soip_core STATIC
   ${PROJECT_SOURCE_DIR}/src/logger.cpp
   ${PROJECT_SOURCE_DIR}/src/cli.cpp
   ${PROJECT_SOURCE_DIR}/src/config.cpp
+  ${PROJECT_SOURCE_DIR}/src/bridges.cpp
 )
 
 if(DEBUG_FLAGS)

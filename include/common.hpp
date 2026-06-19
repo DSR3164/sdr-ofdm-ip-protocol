@@ -261,6 +261,7 @@ struct SharedData {
     char tun_name[16] = "";
 
     std::atomic<bool> stop{ false };
+    std::atomic<bool> is_gui_run{ false };
 
     void stop_all_buffers()
     {

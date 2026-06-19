@@ -23,12 +23,14 @@ socketData::socketData(const bool setup_dir, const std::string &base_folder)
         ip_socket = "ipc://" + (base / "ip_gui.sock").string();
         phy_socket = "ipc://" + (base / "dsp_gui.sock").string();
         stats_socket = "ipc://" + (base / "stats.sock").string();
+        control_socket = "ipc://" + (base / "control.sock").string();
     }
     else
     {
         ip_socket = "";
         phy_socket = "";
         stats_socket = "";
+        control_socket = "";
     }
 }
 

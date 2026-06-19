@@ -17,6 +17,7 @@ struct socketData {
     std::string ip_socket;
     std::string phy_socket;
     std::string stats_socket;
+    std::string control_socket;
     bool is_owner = false;
 
     socketData(const bool setup_dir = true, const std::string &base_folder = "soip_sockets");
@@ -37,6 +38,7 @@ enum class MsgType : uint32_t
     Vector,
     pid,
     Stats,
+    Control,
 };
 
 struct ipc_header {
@@ -124,5 +126,3 @@ class IPC {
 
     zmq::socket_t &socket() { return _socket; }
 };
-
-int run_gui_main(socketData &socket);

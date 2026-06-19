@@ -400,6 +400,7 @@ socketData choose_socket(const std::string &folder_name)
     socket.ip_socket = "ipc://" + (base / "ip_gui.sock").string();
     socket.phy_socket = "ipc://" + (base / "dsp_gui.sock").string();
     socket.stats_socket = "ipc://" + (base / "stats.sock").string();
+    socket.control_socket = "ipc://" + (base / "control.sock").string();
 
     return socket;
 }
