@@ -175,11 +175,13 @@ void run_tun_tx(SharedData &data)
 
                     auto encoded = conv_encoder(frame);
                     auto bits = byte_to_bits(encoded, 8);
+
                     bits = interleaving_(bits);
 
                     data.ip_phy.write(bits, true);
                     std::this_thread::sleep_for(std::chrono::milliseconds(6));
-                    logs::tun.trace("Sent chunk: seq {}, id {}, size {}, flags {:02X}", packet_seq - 1, packet_id, chunk_size, hflag);
+
+                    logs::tun.trace("Sent {} chunk: seq {}, id {}, size {}, flags {:02X}", encoded.size(), packet_seq - 1, packet_id, chunk_size, hflag);
                     offset += chunk_size;
                 }
             }
@@ -204,7 +206,7 @@ void run_tun_rx(SharedData &data)
     auto last_cleanup = std::chrono::steady_clock::now();
 
     const auto mtu = calculate_mtu(data);
-    const size_t EXPECTED_LLR_SIZE = +(sizeof(FrameHeader) + mtu) * 8 * 2;
+    const size_t EXPECTED_LLR_SIZE = +(sizeof(FrameHeader) + mtu) * 8 * 2 + 8;
 
     while (!data.stop.load())
     {
@@ -216,6 +218,7 @@ void run_tun_rx(SharedData &data)
             continue;
 
         llr = deinterleaving_float(llr);
+
         frame = viterbi_decoder_llr(llr);
 
         if (frame.size() < sizeof(FrameHeader) + 2)

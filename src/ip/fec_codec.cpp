@@ -147,7 +147,7 @@ std::vector<uint8_t> viterbi_decoder_llr(const std::vector<float> &llr)
         int bit_pos = bit_index % 8;
 
         uint8_t input_bit = cur_state & 1U;
-        decoded_bytes[byte_pos] |= (input_bit << bit_pos);
+        decoded_bytes[byte_pos] |= (input_bit << (7 - bit_pos));
 
         cur_state = prev_state;
     }
@@ -176,12 +176,12 @@ std::vector<float> deinterleaving_float(const std::vector<float> &input)
     size_t n = input.size();
     size_t r = n / c;
 
-    std::vector<float> deint_llr;
-    deint_llr.reserve(n);
+    std::vector<float> deint(n);
+    size_t idx = 0;
 
-    for (size_t i = 0; i < r; ++i)
-        for (size_t j = 0; j < c; ++j)
-            deint_llr.push_back(input[j * r + i]);
-
-    return deint_llr;
+    for (size_t i = 0; i < c; ++i)
+        for (size_t j = 0; j < r; ++j)
+            deint[j * c + i] = input[idx++];
+        
+    return deint;
 }
