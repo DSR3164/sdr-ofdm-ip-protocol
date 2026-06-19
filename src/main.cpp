@@ -1,10 +1,10 @@
 #include "cli.hpp"
 #include "common.hpp"
 #include "sockets.hpp"
-#include "bridges.hpp"
 #include "phy/dsp.hpp"
 #include "phy/phy_layer.hpp"
 #include "ip/ip_layer.hpp"
+#include "bridges.hpp"
 
 #include <atomic>
 #include <csignal>
