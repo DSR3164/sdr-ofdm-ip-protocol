@@ -242,6 +242,7 @@ struct StatsHistory {
 
 struct SharedData {
     std::atomic<bool> stop{ false };
+    std::atomic<bool> is_gui_run{ false };
 
     SDR sdr;
     DSP dsp;
@@ -263,8 +264,6 @@ struct SharedData {
     int tun_fd;
     char tun_name[16] = "";
 
-    std::atomic<bool> stop{ false };
-    std::atomic<bool> is_gui_run{ false };
     PunctConfig punct_cfg;
 
     void stop_all_buffers()
