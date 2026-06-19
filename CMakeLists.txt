@@ -2,13 +2,6 @@ cmake_minimum_required(VERSION 3.24)
 project(SOIP LANGUAGES CXX)
 
 find_program(CCACHE_PROGRAM ccache)
-if(CCACHE_PROGRAM)
-  set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
-  set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
-  message(STATUS "Found ccache: ${CCACHE_PROGRAM}")
-else()
-  message(WARNING "ccache not found - build might be slower")
-endif()
 
 include(FetchContent)
 
@@ -173,6 +166,30 @@ fetchcontent_declare(
   GIT_TAG v4.10.0
 )
 fetchcontent_makeavailable(cppzmq)
+
+if(CCACHE_PROGRAM)
+  message(STATUS "ccache will be used ONLY for target libraries: imgui, implot, zmq")
+
+  set(TARGETS_TO_CACHE
+    imgui
+    implot
+    libzmq
+    libzmq-static
+    cppzmq
+  )
+
+  foreach(target IN LISTS TARGETS_TO_CACHE)
+    if(TARGET ${target})
+      set_target_properties(${target} PROPERTIES
+        C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}"
+        CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}"
+      )
+    endif()
+  endforeach()
+else()
+  message(WARNING "ccache not found - libraries will build without cache")
+endif()
+
 
 # ---------- Core SDR OPTIONS ----------
 option(HAS_DYNAMIC_ENUMERATE "Build with dynamic SDR enumeration support" OFF)
