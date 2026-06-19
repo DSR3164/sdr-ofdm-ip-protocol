@@ -2,11 +2,9 @@
 #include "sockets.hpp"
 #include "phy/phy_layer.hpp"
 #include "phy/sdr.hpp"
-#include "zmq.hpp"
 
 #include <cstdint>
 #include <cstring>
-#include <thread>
 #include <vector>
 
 int run_sdr(SharedData &data)
@@ -72,82 +70,5 @@ int run_sdr(SharedData &data)
     }
     if (sdr.deinit())
         return 0;
-    return 0;
-}
-
-int run_dsp_gui_bridge(SharedData &data, socketData &socket)
-{
-    IPC server(zmq::socket_type::pub);
-    bool init = false;
-    std::vector<std::complex<float>> raw;
-    std::vector<std::complex<float>> symbols;
-
-    while (!has_flag(data.sdr.get_flags(), Flags::IS_ACTIVE))
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-    while (!init && !data.stop.load())
-    {
-        if (!server.start_server(socket.phy_socket))
-        {
-            logs::socket.error("Failed to start PHY to GUI bridge");
-            std::this_thread::sleep_for(std::chrono::milliseconds(200));
-        }
-        else
-        {
-            logs::socket.info("PHY to GUI bridge server started");
-            init = true;
-        }
-    }
-
-    logs::dsp.info("Socket created successfully {}", socket.phy_socket);
-
-    while (!data.stop.load())
-    {
-        std::this_thread::sleep_for(std::chrono::milliseconds(6));
-        if (data.dsp_sockets_raw.read(raw) == 0)
-            server.send_frame(MsgType::Spectrum, raw);
-        if (data.dsp_sockets_symbols.read(symbols) == 0)
-            server.send_frame(MsgType::Vector, symbols);
-    }
-
-    return 0;
-}
-
-int run_dsp_stats_bridge(SharedData &data, socketData &socket)
-{
-    IPC server(zmq::socket_type::pub);
-    bool init = false;
-
-    std::vector<uint8_t> stats(sizeof(StatsSnapshot));
-    StatsSnapshot tmp;
-
-    while (!has_flag(data.sdr.get_flags(), Flags::IS_ACTIVE))
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-    while (!init && !data.stop.load())
-    {
-        if (!server.start_server(socket.stats_socket))
-        {
-            logs::socket.error("Failed to start PHY Stats to GUI bridge");
-            std::this_thread::sleep_for(std::chrono::milliseconds(200));
-        }
-        else
-        {
-            logs::socket.info("PHY Stats to GUI bridge server started");
-            init = true;
-        }
-    }
-
-    logs::dsp.info("Socket created successfully {}", socket.stats_socket);
-
-    while (!data.stop.load())
-    {
-        std::this_thread::sleep_for(std::chrono::milliseconds(6));
-        data.history.get_last(tmp);
-        std::memcpy(stats.data(), &tmp, sizeof(tmp));
-        if (!stats.empty())
-            server.send_frame(MsgType::Stats, stats);
-    }
-
     return 0;
 }

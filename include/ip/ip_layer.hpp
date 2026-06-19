@@ -1,7 +1,6 @@
 #pragma once
 
 #include "common.hpp"
-#include "sockets.hpp"
 
 struct __attribute__((packed)) FrameHeader {
     uint16_t magic;
@@ -35,4 +34,3 @@ struct ReassemblyBuffer {
 
 void run_tun_tx(SharedData &data);
 void run_tun_rx(SharedData &data);
-int run_ip_gui_bridge(SharedData &data, socketData &socket);

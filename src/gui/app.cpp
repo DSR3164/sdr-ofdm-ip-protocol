@@ -12,6 +12,8 @@
 #include <string>
 #include <vector>
 
+extern float lat;
+
 App::App(const std::string &title, int width, int height)
 {
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER);
@@ -21,10 +23,12 @@ App::App(const std::string &title, int width, int height)
 
     ImGui::CreateContext();
     ImPlot::CreateContext();
-
+    setup_theme();
+    setup_plotTheme();
     std::filesystem::path exe_dir = std::filesystem::canonical(std::filesystem::path(SDL_GetBasePath()));
     static std::string ini_path = (exe_dir.parent_path() / "config" / "imgui.ini").string();
     ImGuiIO &io = ImGui::GetIO();
+    io.Fonts->AddFontFromFileTTF((exe_dir.parent_path() / "resources" / "fonts" / "CascadiaMono-VariableFont_wght.ttf").string().c_str(), 16.0f);
     io.IniFilename = ini_path.c_str();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
@@ -42,6 +46,102 @@ App::~App()
     SDL_GL_DeleteContext(gl_context);
     SDL_DestroyWindow(window);
     SDL_Quit();
+}
+
+void App::setup_theme()
+{
+    ImGuiStyle &style = ImGui::GetStyle();
+    ImVec4 *colors = style.Colors;
+
+    ImVec4 bg = ImVec4(0.09f, 0.10f, 0.11f, 1.00f);
+    ImVec4 bg_panel = ImVec4(0.12f, 0.13f, 0.15f, 1.00f);
+    ImVec4 bg_widget = ImVec4(0.16f, 0.17f, 0.19f, 1.00f);
+    ImVec4 border = ImVec4(0.22f, 0.23f, 0.25f, 1.00f);
+    ImVec4 text = ImVec4(0.86f, 0.87f, 0.88f, 1.00f);
+    ImVec4 text_dim = ImVec4(0.55f, 0.57f, 0.60f, 1.00f);
+    ImVec4 accent = ImVec4(0.20f, 0.75f, 0.85f, 1.00f);
+    ImVec4 accent_hi = ImVec4(0.30f, 0.85f, 0.95f, 1.00f);
+
+    colors[ImGuiCol_WindowBg] = bg;
+    colors[ImGuiCol_ChildBg] = bg;
+    colors[ImGuiCol_PopupBg] = bg_panel;
+    colors[ImGuiCol_Border] = border;
+    colors[ImGuiCol_FrameBg] = bg_widget;
+    colors[ImGuiCol_FrameBgHovered] = ImVec4(0.20f, 0.21f, 0.23f, 1.00f);
+    colors[ImGuiCol_FrameBgActive] = ImVec4(0.22f, 0.23f, 0.25f, 1.00f);
+    colors[ImGuiCol_TitleBg] = bg;
+    colors[ImGuiCol_TitleBgActive] = bg_panel;
+    colors[ImGuiCol_TitleBgCollapsed] = bg;
+    colors[ImGuiCol_MenuBarBg] = bg_panel;
+    colors[ImGuiCol_ScrollbarBg] = bg;
+    colors[ImGuiCol_ScrollbarGrab] = bg_widget;
+    colors[ImGuiCol_ScrollbarGrabHovered] = border;
+    colors[ImGuiCol_ScrollbarGrabActive] = accent;
+    colors[ImGuiCol_CheckMark] = accent;
+    colors[ImGuiCol_SliderGrab] = accent;
+    colors[ImGuiCol_SliderGrabActive] = accent_hi;
+    colors[ImGuiCol_Button] = bg_widget;
+    colors[ImGuiCol_ButtonHovered] = ImVec4(0.20f, 0.21f, 0.23f, 1.00f);
+    colors[ImGuiCol_ButtonActive] = accent;
+    colors[ImGuiCol_Header] = bg_widget;
+    colors[ImGuiCol_HeaderHovered] = ImVec4(0.20f, 0.21f, 0.23f, 1.00f);
+    colors[ImGuiCol_HeaderActive] = accent;
+    colors[ImGuiCol_Separator] = border;
+    colors[ImGuiCol_SeparatorHovered] = accent;
+    colors[ImGuiCol_SeparatorActive] = accent_hi;
+    colors[ImGuiCol_ResizeGrip] = border;
+    colors[ImGuiCol_ResizeGripHovered] = accent;
+    colors[ImGuiCol_ResizeGripActive] = accent_hi;
+    colors[ImGuiCol_Tab] = bg_panel;
+    colors[ImGuiCol_TabHovered] = bg_widget;
+    colors[ImGuiCol_TabActive] = bg_widget;
+    colors[ImGuiCol_TabUnfocused] = bg;
+    colors[ImGuiCol_TabUnfocusedActive] = bg_panel;
+    colors[ImGuiCol_DockingPreview] = ImVec4(accent.x, accent.y, accent.z, 0.30f);
+    colors[ImGuiCol_DockingEmptyBg] = bg;
+    colors[ImGuiCol_Text] = text;
+    colors[ImGuiCol_TextDisabled] = text_dim;
+
+    style.WindowRounding = 3.0f;
+    style.FrameRounding = 2.0f;
+    style.PopupRounding = 3.0f;
+    style.ScrollbarRounding = 2.0f;
+    style.GrabRounding = 2.0f;
+    style.TabRounding = 3.0f;
+
+    style.WindowPadding = ImVec2(8, 8);
+    style.FramePadding = ImVec2(6, 4);
+    style.ItemSpacing = ImVec2(6, 4);
+    style.ItemInnerSpacing = ImVec2(4, 4);
+    style.ScrollbarSize = 12.0f;
+    style.GrabMinSize = 8.0f;
+
+    style.WindowBorderSize = 1.0f;
+    style.FrameBorderSize = 0.0f;
+}
+
+void App::setup_plotTheme()
+{
+    ImPlot::StyleColorsDark();
+    ImPlotStyle &pstyle = ImPlot::GetStyle();
+
+    pstyle.PlotBorderSize = 1.0f;
+
+    pstyle.Colors[ImPlotCol_FrameBg] = ImVec4(0.09f, 0.10f, 0.11f, 1.0f);
+    pstyle.Colors[ImPlotCol_PlotBg] = ImVec4(0.07f, 0.08f, 0.09f, 1.0f);
+    pstyle.Colors[ImPlotCol_PlotBorder] = ImVec4(0.22f, 0.23f, 0.25f, 1.0f);
+    pstyle.Colors[ImPlotCol_LegendBg] = ImVec4(0.12f, 0.13f, 0.15f, 0.9f);
+    pstyle.Colors[ImPlotCol_AxisGrid] = ImVec4(0.22f, 0.23f, 0.25f, 0.5f);
+
+    static const ImVec4 telemetry_map[] = {
+        ImVec4(0.20f, 0.75f, 0.85f, 1.0f),
+        ImVec4(0.95f, 0.55f, 0.20f, 1.0f),
+        ImVec4(0.55f, 0.85f, 0.35f, 1.0f),
+        ImVec4(0.85f, 0.35f, 0.55f, 1.0f),
+        ImVec4(0.75f, 0.75f, 0.30f, 1.0f),
+    };
+    ImPlot::AddColormap("Telemetry", telemetry_map, 5);
+    pstyle.Colormap = ImPlot::GetColormapIndex("Telemetry");
 }
 
 void App::start_frame()
@@ -126,27 +226,136 @@ void App::control_wd(std::vector<std::string> &sockets, socketData &sock)
             ImGui::EndMenu();
         }
         else
-        {
             control_menu_was_open = false;
-        }
         ImGui::EndMainMenuBar();
     }
 }
 
-void App::begin_debug()
+void App::begin_debug(Buffers &data)
 {
     ImGuiIO &io = ImGui::GetIO();
+
+    // Stats
+    static StatsSnapshot snapshot{};
+    static std::deque<StatsSnapshot> stats;
+    std::vector<uint8_t> raw_stats;
+
+    if (data.stats.read(raw_stats) == 0)
+        if (raw_stats.size() == sizeof(StatsSnapshot))
+        {
+            std::memcpy(&snapshot, raw_stats.data(), sizeof(StatsSnapshot));
+
+            stats.push_back(snapshot);
+            if (stats.size() > 1000)
+                stats.pop_front();
+        }
+
+    run_stats_plot(stats);
+
     if (ImGui::Begin("Debug Panel"))
     {
-        ImGui::SeparatorText("Statistics");
+        ImGui::SeparatorText("GUI Stats");
         ImGui::Text("FPS: %.f (%0.3f ms)", io.Framerate, 1000.0f / io.Framerate);
+        ImGui::Text("Latency  %.2f mcs | %.2f ms", lat / 1e3, lat / 1e6);
+
+        ImGui::SeparatorText("Timing & Frequency");
+        ImGui::Text("Processing time: %.2f us", snapshot.processing_time_us);
+        ImGui::Text("CFO:             %.2f Hz", snapshot.cfo);
+
+        ImGui::SeparatorText("Sync Positions");
+        ImGui::Text("CP Position:     %d", snapshot.cp_pos);
+        ImGui::Text("ZC Position:     %d", snapshot.zc_pos);
+
+        ImGui::SeparatorText("Status Flags");
+        ImVec4 color_yes = ImVec4(0.0f, 1.0f, 0.4f, 1.0f);
+        ImVec4 color_no = ImVec4(1.0f, 0.4f, 0.4f, 1.0f);
+
+        ImGui::Text("CP Found:        ");
+        ImGui::SameLine();
+        ImGui::TextColored(snapshot.cp_found ? color_yes : color_no, snapshot.cp_found ? "YES" : "NO");
+
+        ImGui::Text("ZC Found:        ");
+        ImGui::SameLine();
+        ImGui::TextColored(snapshot.zc_found ? color_yes : color_no, snapshot.zc_found ? "YES" : "NO");
+
+        ImGui::Text("Is Packet:       ");
+        ImGui::SameLine();
+        ImGui::TextColored(snapshot.is_packet ? color_yes : color_no, snapshot.is_packet ? "YES" : "NO");
+
+        ImGui::Text("Prev Packet Lost:");
+        ImGui::SameLine();
+        ImGui::TextColored(snapshot.is_previous_packet_lost ? color_no : color_yes, snapshot.is_previous_packet_lost ? "YES" : "NO");
     }
     ImGui::End();
 }
 
-void run_gui(Buffers &buf, std::vector<std::string> &sockets, socketData &sock)
+void App::run_stats_plot(const std::deque<StatsSnapshot> &stats)
 {
-    App app("Development", 1280, 720);
+    if (stats.empty())
+        return;
+
+    size_t size = stats.size();
+
+    static std::vector<float> proc_time_y(size, 0.0f);
+    static std::vector<float> cfo_y(size, 0.0f);
+    static std::vector<float> proc_time_y_smooth(size, 0.0f);
+    static std::vector<float> cfo_y_smooth(size, 0.0f);
+
+    const float alpha = 0.01;
+
+    proc_time_y.push_back(stats.back().processing_time_us);
+    cfo_y.push_back(stats.back().cfo);
+
+    if (proc_time_y.size() > size)
+        proc_time_y.erase(proc_time_y.begin());
+    if (cfo_y.size() > size)
+        cfo_y.erase(cfo_y.begin());
+
+    proc_time_y_smooth.push_back(alpha * stats.back().processing_time_us + (1.0f - alpha) * proc_time_y_smooth[proc_time_y_smooth.size() - 1]);
+    cfo_y_smooth.push_back(alpha * stats.back().cfo + (1.0f - alpha) * cfo_y_smooth[cfo_y_smooth.size() - 1]);
+
+    if (proc_time_y_smooth.size() > size)
+        proc_time_y_smooth.erase(proc_time_y_smooth.begin());
+    if (cfo_y_smooth.size() > size)
+        cfo_y_smooth.erase(cfo_y_smooth.begin());
+
+    if (ImGui::Begin("Signal Metrics"))
+    {
+        if (ImGui::BeginTabBar("MetricsTabBar"))
+        {
+            if (ImGui::BeginTabItem("Processing Time"))
+            {
+                if (ImPlot::BeginPlot("##ProcTime", ImVec2(-1, 250)))
+                {
+                    ImPlot::SetupAxes("Ticks", "Time (us)", ImPlotAxisFlags_None, ImPlotAxisFlags_AutoFit);
+                    ImPlot::PlotLine("Time", proc_time_y.data(), static_cast<int>(size));
+                    ImPlot::PlotLine("Time mean", proc_time_y_smooth.data(), static_cast<int>(size));
+                    ImPlot::EndPlot();
+                }
+                ImGui::EndTabItem();
+            }
+
+            if (ImGui::BeginTabItem("CFO Monitor"))
+            {
+                if (ImPlot::BeginPlot("##CFOMonitor", ImVec2(-1, 250)))
+                {
+                    ImPlot::SetupAxes("Ticks", "CFO (Hz)", ImPlotAxisFlags_None, ImPlotAxisFlags_AutoFit);
+                    ImPlot::PlotLine("CFO", cfo_y.data(), static_cast<int>(size));
+                    ImPlot::PlotLine("CFO mean", cfo_y_smooth.data(), static_cast<int>(size));
+                    ImPlot::EndPlot();
+                }
+                ImGui::EndTabItem();
+            }
+
+            ImGui::EndTabBar();
+        }
+    }
+    ImGui::End();
+}
+
+void run_gui(Buffers &buf, std::vector<std::string> &sockets, socketData &sock, std::atomic_bool &quit)
+{
+    App app("SOIP", 1280, 720);
 
     while (app.is_open())
     {
@@ -164,7 +373,7 @@ void run_gui(Buffers &buf, std::vector<std::string> &sockets, socketData &sock)
         }
 
         if (app.is_debug_run())
-            app.begin_debug();
+            app.begin_debug(buf);
 
         if (app.is_gui_run())
             gui_dev(app);
@@ -174,6 +383,9 @@ void run_gui(Buffers &buf, std::vector<std::string> &sockets, socketData &sock)
 
         if (app.is_ip_run())
             ip_dev(app, buf);
+
+        if (!app.is_open())
+            quit = true;
 
         app.stop_frame();
     }
@@ -188,6 +400,7 @@ socketData choose_socket(const std::string &folder_name)
     socket.ip_socket = "ipc://" + (base / "ip_gui.sock").string();
     socket.phy_socket = "ipc://" + (base / "dsp_gui.sock").string();
     socket.stats_socket = "ipc://" + (base / "stats.sock").string();
+    socket.control_socket = "ipc://" + (base / "control.sock").string();
 
     return socket;
 }
@@ -211,15 +424,15 @@ void App::run_waterfall(const std::string &label, WaterfallData &waterfall, cons
 
     ImGui::Text("FFT Size: %d", waterfall.fft_size);
     ImGui::Text("History: %d rows", waterfall.history_rows);
-    ImGui::SliderInt("Update Rate(ms)", &waterfall.update_interval_ms, 5, 100);
+    ImGui::SliderInt("Update Rate(ms)", &waterfall.update_interval_ms, 1, 100);
 
-    static float min_db = -40.0f;
-    static float max_db = -10.0f;
+    static float min_db = -20.0f;
+    static float max_db = 10.0f;
 
-    ImGui::SliderFloat("Min dB", &min_db, -200.0f, -40.0f);
-    ImGui::SliderFloat("Max dB", &max_db, -39.99f, -0.0f);
+    ImGui::SliderFloat("Min dB", &min_db, -200.0f, 200.0f);
+    ImGui::SliderFloat("Max dB", &max_db, -200.0f, 200.0f);
 
-    static int colormap_idx = 5;
+    static int colormap_idx = 1;
     const char *colormap_names[] = { "Viridis", "Plasma", "Hot", "Cool", "Pink", "Jet" };
     const int colormap_values[] = {
         ImPlotColormap_Viridis,

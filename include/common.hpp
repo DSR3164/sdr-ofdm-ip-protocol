@@ -14,8 +14,6 @@
 #include <utility>
 #include <vector>
 
-extern std::atomic<bool> *stop_ptr;
-
 enum class Modulation
 {
     BPSK,
@@ -244,6 +242,7 @@ struct StatsHistory {
 
 struct SharedData {
     std::atomic<bool> stop{ false };
+    std::atomic<bool> is_gui_run{ false };
 
     SDR sdr;
     DSP dsp;
@@ -289,10 +288,18 @@ struct SharedData {
 struct ThreadJoiner {
     std::string m_name;
     std::jthread m_thread;
-    ThreadJoiner(std::string name, std::jthread thread)
+    std::string m_log;
+    ThreadJoiner(std::string name, std::jthread thread, std::string log)
         : m_name(std::move(name)),
-          m_thread(std::move(thread))
+          m_thread(std::move(thread)),
+          m_log(std::move(log))
     {
     }
-    ~ThreadJoiner() { logs::main.info("Joining thread: {}", m_name.c_str()); }
+    ~ThreadJoiner()
+    {
+        if (m_log == "main")
+            logs::main.info("Joining thread: {}", m_name.c_str());
+        if (m_log == "gui")
+            logs::gui.info("Joining thread: {}", m_name.c_str());
+    }
 };

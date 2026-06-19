@@ -1,13 +1,20 @@
 #pragma once
 
-#include "common.hpp"
 #include "sockets.hpp"
+#include "buffers.hpp"
 
 #include <SDL2/SDL.h>
-#include <cstdint>
+#include <deque>
 #include <implot.h>
 #include <span>
 #include <string>
+#include <type_traits>
+
+template <typename T>
+struct is_complex : std::false_type {};
+
+template <typename T>
+struct is_complex<std::complex<T>> : std::true_type {};
 
 struct WaterfallData {
     int fft_size;
@@ -28,20 +35,6 @@ struct WaterfallData {
     void process_samples(const std::vector<std::complex<float>> &samples);
 };
 
-struct Buffers {
-    DoubleBuffer<std::complex<float>> sdr_raw;
-    DoubleBuffer<std::complex<float>> dsp;
-    DoubleBuffer<uint8_t> stats;
-    DoubleBuffer<uint8_t> ip;
-    DoubleBuffer<std::string> socket;
-
-    Buffers(int size1 = 3840, int size2 = 3840)
-        : sdr_raw(size1),
-          dsp(size2)
-    {
-    }
-};
-
 class App {
   public:
     App(const std::string &title, int width, int height);
@@ -53,10 +46,13 @@ class App {
     bool is_phy_run() { return phy_run; }
     bool is_ip_run() { return ip_run; }
     bool is_chos_sock() { return choose_socket; }
+    void setup_theme();
+    void setup_plotTheme();
     void start_frame();
     void stop_frame();
     void control_wd(std::vector<std::string> &sockets, socketData &sock);
-    void begin_debug();
+    void begin_debug(Buffers &data);
+    void run_stats_plot(const std::deque<StatsSnapshot> &stats);
     void run_heatmap(const std::string &label, const float *data, int rows, int cols, float scale_min, float scale_max);
     void run_waterfall(const std::string &label, WaterfallData &waterfall, const std::vector<std::complex<float>> &data);
     void set_vsync_state(bool vsync_state) { (vsync_state) ? SDL_GL_SetSwapInterval(1) : SDL_GL_SetSwapInterval(0); }
@@ -79,7 +75,12 @@ class App {
     void begin_plot_2d(const std::string &label, const std::string &label_i, const std::string &label_q, std::span<const R> data)
     {
         PlotSpec<T> plot_2d(2);
-        int count = data.size() / 2;
+        int count;
+        if constexpr (is_complex<R>::value)
+            count = data.size();
+        else
+            count = data.size() / 2;
+
         const T *raw_ptr = reinterpret_cast<const T *>(data.data());
         if (ImPlot::BeginPlot(label.c_str(), ImGui::GetContentRegionAvail()))
         {
@@ -94,7 +95,11 @@ class App {
     {
         PlotSpec<T> plot_scatter(2, ImPlotMarker_Square, 1.0f);
         const T *raw_ptr = reinterpret_cast<const T *>(data.data());
-        int count = data.size() / 2;
+        int count;
+        if constexpr (is_complex<R>::value)
+            count = data.size();
+        else
+            count = data.size() / 2;
 
         if (ImPlot::BeginPlot(label.c_str(), ImVec2(ImGui::GetContentRegionAvail()), ImPlotFlags_Equal))
         {
@@ -129,4 +134,4 @@ class App {
 
 socketData choose_socket(const std::string &sock);
 
-void run_gui(Buffers &buf, std::vector<std::string> &sockets, socketData &sock);
+void run_gui(Buffers &buf, std::vector<std::string> &sockets, socketData &sock, std::atomic_bool &quit);

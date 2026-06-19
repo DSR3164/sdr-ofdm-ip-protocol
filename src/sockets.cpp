@@ -23,12 +23,14 @@ socketData::socketData(const bool setup_dir, const std::string &base_folder)
         ip_socket = "ipc://" + (base / "ip_gui.sock").string();
         phy_socket = "ipc://" + (base / "dsp_gui.sock").string();
         stats_socket = "ipc://" + (base / "stats.sock").string();
+        control_socket = "ipc://" + (base / "control.sock").string();
     }
     else
     {
         ip_socket = "";
         phy_socket = "";
         stats_socket = "";
+        control_socket = "";
     }
 }
 
@@ -187,6 +189,21 @@ bool IPC::connect_to(const std::string &path)
         _socket.connect(path);
 
         logs::socket.info("SUB socket connected to {}", path);
+        return true;
+    }
+    catch (const zmq::error_t &e)
+    {
+        logs::socket.error("Failed to connect to {}: {}", path, e.what());
+        return false;
+    }
+}
+
+bool IPC::disconnect_from(const std::string &path)
+{
+    try
+    {
+        _socket.disconnect(path);
+        logs::socket.info("SUB socket disconnected from {}", path);
         return true;
     }
     catch (const zmq::error_t &e)
