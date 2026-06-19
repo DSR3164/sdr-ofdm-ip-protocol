@@ -184,3 +184,36 @@ std::vector<float> deinterleaving_float(const std::vector<float> &input)
 
     return deint;
 }
+
+std::vector<uint8_t> puncture(const std::vector<uint8_t> &coded_bits)
+{
+    std::vector<uint8_t> out;
+    out.reserve(coded_bits.size() / punct_period * 4 + 4);
+
+    for (size_t i = 0; i < coded_bits.size(); ++i)
+    {
+        if (punct_mask[i % punct_period])
+            out.push_back(coded_bits[i]);
+    }
+    return out;
+}
+
+std::vector<float> depuncture(const std::vector<float> &llr)
+{
+    // total positions = how many original bits this corresponds to
+    size_t n_kept = 0;
+    for (bool k : punct_mask)
+        if (k)
+            n_kept++;
+
+    size_t periods = (llr.size() + n_kept - 1) / n_kept;
+    std::vector<float> out(periods * punct_period, 0.0f); // 0 LLR = "no info"
+
+    size_t in_idx = 0;
+    for (size_t i = 0; i < out.size() && in_idx < llr.size(); ++i)
+    {
+        if (punct_mask[i % punct_period])
+            out[i] = llr[in_idx++];
+    }
+    return out;
+}
