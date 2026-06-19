@@ -277,16 +277,17 @@ void run_tun_rx(SharedData &data)
             auto crc_rx = std::vector<uint8_t>(full_packet.end() - 2, full_packet.end());
             full_packet.erase(full_packet.end() - 2, full_packet.end());
 
+            std::vector<uint8_t> gui_frame;
+            gui_frame.insert(gui_frame.end(), (uint8_t *)&hdr, (uint8_t *)&hdr + sizeof(FrameHeader));
+            gui_frame.insert(gui_frame.end(), full_packet.begin(), full_packet.end());
+
+            data.ip_sockets_bytes.write(gui_frame);
+
             auto crc = calculateCRC16(full_packet);
             if (crc != crc_rx)
             {
                 logs::tun.debug("[{}] CRC mismatch for packet ID {}, dropping", tun_name, id);
                 assembly_map.erase(id);
-                std::vector<uint8_t> gui_frame;
-                gui_frame.insert(gui_frame.end(), (uint8_t *)&hdr, (uint8_t *)&hdr + sizeof(FrameHeader));
-                gui_frame.insert(gui_frame.end(), full_packet.begin(), full_packet.end());
-                data.ip_sockets_bytes.write(gui_frame);
-
                 continue;
             }
 
