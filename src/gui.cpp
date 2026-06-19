@@ -1,5 +1,5 @@
-#include "bridges.hpp"
 #include "gui/app.hpp"
+#include "bridges.hpp"
 
 #include <functional>
 #include <string>
@@ -22,7 +22,7 @@ int main()
     }
 
     {
-        ThreadJoiner control { "control", std::jthread(run_control_bridge_server, std::ref(sock)), "gui" };
+        ThreadJoiner control{ "control", std::jthread(run_control_bridge_server, std::ref(sock)), "gui" };
         ThreadJoiner gui{ "gui", std::jthread(run_gui, std::ref(bufs), std::ref(all_sockets), std::ref(sock), std::ref(quit)), "gui" };
         ThreadJoiner dsp_bridge{ "dsp_bridge", std::jthread(run_dsp_bridge, std::ref(bufs), std::ref(sock)), "gui" };
         ThreadJoiner ip_brigde{ "ip_brigde", std::jthread(run_ip_brigde, std::ref(bufs), std::ref(sock)), "gui" };
