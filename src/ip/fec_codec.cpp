@@ -77,9 +77,9 @@ std::vector<uint8_t> viterbi_decoder_llr(const std::vector<float> &llr)
             transitions[state][input_bit] = { next_state, b1, b2 };
         }
     }
-    std::array<int, num_states> cur_metrics;
-    cur_metrics[0] = 0;
-    std::fill(cur_metrics.begin() + 1, cur_metrics.end(), VINF);
+    std::array<float, num_states> cur_metrics;
+    cur_metrics[0] = 0.0f;
+    std::fill(cur_metrics.begin() + 1, cur_metrics.end(), VINF_F);
     std::vector<int> history(T * num_states, -1);
 
     for (size_t t = 0; t < T; ++t)
@@ -89,11 +89,11 @@ std::vector<uint8_t> viterbi_decoder_llr(const std::vector<float> &llr)
             logs::tun.error("[VIT] OOB llr access: t={}, idx2={}, size={}", t, t * 2 + 1, llr.size());
             return {};
         }
-        std::array<int, num_states> next_metrics;
-        std::fill(next_metrics.begin(), next_metrics.end(), VINF);
+        std::array<float, num_states> next_metrics;
+        std::fill(next_metrics.begin(), next_metrics.end(), VINF_F);
         for (uint8_t prev_state = 0; prev_state < num_states; ++prev_state)
         {
-            if (cur_metrics[prev_state] == VINF)
+            if (cur_metrics[prev_state] == VINF_F)
             {
                 continue;
             }
@@ -103,7 +103,8 @@ std::vector<uint8_t> viterbi_decoder_llr(const std::vector<float> &llr)
                 uint8_t u1 = transitions[prev_state][input_bit].b1;
                 uint8_t u2 = transitions[prev_state][input_bit].b2;
                 float ham_s = (u1 == 0 ? -llr[t * 2] : llr[t * 2]) + (u2 == 0 ? -llr[t * 2 + 1] : llr[t * 2 + 1]);
-                int candidate = cur_metrics[prev_state] + ham_s;
+                float candidate = cur_metrics[prev_state] + ham_s;
+
                 if (candidate < next_metrics[next_state])
                 {
                     next_metrics[next_state] = candidate;

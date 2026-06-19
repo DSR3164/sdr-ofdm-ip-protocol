@@ -39,4 +39,4 @@ constexpr uint8_t g_2 = 5;
 constexpr int m = 2;
 constexpr int n = 2;
 constexpr uint8_t num_states = 1 << m;
-constexpr int VINF = 100000;
+constexpr float VINF_F = 1e9f;
