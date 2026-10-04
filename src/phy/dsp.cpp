@@ -1186,6 +1186,8 @@ int run_dsp_tx(SharedData &data)
     std::vector<uint8_t> bits;
     std::vector<int16_t> buffer;
 
+    uint64_t tx_dsp_counter = 0;
+
     while (!has_flag(data.sdr.get_flags(), Flags::IS_ACTIVE))
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
@@ -1196,6 +1198,7 @@ int run_dsp_tx(SharedData &data)
 
         scramble(bits);
         ofdm(bits, buffer, data.dsp);
+        ++tx_dsp_counter;
         logs::dsp.trace("[{}] modulate {} samples", fmt::format(fmt::fg(fmt::color::cyan), "OFDM"), buffer.size());
         data.sdr_dsp_tx.write(buffer);
     }

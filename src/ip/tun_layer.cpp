@@ -7,6 +7,7 @@
 #include <linux/if.h>
 #include <linux/if_tun.h>
 #include <netinet/in.h>
+#include <optional>
 #include <string>
 #include <sys/ioctl.h>
 

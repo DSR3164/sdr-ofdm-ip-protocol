@@ -54,18 +54,11 @@ if(NOT GLEW_FOUND)
   fetchcontent_makeavailable(glew)
 endif()
 
-# ---------- SoapySDR ----------
-find_package(SoapySDR CONFIG QUIET)
+# ---------- UHD ----------
 
-if(NOT SoapySDR_FOUND)
-  message(STATUS "SoapySDR not found, fetching...")
-  fetchcontent_declare(
-    SoapySDR
-    GIT_REPOSITORY https://github.com/pothosware/SoapySDR
-    GIT_TAG soapy-sdr-0.8.1
-  )
-  fetchcontent_makeavailable(SoapySDR)
-endif()
+find_package(UHD CONFIG REQUIRED)
+
+message(STATUS "Found UHD: ${UHD_VERSION}")
 
 # ---------- ImGui ----------
 fetchcontent_declare(
@@ -123,14 +116,6 @@ fetchcontent_declare(
 )
 
 fetchcontent_makeavailable(implot)
-
-if(TARGET SoapySDR::SoapySDR)
-  set(SOAPY_TARGET SoapySDR::SoapySDR)
-elseif(TARGET SoapySDR)
-  set(SOAPY_TARGET SoapySDR)
-else()
-  message(FATAL_ERROR "SoapySDR target not found")
-endif()
 
 add_library(implot STATIC
   ${implot_SOURCE_DIR}/implot.cpp
@@ -248,7 +233,7 @@ target_include_directories(soip_gui
 
 target_link_libraries(soip_core
   PRIVATE
-  ${SOAPY_TARGET}
+  ${UHD_LIBRARIES}
   ${FFTW3F_LIB}
   PUBLIC
   Threads::Threads

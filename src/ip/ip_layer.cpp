@@ -181,7 +181,7 @@ void run_tun_tx(SharedData &data)
                     logs::tun.debug("[TX] bits size: {}", bits.size());
 
                     data.ip_phy.write(bits, true);
-                    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                    // std::this_thread::sleep_for(std::chrono::milliseconds(2));
 
                     logs::tun.trace("Sent {} chunk: seq {}, id {}, size {}, flags {:02X}", encoded.size(), packet_seq - 1, packet_id, chunk_size, hflag);
                     offset += chunk_size;
@@ -242,6 +242,9 @@ void run_tun_rx(SharedData &data)
             logs::tun.debug("[{}] Bad magic: 0x{:04X}", tun_name, ntohs(hdr.magic));
             continue;
         }
+
+        logs::tun.debug("RX frame: {}, packet id: {}", ntohs(hdr.seq), ntohs(hdr.id));
+
         uint16_t current_id = ntohs(hdr.id);
         int16_t diff = (int16_t)(current_id - last_id);
         if (diff > 1 && last_id_valid)

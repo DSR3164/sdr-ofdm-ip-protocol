@@ -2,9 +2,10 @@
 
 #include "logger.hpp"
 
-#include <SoapySDR/Device.hpp>
 #include <cstdint>
 #include <fftw3.h>
+#include <uhd/stream.hpp>
+#include <uhd/usrp/multi_usrp.hpp>
 #include <vector>
 
 enum class Flags : uint16_t
@@ -97,12 +98,13 @@ class SDR {
     [[nodiscard]] bool reinit();
     [[nodiscard]] bool deinit();
     [[nodiscard]] bool check_connection();
+    void start_rx();
     void scan();
     void wait_connection();
     int add_args();
     void apply_runtime();
 
-    int readstream(std::vector<int16_t> &send);
+    int readstream(std::vector<int16_t> &recv);
     int writestream(std::vector<int16_t> &send);
 
     void set_rx_freq(float f)
@@ -140,23 +142,18 @@ class SDR {
         (flags |= flag);
         return true;
     }
-
-    static constexpr int RX = SOAPY_SDR_RX;
-    static constexpr int TX = SOAPY_SDR_TX;
   private:
     std::atomic<bool> &cond;
     SDRConfig cfg;
     Flags flags = Flags::None;
 
-    size_t channels[1] = { 0 };
-    SoapySDR::Device *sdr = nullptr;
-    SoapySDR::Stream *rxStream = nullptr;
-    SoapySDR::Stream *txStream = nullptr;
-    SoapySDR::Kwargs args;
+    uhd::usrp::multi_usrp::sptr usrp = nullptr;
 
+    uhd::rx_streamer::sptr rxStream = nullptr;
+    uhd::tx_streamer::sptr txStream = nullptr;
+
+    uhd::device_addr_t args;
     size_t connection_retries = 0;
-    int sdr_flags = 0;
-    long long timeNs = 0;
-    long long timeNSdelay = 2e6;
-    long timeoutUs = 0;
+    double time_delay_ns = 2e6;
+    double timeout = 0.4;
 };

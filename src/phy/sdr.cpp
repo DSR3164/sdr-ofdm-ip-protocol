@@ -1,38 +1,12 @@
 #include "logger.hpp"
 #include "phy/sdr.hpp"
 
-#include <SoapySDR/Device.hpp>
-#include <SoapySDR/Formats.hpp>
-#include <SoapySDR/Logger.hpp>
-
-void soapy_log_handler(const SoapySDRLogLevel logLevel, const char *message)
-{
-    static auto tag = fmt::format(fmt::fg(fmt::color::blue_violet), "SoapySDR");
-    switch (logLevel)
-    {
-    case SOAPY_SDR_FATAL:
-        logs::sdr.critical("[{}] {}", tag, message);
-        break;
-    case SOAPY_SDR_ERROR:
-        logs::sdr.error("[{}] {}", tag, message);
-        break;
-    case SOAPY_SDR_WARNING:
-        logs::sdr.warn("[{}] {}", tag, message);
-        break;
-    case SOAPY_SDR_INFO:
-        logs::sdr.info("[{}] {}", tag, message);
-        break;
-    default:
-        logs::sdr.debug("[{}] {}", tag, message);
-        break;
-    }
-}
+#include <uhd/types/device_addr.hpp>
 
 SDR::SDR(const SDRConfig &config, std::atomic<bool> &stop_condition)
     : cond(stop_condition),
       cfg(config)
 {
-    SoapySDR::registerLogHandler(soapy_log_handler);
     scan();
 }
 
@@ -51,64 +25,71 @@ bool SDR::init()
 {
     if (cond.load())
         return false;
-    if (cfg.enable_rx and cfg.enable_tx)
-        SDR::add_args();
-    sdr = SoapySDR::Device::make(args);
 
-    if (!sdr)
+    usrp = uhd::usrp::multi_usrp::make(args);
+
+    if (!usrp)
     {
-        logs::sdr.error("Failed to create SDR: {}", args["uri"]);
-        return 0;
+        logs::sdr.error("Failed to create USRP");
+        return false;
     }
 
-    // RX parameters
-    sdr->setSampleRate(RX, 0, cfg.sample_rate);
-    sdr->setFrequency(RX, 0, cfg.rx_freq);
-    sdr->setGain(RX, 0, cfg.rx_gain);
-    // sdr->setGainMode(RX, 0, false);
-    // sdr->setBandwidth(RX, 0, rx_bandwidth);
+    // RX
+    usrp->set_rx_rate(cfg.sample_rate, 0);
+    usrp->set_rx_freq(cfg.rx_freq, 0);
+    usrp->set_rx_gain(cfg.rx_gain, 0);
+    usrp->set_rx_bandwidth(cfg.rx_bandwidth, 0);
 
-    // TX parameters
-    sdr->setSampleRate(TX, 0, cfg.sample_rate);
-    sdr->setFrequency(TX, 0, cfg.tx_freq);
-    sdr->setGain(TX, 0, cfg.tx_gain);
-    // sdr->setGainMode(TX, 0, false);
-    // sdr->setBandwidth(TX, 0, tx_bandwidth);
+    // TX
+    usrp->set_tx_rate(cfg.sample_rate, 0);
+    usrp->set_tx_freq(cfg.tx_freq, 0);
+    usrp->set_tx_gain(cfg.tx_gain, 0);
+    usrp->set_tx_bandwidth(cfg.tx_bandwidth, 0);
 
-    sdr->setDCOffsetMode(RX, 0, true);
-    sdr->setDCOffsetMode(TX, 0, true);
-    sdr->setIQBalanceMode(RX, 0, true);
-    sdr->setIQBalanceMode(TX, 0, true);
-
-    // Stream parameters
-    std::vector<size_t> channels = { 0 };
     if (cfg.enable_rx)
     {
-        rxStream = sdr->setupStream(RX, SOAPY_SDR_CS16, channels);
-        if (sdr->activateStream(rxStream, 0, 0, 0) == 0)
-            logs::sdr.info("{} stream is active", fmt::format(fg(fmt::color::cyan), "RX"));
+        uhd::stream_args_t stream_args;
+        stream_args.cpu_format = "sc16";
+        stream_args.otw_format = "sc16";
+        stream_args.channels = { 0 };
+
+        rxStream = usrp->get_rx_stream(stream_args);
     }
+
     if (cfg.enable_tx)
     {
-        txStream = sdr->setupStream(TX, SOAPY_SDR_CS16, channels);
-        if (sdr->activateStream(txStream, 0, 0, 0) == 0)
-            logs::sdr.info("{} stream is active", fmt::format(fg(fmt::color::cyan), "TX"));
+        uhd::stream_args_t stream_args;
+        stream_args.cpu_format = "sc16";
+        stream_args.otw_format = "sc16";
+        stream_args.channels = { 0 };
+
+        txStream = usrp->get_tx_stream(stream_args);
+
+        logs::sdr.info(
+            "{} stream is active",
+            fmt::format(fg(fmt::color::cyan), "TX")
+        );
     }
-    auto rx_gain_range = sdr->getGainRange(SOAPY_SDR_RX, 0);
-    auto tx_gain_range = sdr->getGainRange(SOAPY_SDR_TX, 0);
-    auto rx_carrier_range = sdr->getFrequencyRange(SOAPY_SDR_RX, 0);
-    auto tx_carrier_range = sdr->getFrequencyRange(SOAPY_SDR_TX, 0);
 
-    logs::sdr.debug("SDR Sample Rate: {:.3f} MHz", sdr->getSampleRate(SOAPY_SDR_RX, 0) / 1e6);
-    logs::sdr.debug("SDR RX Gain range: {:.2f} dB -> {:.2f} dB", rx_gain_range.minimum(), rx_gain_range.maximum());
-    logs::sdr.debug("SDR TX Gain range: {:.2f} dB -> {:.2f} dB", tx_gain_range.minimum(), tx_gain_range.maximum());
-    logs::sdr.debug("SDR RX Carrier range: {:.2f} MHz -> {:.2f} GHz", rx_carrier_range[0].minimum() / 1e6, rx_carrier_range[0].maximum() / 1e9);
-    logs::sdr.debug("SDR TX Carrier range: {:.2f} MHz -> {:.2f} GHz", tx_carrier_range[0].minimum() / 1e6, tx_carrier_range[0].maximum() / 1e9);
-
-    logs::sdr.info("Create SDR: {}", args["uri"]);
     flags |= Flags::IS_ACTIVE;
 
     return true;
+}
+
+void SDR::start_rx()
+{
+    uhd::stream_cmd_t stream_cmd(
+        uhd::stream_cmd_t::STREAM_MODE_START_CONTINUOUS
+    );
+
+    stream_cmd.stream_now = true;
+
+    rxStream->issue_stream_cmd(stream_cmd);
+
+    logs::sdr.info(
+        "{} stream is active",
+        fmt::format(fg(fmt::color::cyan), "RX")
+    );
 }
 
 /*!
@@ -122,19 +103,30 @@ bool SDR::init()
  */
 int SDR::readstream(std::vector<int16_t> &recv)
 {
-    void *rxbuffs[] = { recv.data() };
+    uhd::rx_metadata_t metadata;
 
-    int ret = sdr->readStream(
-        rxStream,
-        rxbuffs,
-        cfg.buffer_size,
-        sdr_flags,
-        timeNs,
-        timeoutUs
+    const size_t samples = recv.size() / 2;
+
+    size_t ret = rxStream->recv(
+        recv.data(),
+        samples,
+        metadata,
+        timeout,
+        false
     );
 
-    return ret;
-};
+    if (metadata.error_code != uhd::rx_metadata_t::ERROR_CODE_NONE)
+    {
+        logs::sdr.error(
+            "RX error: {}",
+            metadata.strerror()
+        );
+
+        return -1;
+    }
+
+    return static_cast<int>(ret);
+}
 
 /*!
  * \brief Write samples to SDR TX stream.
@@ -147,19 +139,24 @@ int SDR::readstream(std::vector<int16_t> &recv)
  */
 int SDR::writestream(std::vector<int16_t> &send)
 {
-    void *txbuffs[] = { send.data() };
+    uhd::tx_metadata_t metadata;
+    metadata.start_of_burst = true;
+    metadata.end_of_burst = true;
+    metadata.has_time_spec = false;
 
-    int ret = sdr->writeStream(
-        txStream,
-        txbuffs,
-        cfg.buffer_size,
-        sdr_flags,
-        timeNs + timeNSdelay,
-        timeoutUs
+    const size_t samples = send.size() / 2;
+
+    size_t ret = txStream->send(
+        send.data(),
+        samples,
+        metadata,
+        timeout
     );
 
-    return ret;
-};
+    logs::sdr.info("TX requested {}, sent {}", samples, ret);
+
+    return static_cast<int>(ret);
+}
 
 /*!
  * \brief Deinitialize SDR device and release resources.
@@ -173,29 +170,35 @@ int SDR::writestream(std::vector<int16_t> &send)
  */
 bool SDR::deinit()
 {
-    if (sdr == nullptr)
+    if (usrp == nullptr)
         return false;
 
-    if (sdr)
+    if (rxStream)
     {
-        if (rxStream)
-        {
-            sdr->deactivateStream(rxStream, 0, 0);
-            sdr->closeStream(rxStream);
-            rxStream = nullptr;
-        }
-        if (txStream)
-        {
-            sdr->deactivateStream(txStream, 0, 0);
-            sdr->closeStream(txStream);
-            txStream = nullptr;
-        }
-        logs::sdr.info("Delete SDR: {}", args["uri"]);
-        SoapySDR::Device::unmake(sdr);
-        flags &= ~Flags::IS_ACTIVE;
-        flags &= ~Flags::FOUND;
-        sdr = nullptr;
+        uhd::stream_cmd_t stream_cmd(
+            uhd::stream_cmd_t::STREAM_MODE_STOP_CONTINUOUS
+        );
+
+        rxStream->issue_stream_cmd(stream_cmd);
+
+        rxStream = nullptr;
     }
+
+    if (txStream)
+    {
+        txStream = nullptr;
+    }
+
+    logs::sdr.info(
+        "Delete USRP: {}",
+        args.to_string()
+    );
+
+    usrp.reset();
+
+    flags &= ~Flags::IS_ACTIVE;
+    flags &= ~Flags::FOUND;
+
     return true;
 }
 
@@ -223,11 +226,17 @@ bool SDR::reinit()
 
 void SDR::scan()
 {
-    auto list = SoapySDR::Device::enumerate();
-    if (!list.empty() and (list[0]["uri"] != "ip:pluto.local"))
+    auto list = uhd::device::find(uhd::device_addr_t{});
+
+    if (!list.empty())
     {
         args = list[0];
-        logs::sdr.info("Found SDR: {}", args["uri"]);
+
+        logs::sdr.info(
+            "Found USRP: {}",
+            args.to_string()
+        );
+
         if (cfg.init_on_start)
             flags |= Flags::FOUND;
     }
@@ -253,32 +262,51 @@ void SDR::wait_connection()
 
 bool SDR::check_connection()
 {
-    if (!sdr || !has_flag(flags, Flags::IS_ACTIVE))
+    if (!usrp || !has_flag(flags, Flags::IS_ACTIVE))
         return false;
 
-    SoapySDR::Kwargs filter;
-    filter["uri"] = args["uri"];
-    filter["driver"] = args["driver"];
-    auto msg = fmt::format(fg(fmt::color::green), "waiting for connection...");
-    logs::sdr.warn("SDR {} seems to be disconnected, trying to find it", args["uri"]);
-    auto found = SoapySDR::Device::enumerate(filter);
+    auto msg = fmt::format(
+        fg(fmt::color::green),
+        "waiting for connection..."
+    );
+
+    logs::sdr.warn(
+        "USRP seems to be disconnected, trying to find it"
+    );
+
+    auto found = uhd::device::find(args);
 
     if (found.empty())
     {
         if (cfg.exit_on_error)
         {
-            msg = fmt::format(fg(fmt::color::red), "closing application");
-            logs::sdr.critical("SDR {} was disconnected, {}", args["uri"], msg);
+            msg = fmt::format(
+                fg(fmt::color::red),
+                "closing application"
+            );
+
+            logs::sdr.critical(
+                "USRP was disconnected, {}",
+                msg
+            );
+
             return false;
         }
+
         if (deinit())
         {
-            logs::sdr.critical("SDR {} was disconnected, {}", args["uri"], msg);
+            logs::sdr.critical(
+                "USRP was disconnected, {}",
+                msg
+            );
+
             wait_connection();
+
             if (!init())
                 return false;
         }
     }
+
     return true;
 }
 
@@ -293,12 +321,9 @@ bool SDR::check_connection()
  */
 int SDR::add_args()
 {
-    args["direct"] = "1";
-    args["timestamp_every"] = "1920";
-    args["loopback"] = "0";
-    sdr_flags = SOAPY_SDR_HAS_TIME;
-    timeoutUs = 400000;
-    timeNSdelay = 2e6;
+    timeout = 0.4;
+    time_delay_ns = 2e6;
+
     return 0;
 }
 
@@ -317,35 +342,38 @@ int SDR::add_args()
  */
 void SDR::apply_runtime()
 {
-    if (!sdr)
+    if (!usrp)
         return;
 
     if ((flags & Flags::APPLY_FREQUENCY) != Flags::None)
     {
+        usrp->set_tx_freq(cfg.tx_freq, 0);
+        usrp->set_rx_freq(cfg.rx_freq, 0);
 
-        sdr->setFrequency(TX, 0, cfg.tx_freq);
-        sdr->setFrequency(RX, 0, cfg.rx_freq);
         flags &= ~Flags::APPLY_FREQUENCY;
     }
 
     if ((flags & Flags::APPLY_BANDWIDTH) != Flags::None)
     {
-        sdr->setBandwidth(TX, 0, cfg.tx_bandwidth);
-        sdr->setBandwidth(RX, 0, cfg.rx_bandwidth);
+        usrp->set_tx_bandwidth(cfg.tx_bandwidth, 0);
+        usrp->set_rx_bandwidth(cfg.rx_bandwidth, 0);
+
         flags &= ~Flags::APPLY_BANDWIDTH;
     }
 
     if ((flags & Flags::APPLY_GAIN) != Flags::None)
     {
-        sdr->setGain(TX, 0, cfg.tx_gain);
-        sdr->setGain(RX, 0, cfg.rx_gain);
+        usrp->set_tx_gain(cfg.tx_gain, 0);
+        usrp->set_rx_gain(cfg.rx_gain, 0);
+
         flags &= ~Flags::APPLY_GAIN;
     }
 
     if ((flags & Flags::APPLY_SAMPLE_RATE) != Flags::None)
     {
-        sdr->setSampleRate(RX, 0, cfg.sample_rate);
-        sdr->setSampleRate(TX, 0, cfg.sample_rate);
+        usrp->set_rx_rate(cfg.sample_rate, 0);
+        usrp->set_tx_rate(cfg.sample_rate, 0);
+
         flags &= ~Flags::APPLY_SAMPLE_RATE;
     }
 }

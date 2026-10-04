@@ -49,9 +49,17 @@ int main(int argc, char *argv[])
 
     socketData socket;
 
+    if (!data.sdr.init())
+    {
+        logs::sdr.error("Initialization error");
+        return 1;
+    }
+
     ThreadJoiner tun_tx{ "tun_tx", std::jthread(run_tun_tx, std::ref(data)), "main" };
     ThreadJoiner rx_thread{ "tun_rx", std::jthread(run_tun_rx, std::ref(data)), "main" };
-    ThreadJoiner sdr{ "sdr", std::jthread(run_sdr, std::ref(data)), "main" };
+    ThreadJoiner sdr_rx{ "sdr_rx", std::jthread(run_sdr_rx, std::ref(data)), "main" };
+
+    ThreadJoiner sdr_tx{ "sdr_tx", std::jthread(run_sdr_tx, std::ref(data)), "main" };
     ThreadJoiner dsp_tx{ "dsp_tx", std::jthread(run_dsp_tx, std::ref(data)), "main" };
     ThreadJoiner dsp_rx{ "dsp_rx", std::jthread(run_dsp_rx, std::ref(data)), "main" };
     ThreadJoiner control{ "control", std::jthread(run_control_bridge_client, std::ref(data), std::ref(socket)), "main" };
