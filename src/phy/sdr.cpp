@@ -140,8 +140,8 @@ int SDR::readstream(std::vector<int16_t> &recv)
 int SDR::writestream(std::vector<int16_t> &send)
 {
     uhd::tx_metadata_t metadata;
-    metadata.start_of_burst = true;
-    metadata.end_of_burst = true;
+    metadata.start_of_burst = false;
+    metadata.end_of_burst = false;
     metadata.has_time_spec = false;
 
     const size_t samples = send.size() / 2;
