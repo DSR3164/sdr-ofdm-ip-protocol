@@ -38,6 +38,8 @@ std::optional<CliConfig> parse_cli(int argc, char *argv[])
     ("n,node", "Base Node settings (A / B)", cxxopts::value<std::string>())
     ("r,rx", "Set RX frequency (Hz)", cxxopts::value<double>()->implicit_value("2200000000"))
     ("t,tx", "Set TX frequency (Hz)", cxxopts::value<double>()->implicit_value("2230000000"))
+    ("rg,rxgain", "Set RX Gain (dB)", cxxopts::value<float>()->default_value("25.0"))
+    ("tg,txgain", "Set TX Gain (dB)", cxxopts::value<float>()->default_value("45.0"))
     ("i,ip", "Set IP Adress", cxxopts::value<std::string>()->default_value("10.0.0.2"))
     ("log-level", "Log level for all (trace/debug/info/warn/error/critical)", cxxopts::value<std::string>()->default_value("info"))
     ("log-sdr", "Log level for SDR", cxxopts::value<std::string>())
@@ -167,6 +169,11 @@ std::optional<CliConfig> parse_cli(int argc, char *argv[])
     if (result.count("tx") && !result.count("n"))
         cfg.tx_freq = result["tx"].as<double>();
 
+    if (result.count("rxgain"))
+        cfg.rx_gain = result["rxgain"].as<float>();
+    if (result.count("txgain"))
+        cfg.tx_gain = result["txgain"].as<float>();
+
     if (result.count("ip") && !result.count("n"))
         cfg.ip = result["ip"].as<std::string>();
 
@@ -205,6 +212,11 @@ void set_cli_opts(SharedData &data, CliConfig &cfg)
         data.sdr.set_rx_freq(*cfg.rx_freq);
     if (cfg.tx_freq)
         data.sdr.set_tx_freq(*cfg.tx_freq);
+
+    if (cfg.rx_gain)
+        data.sdr.set_rx_gain(*cfg.rx_gain);
+    if (cfg.tx_gain)
+        data.sdr.set_tx_gain(*cfg.tx_gain);
 
     if (cfg.ip)
         data.ip_addr = *cfg.ip;
