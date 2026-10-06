@@ -13,26 +13,27 @@ void ip_dev(App &app, Buffers &data) // IP layer
 
     data.ip.read(bytes);
 
-    const uint8_t *raw_ptr_bytes = reinterpret_cast<const uint8_t *>(bytes.data());
-
-    const char *flag = "None";
-    uint8_t flag_byte = raw_ptr_bytes[8];
-
-    if ((flag_byte & 0x01) && (flag_byte & 0x02))
-        flag = "First n Last";
-    else if (flag_byte & 0x01)
-        flag = "Last";
-    else if (flag_byte & 0x02)
-        flag = "First";
-
     if (ImGui::Begin("IP Layer"))
     {
-        if (bytes.size() < sizeof(FrameHeader) + 20)
+        if (bytes.size() < 9 || bytes.size() < sizeof(FrameHeader) + 20)
         {
-            ImGui::Text("Packet too short");
+            ImGui::Text("Packet too short или поврежден");
             ImGui::End();
             return;
         }
+
+        const uint8_t *raw_ptr_bytes = reinterpret_cast<const uint8_t *>(bytes.data());
+
+        const char *flag = "None";
+        uint8_t flag_byte = raw_ptr_bytes[8];
+
+        if ((flag_byte & 0x01) && (flag_byte & 0x02))
+            flag = "First n Last";
+        else if (flag_byte & 0x01)
+            flag = "Last";
+        else if (flag_byte & 0x02)
+            flag = "First";
+
         // clang-format off
         ImGui::Text("[Hdr] Magic=0x%04X PLen=%d Seq=%d Id=%d Flags=%s",
             (raw_ptr_bytes[0] << 8) | raw_ptr_bytes[1],
@@ -41,7 +42,7 @@ void ip_dev(App &app, Buffers &data) // IP layer
             (raw_ptr_bytes[6] << 8) | raw_ptr_bytes[7],
             flag
         );
-        
+
         const uint8_t* ip = raw_ptr_bytes + sizeof(FrameHeader);
         ImGui::Text(
             "[IP] Ver=%d HLen=%d TOS=%02X Len=%d Proto=%d Src=%d.%d.%d.%d Dest=%d.%d.%d.%d",
