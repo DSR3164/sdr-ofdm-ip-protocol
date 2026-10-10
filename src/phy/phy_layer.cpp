@@ -92,7 +92,7 @@ int run_sdr_rx(SharedData &data)
 
         if (ret_rx == sdr.get_buffer_size())
             data.sdr_dsp_rx.swap(true);
-        else if (ret_rx > 0)
+        else if (ret_rx < 0)
         {
             logs::sdr.warn(
                 "[RX] read only {} samples",
