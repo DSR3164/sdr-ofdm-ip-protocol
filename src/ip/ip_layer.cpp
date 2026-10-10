@@ -185,7 +185,6 @@ void run_tun_tx(SharedData &data)
 
                     logs::tun.debug("[TX] bits size: {}", bits.size());
 
-                    logs::tun.info("[TX PUSH] packet_id: {}, seq: {}", packet_id, packet_seq - 1);
                     data.ip_phy.write(bits, true);
                     std::this_thread::sleep_for(std::chrono::milliseconds(2));
 
