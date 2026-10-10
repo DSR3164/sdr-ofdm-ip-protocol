@@ -2,6 +2,7 @@
 
 #include "phy/sdr.hpp"
 #include "ip/fec_codec.hpp"
+#include "ip/tun_layer.hpp"
 
 #include <atomic>
 #include <cmath>
@@ -260,9 +261,10 @@ struct SharedData {
     StatsHistory<60000> history;
     StatsSnapshot snap;
 
-    std::string ip_addr;
+    std::shared_ptr<TunDevice> tun;
     int tun_fd;
-    char tun_name[16] = "";
+    std::string ip_addr;
+    std::string tun_name;
 
     PunctConfig punct_cfg;
 

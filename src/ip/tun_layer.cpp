@@ -1,98 +1,146 @@
-#include "logger.hpp"
+#include "ip/tun_layer.hpp"
 
-#include <arpa/inet.h>
-#include <cstdio>
-#include <cstring>
-#include <fcntl.h>
-#include <linux/if.h>
-#include <linux/if_tun.h>
-#include <netinet/in.h>
-#include <optional>
-#include <string>
-#include <sys/ioctl.h>
-
-int allocate_tun(char *dev)
+TunDevice::TunDevice(std::string name)
 {
-    struct ifreq ifr;
-
-    int fd = open("/dev/net/tun", O_RDWR | O_NONBLOCK);
-    if (fd < 0)
+    fd_ = open("/dev/net/tun", O_RDWR | O_NONBLOCK);
+    if (fd_ < 0)
     {
         logs::tun.critical("Failed to open /dev/net/tun: {} (errno {})", strerror(errno), errno);
-        return fd;
+        return;
     }
 
-    logs::tun.info("TUN device opened successfully, fd: {}", fd);
-
-    memset(&ifr, 0, sizeof(ifr));
+    struct ifreq ifr;
+    std::memset(&ifr, 0, sizeof(ifr));
     ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
-    if (*dev)
-        strncpy(ifr.ifr_name, dev, IFNAMSIZ);
 
-    int err = ioctl(fd, TUNSETIFF, (void *)&ifr);
-    if (err < 0)
+    if (!name.empty())
+        strncpy(ifr.ifr_name, name.c_str(), IFNAMSIZ - 1);
+
+    if (ioctl(fd_, TUNSETIFF, static_cast<void *>(&ifr)) < 0)
     {
-        logs::tun.critical("ioctl(TUNSETIFF) failed: {} (errno {})", strerror(errno), errno);
-        close(fd);
-        return err;
+        logs::tun.critical("ioctl(TUNSETIFF) failed on {}: {} (errno {})", name, strerror(errno), errno);
+        close_fd();
+        return;
     }
 
-    logs::tun.info("TUN interface allocated: {}", ifr.ifr_name);
-
-    strcpy(dev, ifr.ifr_name);
-    return fd;
+    name_ = ifr.ifr_name;
+    logs::tun.info("TUN interface allocated: {}, fd: {}", name_, fd_);
 }
 
-std::optional<std::string> set_interface_ip(const char *dev_name, std::string ip_addr)
+bool TunDevice::set_ip_and_up(const std::string &ip, const std::string &netmask)
 {
-    int sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock < 0)
+    if (fd_ < 0)
     {
-        logs::tun.error("Socket creation failed: {}", strerror(errno));
-        return std::nullopt;
+        logs::tun.error("Cannot configure IP: TUN device is not initialized");
+        return false;
     }
 
-    struct ifreq ifr = {};
+    struct SockCloser {
+        int fd{ -1 };
+        ~SockCloser()
+        {
+            if (fd >= 0)
+                close(fd);
+        }
+    } sock_guard{ socket(AF_INET, SOCK_DGRAM, 0) };
+
+    if (sock_guard.fd < 0)
+    {
+        logs::tun.error("Failed to open socket for ioctl: {} (errno {})", strerror(errno), errno);
+        return false;
+    }
+
+    int sock = sock_guard.fd;
+    struct ifreq ifr;
+    struct sockaddr_in *sin = reinterpret_cast<struct sockaddr_in *>(&ifr.ifr_addr);
+
     memset(&ifr, 0, sizeof(ifr));
-    strncpy(ifr.ifr_name, dev_name, IFNAMSIZ - 1);
+    strncpy(ifr.ifr_name, get_name().c_str(), IFNAMSIZ - 1);
 
-    char ip[INET_ADDRSTRLEN];
-    snprintf(ip, sizeof(ip), "%s", ip_addr.c_str());
-
-    struct sockaddr_in *addr = (struct sockaddr_in *)&ifr.ifr_addr;
-    addr->sin_family = AF_INET;
-    inet_pton(AF_INET, ip, &addr->sin_addr);
+    sin->sin_family = AF_INET;
+    if (inet_pton(AF_INET, ip.c_str(), &sin->sin_addr) <= 0)
+    {
+        logs::tun.error("Invalid IP address format: {}", ip);
+        return false;
+    }
 
     if (ioctl(sock, SIOCSIFADDR, &ifr) < 0)
     {
-        logs::tun.error("SIOCSIFADDR failed: {}", strerror(errno));
-        close(sock);
-        return std::nullopt;
+        logs::tun.error("SIOCSIFADDR failed for {}: {} (errno {})", name_, strerror(errno), errno);
+        return false;
     }
-    logs::tun.info("IP {} assigned to {}", ip, dev_name);
 
-    struct sockaddr_in *netmask = (struct sockaddr_in *)&ifr.ifr_netmask;
-    netmask->sin_family = AF_INET;
-    inet_pton(AF_INET, "255.255.255.252", &netmask->sin_addr);
+    memset(&ifr, 0, sizeof(ifr));
+    strncpy(ifr.ifr_name, get_name().c_str(), IFNAMSIZ - 1);
+
+    sin->sin_family = AF_INET;
+    if (inet_pton(AF_INET, netmask.c_str(), &sin->sin_addr) <= 0)
+    {
+        logs::tun.error("Invalid NetMask format: {}", netmask);
+        return false;
+    }
 
     if (ioctl(sock, SIOCSIFNETMASK, &ifr) < 0)
-        logs::tun.error("SIOCSIFNETMASK failed: {}", strerror(errno));
-
-    if (ioctl(sock, SIOCGIFFLAGS, &ifr) < 0)
-        logs::tun.error("SIOCGIFFLAGS failed: {}", strerror(errno));
-    else
     {
-        ifr.ifr_flags |= IFF_UP | IFF_RUNNING;
-        if (ioctl(sock, SIOCSIFFLAGS, &ifr) < 0)
-            logs::tun.error("SIOCSIFFLAGS failed: {}", strerror(errno));
-        else
-            logs::tun.info("Interface {} is UP", dev_name);
+        logs::tun.error("SIOCSIFNETMASK failed for {}: {} (errno {})", name_, strerror(errno), errno);
+        return false;
     }
 
-    ifr.ifr_mtu = 1500;
-    if (ioctl(sock, SIOCSIFMTU, &ifr) < 0)
-        logs::tun.error("SIOCSIFMTU failed: {}", strerror(errno));
+    memset(&ifr, 0, sizeof(ifr));
+    strncpy(ifr.ifr_name, get_name().c_str(), IFNAMSIZ - 1);
 
-    close(sock);
-    return std::string(ip);
+    if (ioctl(sock, SIOCGIFFLAGS, &ifr) < 0)
+    {
+        logs::tun.error("SIOCGIFFLAGS failed on {}: {} (errno {})", name_, strerror(errno), errno);
+        return false;
+    }
+
+    ifr.ifr_flags |= (IFF_UP | IFF_RUNNING);
+
+    if (ioctl(sock, SIOCSIFFLAGS, &ifr) < 0)
+    {
+        logs::tun.error("SIOCSIFFLAGS failed on {}: {} (errno {})", name_, strerror(errno), errno);
+        return false;
+    }
+
+    logs::tun.info("Interface {} configured with IP {}/{} and brought UP", name_, ip, netmask);
+    return true;
+}
+
+bool TunDevice::set_mtu(int mtu)
+{
+    if (fd_ < 0)
+    {
+        logs::tun.error("Cannot set MTU: TUN device is not initialized");
+        return false;
+    }
+
+    struct SockCloser {
+        int fd{ -1 };
+        ~SockCloser()
+        {
+            if (fd >= 0)
+                close(fd);
+        }
+    } sock_guard{ socket(AF_INET, SOCK_DGRAM, 0) };
+
+    if (sock_guard.fd < 0)
+    {
+        logs::tun.error("Failed to open socket for set_mtu: {} (errno {})", strerror(errno), errno);
+        return false;
+    }
+
+    struct ifreq ifr;
+    std::memset(&ifr, 0, sizeof(ifr));
+    std::strncpy(ifr.ifr_name, name_.c_str(), IFNAMSIZ - 1);
+    ifr.ifr_mtu = mtu;
+
+    if (ioctl(sock_guard.fd, SIOCSIFMTU, &ifr) < 0)
+    {
+        logs::tun.error("SIOCSIFMTU failed on {} (MTU={}): {} (errno {})", name_, mtu, strerror(errno), errno);
+        return false;
+    }
+
+    logs::tun.info("MTU set to {} on {}", mtu, name_);
+    return true;
 }

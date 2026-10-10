@@ -153,8 +153,6 @@ int SDR::writestream(std::vector<int16_t> &send)
         timeout
     );
 
-    logs::sdr.info("TX requested {}, sent {}", samples, ret);
-
     return static_cast<int>(ret);
 }
 
