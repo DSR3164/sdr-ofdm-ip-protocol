@@ -1,6 +1,8 @@
 #include "logger.hpp"
 #include "phy/sdr.hpp"
 
+#include <cstdint>
+#include <stdexcept>
 #include <uhd/types/device_addr.hpp>
 
 SDR::SDR(const SDRConfig &config, std::atomic<bool> &stop_condition)
@@ -78,18 +80,25 @@ bool SDR::init()
 
 void SDR::start_rx()
 {
-    uhd::stream_cmd_t stream_cmd(
-        uhd::stream_cmd_t::STREAM_MODE_START_CONTINUOUS
-    );
+    if (!rxStream)
+        throw std::runtime_error("RX stream is not init");
 
+    uhd::stream_cmd_t stream_cmd(uhd::stream_cmd_t::STREAM_MODE_START_CONTINUOUS);
     stream_cmd.stream_now = true;
-
     rxStream->issue_stream_cmd(stream_cmd);
-
     logs::sdr.info(
         "{} stream is active",
         fmt::format(fg(fmt::color::cyan), "RX")
     );
+}
+
+void SDR::stop_rx()
+{
+    if (!rxStream)
+        return;
+    uhd::stream_cmd_t cmd(uhd::stream_cmd_t::STREAM_MODE_STOP_CONTINUOUS);
+    cmd.stream_now = true;
+    rxStream->issue_stream_cmd(cmd);
 }
 
 /*!
@@ -103,29 +112,43 @@ void SDR::start_rx()
  */
 int SDR::readstream(std::vector<int16_t> &recv)
 {
-    uhd::rx_metadata_t metadata;
+    if (cond.load())
+    {
+        recv.clear();
+        return 0;
+    }
+    if (!rxStream || cfg.buffer_size <= 0)
+        throw std::runtime_error("Invalid RX stream or buffer size");
+
+    const auto requested = static_cast<size_t>(cfg.buffer_size);
+    recv.resize(requested * 2);
+
+    size_t offset = 0;
+    while (offset < requested && !cond.load())
+    {
+        uhd::rx_metadata_t md;
+        const auto received = rxStream->recv(recv.data() + 2 * offset, requested - offset, md, 0.05, true);
+        if (received > requested - offset)
+            throw std::runtime_error("UHD returned too many RX samples");
+
+        if (md.error_code == uhd::rx_metadata_t::ERROR_CODE_NONE || md.error_code == uhd::rx_metadata_t::ERROR_CODE_TIMEOUT)
+        {
+            offset += received;
+            if (received == 0 || md.error_code == uhd::rx_metadata_t::ERROR_CODE_TIMEOUT)
+                break;
+            continue;
+        }
+
+        recv.clear();
+        if (md.error_code == uhd::rx_metadata_t::ERROR_CODE_OVERFLOW)
+            return -2;
+        throw std::runtime_error(md.strerror());
+    }
 
     const size_t samples = recv.size() / 2;
 
-    size_t ret = rxStream->recv(
-        recv.data(),
-        samples,
-        metadata,
-        timeout,
-        false
-    );
-
-    if (metadata.error_code != uhd::rx_metadata_t::ERROR_CODE_NONE)
-    {
-        logs::sdr.error(
-            "RX error: {}",
-            metadata.strerror()
-        );
-
-        return -1;
-    }
-
-    return static_cast<int>(ret);
+    recv.resize(offset * 2);
+    return static_cast<int>(offset);
 }
 
 /*!
@@ -139,21 +162,56 @@ int SDR::readstream(std::vector<int16_t> &recv)
  */
 int SDR::writestream(std::vector<int16_t> &send)
 {
-    uhd::tx_metadata_t metadata;
-    metadata.start_of_burst = false;
-    metadata.end_of_burst = false;
-    metadata.has_time_spec = false;
+    if (!txStream)
+        throw std::runtime_error("TX stream is not initialized");
+    if (send.size() % 2 != 0 || send.size() / 2 > static_cast<size_t>(std::numeric_limits<int>::max()))
+        throw std::invalid_argument("Invalid TX I/Q buffer length");
 
-    const size_t samples = send.size() / 2;
+    const size_t total = send.size() / 2;
+    const size_t packet_size = txStream->get_max_num_samps();
+    if (packet_size == 0)
+        throw std::runtime_error("Invalid UHD TX packet size");
 
-    size_t ret = txStream->send(
-        send.data(),
-        samples,
-        metadata,
-        timeout
-    );
+    size_t offset = 0;
+    auto last_progress = std::chrono::steady_clock::now();
+    while (offset < total && !cond.load())
+    {
+        uhd::tx_metadata_t md;
+        md.start_of_burst = !tx_burst_started_;
+        md.end_of_burst = false;
+        md.has_time_spec = false;
+        const size_t requested = std::min(packet_size, total - offset);
+        const size_t sent = txStream->send(send.data() + 2 * offset, requested, md, 0.05);
+        if (sent > requested)
+            throw std::runtime_error("UHD returned too many TX samples");
+        if (sent == 0)
+        {
+            if (std::chrono::steady_clock::now() - last_progress >= std::chrono::milliseconds(500))
+                throw std::runtime_error("TX has made no progress for 500 ms");
+            continue;
+        }
+        tx_burst_started_ = true;
+        offset += sent;
+        last_progress = std::chrono::steady_clock::now();
+    }
+    return static_cast<int>(offset);
+}
 
-    return static_cast<int>(ret);
+uint32_t SDR::poll_tx_events()
+{
+    uint32_t events = 0;
+    if (!txStream)
+        return events;
+
+    for (int i = 0; i < 32; ++i)
+    {
+        uhd::async_metadata_t md;
+        if (!txStream->recv_async_msg(md, 0.0))
+            break;
+        if (md.event_code != uhd::async_metadata_t::EVENT_CODE_BURST_ACK)
+            events |= static_cast<std::uint32_t>(md.event_code);
+    }
+    return events;
 }
 
 /*!

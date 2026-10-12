@@ -69,7 +69,7 @@ inline bool has_any_except(Flags flags, Flags excluded)
 }
 
 struct SDRConfig {
-    float sample_rate = 1.92e6f;
+    float sample_rate = 7.68e6f;
     int buffer_size = static_cast<int>(sample_rate / 1e3f);
     float tx_freq = 2200e6f; // FDD: set rx_freq to tx_freq + 3MHz on the other node
     float rx_freq = 2200e6f; // FDD: adjust per node, see Configuration in README
@@ -77,8 +77,8 @@ struct SDRConfig {
     float rx_gain = 25.0f;
     bool enable_tx = true;
     bool enable_rx = true;
-    float tx_bandwidth = 1.92e6f;
-    float rx_bandwidth = 1.92e6f;
+    float tx_bandwidth = 6e6f;
+    float rx_bandwidth = 6e6f;
     bool init_on_start = true;
     bool exit_on_error = true;
 };
@@ -99,6 +99,7 @@ class SDR {
     [[nodiscard]] bool deinit();
     [[nodiscard]] bool check_connection();
     void start_rx();
+    void stop_rx();
     void scan();
     void wait_connection();
     int add_args();
@@ -106,6 +107,7 @@ class SDR {
 
     int readstream(std::vector<int16_t> &recv);
     int writestream(std::vector<int16_t> &send);
+    uint32_t poll_tx_events();
 
     void set_rx_freq(float f)
     {
@@ -156,4 +158,5 @@ class SDR {
     size_t connection_retries = 0;
     double time_delay_ns = 2e6;
     double timeout = 0.4;
+    bool tx_burst_started_ = true;
 };
