@@ -15,14 +15,9 @@
 namespace
 {
     constexpr size_t MAX_DATA_SYMBOLS = SDRConfig{}.buffer_size / (DSP{}.ofdm_cfg.n_cp + DSP{}.ofdm_cfg.n_subcarriers) - 2;
-    constexpr float dac_max_value = 16384.0f;
 
     constexpr auto pi = std::numbers::pi_v<float>;
     constexpr auto tau = std::numbers::pi_v<float> * 2.0f;
-    constexpr float bpsk_scale = dac_max_value / 20.9f;
-    constexpr float qpsk_scale = dac_max_value / 26.9f;
-    constexpr float qam16_scale = dac_max_value / 26.9f;
-    constexpr float qam64_scale = dac_max_value / 26.9f;
 
     [[nodiscard]] constexpr size_t get_bits_per_symbol(Modulation mod) noexcept
     {
@@ -45,13 +40,13 @@ namespace
         switch (mod)
         {
         case Modulation::BPSK:
-            return bpsk_scale;
+            return 16384.0f / 20.9f;
         case Modulation::QPSK:
-            return qpsk_scale;
+            return 16384.0f / 26.9f;
         case Modulation::QAM16:
-            return qam16_scale;
+            return 16384.0f / 26.9f;
         case Modulation::QAM64:
-            return qam64_scale;
+            return 16384.0f / 26.9f;
         }
         return 1.0f;
     }
@@ -72,75 +67,66 @@ namespace
         return 1.0f;
     }
 
+    std::mutex &fftw_mutex()
+    {
+        static std::mutex mutex;
+        return mutex;
+    }
+
     struct FFTWPlan {
+        size_t size;
         fftwf_complex *in = nullptr;
         fftwf_complex *out = nullptr;
         fftwf_plan plan = nullptr;
 
         FFTWPlan(int size, bool direction = true)
+            : size(size)
         {
-            in = reinterpret_cast<fftwf_complex *>(fftwf_malloc(sizeof(fftwf_complex) * size));
-            out = reinterpret_cast<fftwf_complex *>(fftwf_malloc(sizeof(fftwf_complex) * size));
+            if (size == 0 || size > static_cast<size_t>(std::numeric_limits<int>::max()))
+                throw std::invalid_argument("Invalid FFT length");
+
+            std::scoped_lock lock(fftw_mutex());
+
+            in = static_cast<fftwf_complex *>(fftwf_malloc(sizeof(fftwf_complex) * size));
+            out = static_cast<fftwf_complex *>(fftwf_malloc(sizeof(fftwf_complex) * size));
+
             if (!in || !out)
-                throw std::bad_alloc{};
-
-            static std::mutex fftw_planner_mutex;
-
-            fftwf_plan local_plan = nullptr;
             {
-                std::scoped_lock lock(fftw_planner_mutex);
-                local_plan = fftwf_plan_dft_1d(size, in, out, direction ? FFTW_FORWARD : FFTW_BACKWARD, FFTW_MEASURE);
+                fftwf_free(in);
+                fftwf_free(out);
+                throw std::bad_alloc{};
             }
-            plan = local_plan;
 
+            plan = fftwf_plan_dft_1d(static_cast<int>(size), in, out, direction ? FFTW_FORWARD : FFTW_BACKWARD, FFTW_ESTIMATE);
             if (!plan)
+            {
+                fftwf_free(in);
+                fftwf_free(out);
                 throw std::runtime_error("fftwf_plan_dft_1d failed");
+            }
         }
 
         ~FFTWPlan()
         {
-            if (plan)
-                fftwf_destroy_plan(plan);
-            if (in)
-                fftwf_free(in);
-            if (out)
-                fftwf_free(out);
+            std::scoped_lock lock(fftw_mutex());
+            fftwf_destroy_plan(plan);
+            fftwf_free(in);
+            fftwf_free(out);
         }
 
-        // move constructor
-        FFTWPlan(FFTWPlan &&other) noexcept
-            : in(other.in),
-              out(other.out),
-              plan(other.plan)
-        {
-            other.in = nullptr;
-            other.out = nullptr;
-            other.plan = nullptr;
-        }
-
-        FFTWPlan &operator=(FFTWPlan &&other) noexcept
-        {
-            if (this != &other)
-            {
-                if (plan)
-                    fftwf_destroy_plan(plan);
-                if (in)
-                    fftwf_free(in);
-                if (out)
-                    fftwf_free(out);
-
-                in = other.in;
-                out = other.out;
-                plan = other.plan;
-
-                other.in = nullptr;
-                other.out = nullptr;
-                other.plan = nullptr;
-            }
-            return *this;
-        }
         FFTWPlan(const FFTWPlan &) = delete;
         FFTWPlan &operator=(const FFTWPlan &) = delete;
+        FFTWPlan(FFTWPlan &&) = delete;
+        FFTWPlan &operator=(FFTWPlan &&) = delete;
+
+        void clear()
+        {
+            for (size_t i = 0; i < size; ++i)
+            {
+                in[i][0] = 0.0f;
+                in[i][1] = 0.0f;
+            }
+        }
     };
 
     struct FrameHeader {
@@ -813,8 +799,8 @@ namespace
 
         for (size_t n = 0; n < N; ++n)
         {
-            ifft.out[n][0] *= bpsk_scale;
-            ifft.out[n][1] *= bpsk_scale;
+            ifft.out[n][0] *= 16384.0f / 20.9f;
+            ifft.out[n][1] *= 16384.0f / 20.9f;
         }
 
         // Cyclic Prefix
