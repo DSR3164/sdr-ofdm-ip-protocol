@@ -27,38 +27,37 @@ size_t calculate_mtu(const SharedData &data)
     const int ps = data.dsp.ofdm_cfg.pilot_spacing;
     const auto mod_type = data.dsp.ofdm_cfg.mod;
 
-    uint16_t bps = 1;
-
     size_t data_subs = 0;
-    int active_idx = 0;
+    size_t active_idx = 0;
+
+    const size_t guard_left = ns / 8;
+    const size_t guard_right = ns / 8;
 
     for (size_t k = 0; k < ns; ++k)
     {
-        if (k == 0 || (k >= 37 && k <= 91))
+        if (k == 0 || k < guard_left || k >= (ns - guard_right))
             continue;
 
-        bool is_pilot = (active_idx % ps == 0) || (k == ns / 2 - 28) || (k == ns / 2 + 28) || (k == ns - 1);
-
+        bool is_pilot = (active_idx % ps == 0) || (k == ns - guard_right - 1);
         if (!is_pilot)
             data_subs++;
 
         active_idx++;
     }
 
-    logs::tun.debug("MTU debug: data_subs={}, ps={}, mod={}", data_subs, ps, static_cast<int>(mod_type));
-
-    switch (static_cast<int>(mod_type))
+    uint16_t bps = 1;
+    switch (mod_type)
     {
-    case 0:
+    case Modulation::BPSK:
         bps = 1;
         break;
-    case 1:
+    case Modulation::QPSK:
         bps = 2;
         break;
-    case 2:
+    case Modulation::QAM16:
         bps = 4;
         break;
-    case 3:
+    case Modulation::QAM64:
         bps = 6;
         break;
     default:
@@ -66,13 +65,20 @@ size_t calculate_mtu(const SharedData &data)
         break;
     }
 
-    const size_t bits_per_stream = data_subs * bps * 10;
+    constexpr size_t num_ofdm_symbols = 10;
+    const size_t bits_per_frame = data_subs * bps * num_ofdm_symbols;
 
-    if (bits_per_stream / 8 <= (sizeof(FrameHeader) + 2))
+    const size_t raw_payload_bits = (bits_per_frame * data.punct_cfg.period) / (n * data.punct_cfg.kept);
+    const size_t raw_payload_bytes = raw_payload_bits / 8;
+
+    if (raw_payload_bytes <= sizeof(FrameHeader) + 4)
         return 0;
 
-    int result = (bits_per_stream * data.punct_cfg.period / (n * data.punct_cfg.kept)) / 8 - 20;
-    return result & ~7;
+    int result = static_cast<int>(raw_payload_bytes - sizeof(FrameHeader) - 4);
+
+    logs::tun.debug("MTU debug: data_subs={}, ps={}, mod={}", data_subs, ps, static_cast<int>(mod_type));
+
+    return static_cast<size_t>(result & ~7);
 }
 
 void run_tun_tx(SharedData &data)

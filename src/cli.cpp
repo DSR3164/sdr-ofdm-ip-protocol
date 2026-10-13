@@ -196,13 +196,13 @@ void set_cli_opts(SharedData &data, CliConfig &cfg)
     {
         logs::main.info("Starting node [{}]", fmt::format(fmt::fg(fmt::color::orange), "A"));
         data.sdr.set_rx_freq(2200e6);
-        data.sdr.set_tx_freq(2230e6);
+        data.sdr.set_tx_freq(2250e6);
         data.ip_addr = "10.0.0.1";
     }
     else if (cfg.node == Node::B)
     {
         logs::main.info("Starting node [{}]", fmt::format(fmt::fg(fmt::color::orange), "B"));
-        data.sdr.set_rx_freq(2230e6);
+        data.sdr.set_rx_freq(2250e6);
         data.sdr.set_tx_freq(2200e6);
         data.ip_addr = "10.0.0.2";
     }

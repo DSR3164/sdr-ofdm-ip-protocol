@@ -44,10 +44,10 @@ struct DSP {
     float cfo = 0.0f;
     int max_index = 0;
     int offset = -2;
-    float sample_rate = 1.92e6;
+    float sample_rate = 7.68e6f;
     struct OFDMConfig {
         Modulation mod = Modulation::QAM16;
-        size_t n_subcarriers = 128;
+        size_t n_subcarriers = 512;
         size_t pilot_spacing = 19;
         size_t n_cp = 32;
     } ofdm_cfg;

@@ -8,16 +8,20 @@
 #include <fftw3.h>
 #include <mutex>
 #include <numbers>
+#include <numeric>
+#include <span>
 #include <spdlog/fmt/bundled/color.h>
 #include <spdlog/spdlog.h>
 #include <vector>
 
 namespace
 {
-    constexpr size_t MAX_DATA_SYMBOLS = SDRConfig{}.buffer_size / (DSP{}.ofdm_cfg.n_cp + DSP{}.ofdm_cfg.n_subcarriers) - 2;
-
     constexpr auto pi = std::numbers::pi_v<float>;
     constexpr auto tau = std::numbers::pi_v<float> * 2.0f;
+
+    constexpr size_t header_raw_bits = 32;
+    constexpr size_t max_data_symbols = 15;
+    constexpr size_t max_payload_bits = std::numeric_limits<uint16_t>::max();
 
     [[nodiscard]] constexpr size_t get_bits_per_symbol(Modulation mod) noexcept
     {
@@ -35,22 +39,6 @@ namespace
         return 0;
     }
 
-    [[nodiscard]] constexpr float get_scale(Modulation mod) noexcept
-    {
-        switch (mod)
-        {
-        case Modulation::BPSK:
-            return 16384.0f / 20.9f;
-        case Modulation::QPSK:
-            return 16384.0f / 26.9f;
-        case Modulation::QAM16:
-            return 16384.0f / 26.9f;
-        case Modulation::QAM64:
-            return 16384.0f / 26.9f;
-        }
-        return 1.0f;
-    }
-
     [[nodiscard]] constexpr std::complex<float> get_pilot(Modulation mod) noexcept
     {
         switch (mod)
@@ -65,6 +53,16 @@ namespace
             return std::complex(1.080123500f, 1.080123500f) / std::sqrt(2.0f);
         }
         return 1.0f;
+    }
+
+    int16_t clip(float x)
+    {
+        return static_cast<int16_t>(std::clamp(x, -16384.0f, 16384.0f));
+    }
+
+    size_t ceil_div(size_t value, size_t divisor)
+    {
+        return value / divisor + static_cast<size_t>(value % divisor != 0);
     }
 
     std::mutex &fftw_mutex()
@@ -129,75 +127,46 @@ namespace
         }
     };
 
-    struct FrameHeader {
-        Modulation modulation = Modulation::QAM64;
-        uint8_t ofdm_symbols_count = 10;                                                 // Default ofdm symbols count
-        uint16_t bits_count = 65 * ofdm_symbols_count * get_bits_per_symbol(modulation); // Max bits per frame
+    struct CarrierGrid {
+        size_t n;
+        size_t cp;
+        size_t spacing;
+        size_t half_active;
+        std::vector<size_t> pilots;
+        std::vector<size_t> data;
+        std::vector<bool> is_guard;
+
+        explicit CarrierGrid(const DSP::OFDMConfig &config)
+            : n(config.n_subcarriers),
+              cp(config.n_cp),
+              spacing(config.pilot_spacing),
+              half_active(0)
+        {
+            if (n < 128 || n % 2 != 0 || n > static_cast<size_t>(std::numeric_limits<int>::max()) / 128 || cp == 0 || cp > n || spacing < 2)
+                throw std::invalid_argument("Invalid OFDM configuration");
+
+            half_active = n * 9 / 32;
+            is_guard.assign(n, true);
+            size_t counter = 0;
+            for (size_t k = 1; k < n; ++k)
+            {
+                if (k > half_active && k < n - half_active)
+                    continue;
+
+                is_guard[k] = false;
+                if (counter % spacing == 0 || k == half_active || k == n - half_active || k == n - 1)
+                    pilots.push_back(k);
+                else
+                    data.push_back(k);
+                ++counter;
+            }
+            if (data.empty() || pilots.size() < 4)
+                throw std::invalid_argument("OFDM grid has no usable data carriers");
+        }
+
+        size_t symbol_length() const { return n + cp; }
+        size_t active_count() const { return 2 * half_active; }
     };
-
-    std::vector<uint8_t> packFrameHeader(const FrameHeader &fh)
-    {
-        std::vector<uint8_t> bits(32);
-        uint8_t mod_val = static_cast<uint8_t>(fh.modulation);
-        bits[0] = (mod_val >> 1) & 1;
-        bits[1] = mod_val & 1;
-        for (int i = 0; i < 4; ++i)
-            bits[2 + i] = (fh.ofdm_symbols_count >> (3 - i)) & 1;
-        for (int i = 0; i < 16; ++i)
-            bits[6 + i] = (fh.bits_count >> (15 - i)) & 1;
-        return bits;
-    }
-
-    FrameHeader unpackFrameHeader(std::vector<uint8_t> &bits)
-    {
-        FrameHeader header;
-        uint8_t mod_val = 0;
-        Modulation mod;
-        uint16_t bits_count_val = 0;
-        uint16_t ofdm_count_val = 0;
-        mod_val |= (bits[0] & 1) << 1;
-        mod_val |= (bits[1] & 1);
-
-        mod = static_cast<Modulation>(mod_val);
-
-        for (int i = 0; i < 4; ++i)
-            ofdm_count_val |= (bits[2 + i] & 1) << (3 - i);
-        for (int i = 0; i < 16; ++i)
-            bits_count_val |= (bits[6 + i] & 1) << (15 - i);
-
-        if (bits_count_val == 0 || bits_count_val > header.bits_count)
-        {
-            logs::dsp.debug("Header mismatch: {} | {}", mod_to_string(mod), bits_count_val);
-            return header;
-        }
-        else
-        {
-            header.modulation = mod;
-            header.bits_count = bits_count_val;
-            header.ofdm_symbols_count = ofdm_count_val;
-            logs::dsp.trace("Get {} symbols in header", header.bits_count);
-        }
-        return header;
-    }
-
-    std::vector<uint8_t> encode(const std::vector<uint8_t> &data)
-    {
-        auto bytes = bits_to_bytes<uint8_t>(data, 8);
-        auto encoded = conv_encoder(bytes);
-        auto bits = byte_to_bits(encoded, 8);
-        auto inter = interleaving_(bits);
-        return inter;
-    }
-
-    std::vector<uint8_t> decode(std::vector<float> &llr)
-    {
-        llr.resize(9 * 8);
-        auto deinter = deinterleaving_float(llr);
-        auto frame = viterbi_decoder_llr(deinter);
-        frame.resize(4);
-        auto bits = byte_to_bits(frame, 8);
-        return bits;
-    }
 
     void scramble(std::vector<uint8_t> &bits, uint8_t seed = 0x5B)
     {
@@ -239,6 +208,75 @@ namespace
             if (feedback)
                 llr = -llr;
         }
+    }
+
+    struct FrameHeader {
+        Modulation modulation = Modulation::QAM64;
+        uint8_t ofdm_symbols_count = 0; // Default ofdm symbols count
+        uint16_t bits_count = 0;        // Max bits per frame
+    };
+
+    std::vector<uint8_t> packFrameHeader(const FrameHeader &header)
+    {
+        std::vector<uint8_t> bits(header_raw_bits, 0);
+        uint8_t mod_val = static_cast<uint8_t>(header.modulation);
+        bits[0] = (mod_val >> 1) & 1;
+        bits[1] = mod_val & 1;
+        for (int i = 0; i < 4; ++i)
+            bits[2 + i] = (header.ofdm_symbols_count >> (3 - i)) & 1;
+        for (int i = 0; i < 16; ++i)
+            bits[6 + i] = (header.bits_count >> (15 - i)) & 1;
+        return bits;
+    }
+
+    bool unpackFrameHeader(const std::vector<uint8_t> &bits, const CarrierGrid &grid, FrameHeader &header)
+    {
+        FrameHeader candidate;
+        candidate.modulation = static_cast<Modulation>((bits[0] << 1) | bits[1]);
+        for (size_t i = 0; i < 4; ++i)
+            candidate.ofdm_symbols_count |= static_cast<uint8_t>(bits[2 + i] << (3 - i));
+        for (size_t i = 0; i < 16; ++i)
+            candidate.bits_count |= static_cast<uint16_t>(bits[6 + i] << (15 - i));
+
+        const size_t bps = get_bits_per_symbol(candidate.modulation);
+        if (bps == 0 || candidate.bits_count == 0 || candidate.ofdm_symbols_count == 0 || candidate.ofdm_symbols_count > max_data_symbols)
+            return false;
+        if (ceil_div(candidate.bits_count, grid.data.size() * bps) != candidate.ofdm_symbols_count)
+            return false;
+
+        header = candidate;
+        return true;
+    }
+
+    std::vector<uint8_t> encode(const std::vector<uint8_t> &data)
+    {
+        auto bytes = bits_to_bytes<uint8_t>(data, 8);
+        auto encoded = conv_encoder(bytes);
+        auto bits = byte_to_bits(encoded, 8);
+        auto inter = interleaving_(bits);
+        return inter;
+    }
+
+    size_t encoded_header_length()
+    {
+        const auto encoded = encode(std::vector<uint8_t>(header_raw_bits, 0));
+        if (encoded.empty())
+            throw std::runtime_error("Header encoder returned no bits");
+        return encoded.size();
+    }
+
+    bool decode(std::vector<float> &llr, size_t encoded_size, std::vector<uint8_t> &bits)
+    {
+        if (llr.size() < encoded_size)
+            return false;
+        llr.resize(encoded_size);
+        descramble_llr(llr);
+        auto bytes = viterbi_decoder_llr(deinterleaving_float(llr));
+        if (bytes.size() < header_raw_bits / 8)
+            return false;
+        bytes.resize(header_raw_bits / 8);
+        bits = byte_to_bits(bytes, 8);
+        return bits.size() == header_raw_bits;
     }
 
     void bpsk_mapper_3gpp(const std::vector<uint8_t> &bits, std::vector<std::complex<float>> &symbols)
@@ -529,134 +567,43 @@ namespace
         return max_index;
     }
 
-    void calculate_pilots_and_guard(DSP::OFDMConfig ofdm_config, std::vector<int> &pilots, std::vector<int> &data, std::vector<bool> &is_pilot, std::vector<bool> &is_guard)
+    void ofdm_equalize(const std::vector<std::complex<float>> &input, std::vector<std::complex<float>> &output, const CarrierGrid &grid, Modulation mod, std::vector<std::complex<float>> &channel)
     {
-        size_t N = ofdm_config.n_subcarriers;
-        size_t PS = ofdm_config.pilot_spacing;
-
-        data.clear();
-        pilots.clear();
-        is_pilot.resize(N, false);
-        is_guard.resize(N, false);
-
-        size_t counter = 0;
-        for (size_t k = 0; k < N; ++k)
+        if (input.size() != grid.n)
+            throw std::invalid_argument("Equalizer input has the wrong FFT size");
+        channel.assign(grid.n, std::complex<float>{});
+        const std::complex<float> pilot = get_pilot(mod);
+        float maximum_power = 0.0f;
+        for (const size_t k : grid.pilots)
         {
-            if (k == 0 || (k >= 37 && k <= 91))
-            {
-                is_guard[k] = true;
-                continue;
-            }
-            if ((counter % PS == 0) || (k == N / 2 - 28) || (k == N / 2 + 28) || (k == N - 1))
-            {
-                pilots.push_back(k);
-                is_pilot[k] = true;
-            }
-            else
-                data.push_back(k);
-            counter++;
+            channel[k] = input[k] / pilot;
+            maximum_power = std::max(maximum_power, std::norm(channel[k]));
         }
-    };
-
-    void ofdm_equalize(std::vector<std::complex<float>> &input, std::vector<std::complex<float>> &output, DSP::OFDMConfig &ofdm_config)
-    {
-        int N = ofdm_config.n_subcarriers;
-        float accumulated_phase = 0;
-        const std::complex<float> pilot = get_pilot(ofdm_config.mod);
-        std::vector<std::complex<float>> temp = input;
-        output.clear();
-
-        std::vector<int> pilots;
-        std::vector<int> data;
-        std::vector<bool> is_pilot(N, false);
-        std::vector<bool> is_guard(N, false);
-
-        calculate_pilots_and_guard(ofdm_config, pilots, data, is_pilot, is_guard);
-
-        std::vector<std::complex<float>> H_prev(N, { 1, 0 });
-
-        for (size_t i = 0; i + N <= temp.size(); i += N)
+        for (size_t p = 0; p + 1 < grid.pilots.size(); ++p)
         {
-            std::vector<std::complex<float>> sym(temp.begin() + i, temp.begin() + i + N);
-
-            std::vector<std::complex<float>> H(N, { 0, 0 });
-            std::vector<std::complex<float>> equalized(N);
-
-            for (auto k : pilots)
-                H[k] = sym[k] / pilot;
-
-            for (size_t p = 0; p < pilots.size() - 1; ++p)
+            const size_t k1 = grid.pilots[p];
+            const size_t k2 = grid.pilots[p + 1];
+            if (k1 == grid.half_active && k2 == grid.n - grid.half_active)
+                continue;
+            const float phase1 = std::arg(channel[k1]);
+            const float delta_phase = std::remainder(std::arg(channel[k2]) - phase1, tau);
+            const float magnitude1 = std::abs(channel[k1]);
+            const float delta_magnitude = std::abs(channel[k2]) - magnitude1;
+            for (size_t k = k1 + 1; k < k2; ++k)
             {
-                int k1 = pilots[p];
-                int k2 = pilots[p + 1];
-
-                auto H1 = H[k1];
-                auto H2 = H[k2];
-
-                float a1 = std::arg(H1);
-                float a2 = std::arg(H2);
-
-                float da = a2 - a1;
-                if (da > pi)
-                    da -= tau;
-                if (da < -pi)
-                    da += tau;
-
-                float m1 = std::abs(H1);
-                float m2 = std::abs(H2);
-
-                for (int k = k1 + 1; k < k2; ++k)
-                {
-                    if (is_guard[k])
-                        continue;
-
-                    float alpha = float(k - k1) / float(k2 - k1);
-
-                    float a = a1 + alpha * da;
-                    float m = m1 + alpha * (m2 - m1);
-
-                    H[k] = std::polar(m, a);
-                }
+                const float alpha = static_cast<float>(k - k1) / static_cast<float>(k2 - k1);
+                channel[k] = std::polar(magnitude1 + alpha * delta_magnitude, phase1 + alpha * delta_phase);
             }
-
-            for (int k = 0; k < pilots.front(); ++k)
-                if (!is_guard[k])
-                    H[k] = H[pilots.front()];
-
-            for (int k = pilots.back() + 1; k < N; ++k)
-                if (!is_guard[k])
-                    H[k] = H[pilots.back()];
-
-            for (int k = 1; k < N; ++k)
-                if (std::abs(H[k]) > 1e-12f)
-                    equalized[k] = sym[k] / H[k];
-                else
-                    equalized[k] = sym[k];
-
-            float cpe = 0;
-            for (auto k : pilots)
-                cpe += std::arg(equalized[k] / pilot);
-            cpe /= pilots.size();
-
-            accumulated_phase += cpe;
-
-            float mean_amp_pilots = 0;
-            for (auto k : pilots)
-                mean_amp_pilots += std::abs(equalized[k]);
-            mean_amp_pilots /= pilots.size();
-
-            for (int k = 0; k < N; ++k)
-                if (!is_guard[k])
-                    equalized[k] /= mean_amp_pilots;
-
-            std::complex<float> rot = std::exp(std::complex<float>(0, -accumulated_phase));
-            for (int k = 0; k < N; ++k)
-                if (!is_guard[k])
-                    equalized[k] *= rot;
-
-            for (int k = 0; k < N; ++k)
-                if (!is_pilot[k] && !is_guard[k])
-                    output.push_back(equalized[k]);
+        }
+        const float minimum_power = std::max(1e-20f, maximum_power * 1e-8f);
+        output.clear();
+        output.reserve(grid.data.size());
+        for (const size_t k : grid.data)
+        {
+            std::complex<float> value{};
+            if (std::norm(channel[k]) > minimum_power)
+                value = input[k] / channel[k];
+            output.push_back(value);
         }
     }
 
@@ -673,35 +620,48 @@ namespace
         return zc;
     }
 
-    std::vector<std::complex<float>> ofdm_zadoff_chu_symbol(DSP &data)
+    std::vector<std::complex<float>> scaled_ifft_output(const FFTWPlan &ifft, size_t active_count)
     {
-        static FFTWPlan ifft(data.ofdm_cfg.n_subcarriers, false);
-        std::vector<std::complex<float>> zadoff_chu;
-        auto zc = generate_zc(127, 5);
-        zadoff_chu.reserve(data.ofdm_cfg.n_subcarriers);
-        const auto scale = get_scale(Modulation::BPSK);
-        ifft.in[0][0] = 0;
-        ifft.in[0][1] = 0;
+        float scale = 16384.0f / (4.0f * std::sqrt(static_cast<float>(active_count)));
+        float peak = 0.0f;
+        for (size_t i = 0; i < ifft.size; ++i)
+            peak = std::max({ peak, std::abs(ifft.out[i][0]), std::abs(ifft.out[i][1]) });
+        if (peak > 0.0f)
+            scale = std::min(scale, 16384.0f * 0.95f / peak);
 
-        for (size_t i = 1; i <= 127; ++i)
+        std::vector<std::complex<float>> output(ifft.size);
+        for (size_t i = 0; i < ifft.size; ++i)
+            output[i] = { ifft.out[i][0] * scale, ifft.out[i][1] * scale };
+        return output;
+    }
+
+    std::vector<std::complex<float>> ofdm_zadoff_chu_symbol(const CarrierGrid &grid, FFTWPlan &ifft)
+    {
+        const size_t length = grid.active_count();
+        size_t root = 5;
+        while (std::gcd(length, root) != 1)
+            ++root;
+        const auto zc = generate_zc(length, root);
+        ifft.clear();
+        for (size_t i = 0; i < length; ++i)
         {
-            ifft.in[i][0] = zc[i - 1].real();
-            ifft.in[i][1] = zc[i - 1].imag();
+            const size_t k = i < grid.half_active ? grid.n - grid.half_active + i
+                                                  : i - grid.half_active + 1;
+            ifft.in[k][0] = zc[i].real();
+            ifft.in[k][1] = zc[i].imag();
         }
-
         fftwf_execute(ifft.plan);
+        auto output = scaled_ifft_output(ifft, grid.active_count());
+        for (auto &sample : output)
+            sample = { static_cast<float>(clip(sample.real())), static_cast<float>(clip(sample.imag())) };
+        return output;
+    }
 
-        for (size_t n = 0; n < data.ofdm_cfg.n_subcarriers; ++n)
-        {
-            ifft.out[n][0] *= scale;
-            ifft.out[n][1] *= scale;
-        }
-
-        for (size_t n = 0; n < data.ofdm_cfg.n_subcarriers; ++n)
-            zadoff_chu.push_back(std::complex<float>(ifft.out[n][0], ifft.out[n][1]));
-
-        return zadoff_chu;
-    };
+    std::vector<std::complex<float>> ofdm_zadoff_chu_symbol(const CarrierGrid &grid)
+    {
+        FFTWPlan ifft(grid.n, false);
+        return ofdm_zadoff_chu_symbol(grid, ifft);
+    }
 
     float coarse_cfo(std::vector<std::complex<float>> &r, int max_index, int N, int Lcp, float fs)
     {
@@ -724,40 +684,29 @@ namespace
         return cfo_hz;
     }
 
-    void cfo_est(std::vector<std::complex<float>> &signal, DSP &data)
+    double cfo_est(std::span<const std::complex<float>> signal, size_t zc_start, size_t following_symbols, const CarrierGrid &grid, double fallback)
     {
-        int N = data.ofdm_cfg.n_subcarriers;
-        int CP = data.ofdm_cfg.n_cp;
-        float fs = data.sample_rate;
-        int start = data.max_index + N;
-
-        int symbol_len = N + CP;
-        for (size_t i = 0; i < 10; ++i)
+        std::complex<float> correlation = 0.0;
+        double total_energy = 0.0;
+        auto accumulate = [&](size_t start)
         {
-            size_t sym_start = start + i * symbol_len;
-            if (signal.size() < sym_start + N + CP)
-                break;
-
-            std::complex<float> corr = 0;
-            for (int n = 0; n < CP; ++n)
-                corr += std::conj(signal[sym_start + n]) * signal[sym_start + n + N];
-
-            float epsilon = std::arg(corr) / (tau);
-            float delta_f = epsilon * fs / N;
-
-            data.cfo = delta_f;
-
-            for (int n = 0; n < N + CP; ++n)
+            if (start + grid.symbol_length() > signal.size())
+                return;
+            for (size_t i = grid.cp / 4; i < grid.cp; ++i)
             {
-                float phase = -tau * delta_f * (sym_start + n) / fs;
-                signal[sym_start + n] *= std::complex<float>(std::cos(phase), std::sin(phase));
+                const std::complex<float> prefix(signal[start + i]);
+                const std::complex<float> tail(signal[start + i + grid.n]);
+                correlation += std::conj(prefix) * tail;
+                total_energy += 0.5 * (std::norm(prefix) + std::norm(tail));
             }
-        }
-    }
-
-    int16_t clip(float x)
-    {
-        return static_cast<int16_t>(std::clamp(x, -16384.0f, 16384.0f));
+        };
+        if (zc_start >= grid.cp)
+            accumulate(zc_start - grid.cp);
+        for (size_t s = 0; s < following_symbols; ++s)
+            accumulate(zc_start + grid.n + s * grid.symbol_length());
+        if (total_energy <= 1e-12 || std::abs(correlation) < 0.15 * total_energy)
+            return fallback;
+        return std::arg(correlation) / static_cast<double>(grid.n);
     }
 
     std::vector<std::complex<float>> generate_frame_header(DSP::OFDMConfig &config, FrameHeader frameheader, std::vector<int> &data, std::vector<int> &pilots)
@@ -814,45 +763,13 @@ namespace
         return header;
     };
 
-    void ofdm(std::vector<uint8_t> &bits, std::vector<int16_t> &buffer, DSP &dsp_config)
+    void modulate(Modulation mod, const std::vector<uint8_t> &bits, std::vector<std::complex<float>> &symbols)
     {
-        auto &ofdm_config = dsp_config.ofdm_cfg;
-        int Ncp = ofdm_config.n_cp;
-        int N = ofdm_config.n_subcarriers;
-        int pilot_spacing = ofdm_config.pilot_spacing;
-        size_t bits_size = bits.size();
-        Modulation modulation_type = ofdm_config.mod;
-        FrameHeader header;
-        header.bits_count = bits_size;
-
-        std::vector<int> pilots;
-        std::vector<int> data;
-        std::vector<bool> is_pilot;
-        std::vector<bool> is_guard;
-        calculate_pilots_and_guard(ofdm_config, pilots, data, is_pilot, is_guard);
-
-        size_t data_symbols = (bits_size / get_bits_per_symbol(modulation_type)) / data.size();
-
-        if (data_symbols > MAX_DATA_SYMBOLS)
-        {
-            logs::dsp.warn("There is more data than PHY can send ({}): {} {} symbols", MAX_DATA_SYMBOLS, data_symbols, mod_to_string(modulation_type));
-            return;
-        }
-
-        if (N < 4 || pilot_spacing < 2)
-            return;
-
-        buffer.clear();
-        std::vector<std::complex<float>> symbols(bits_size);
-        std::vector<std::complex<float>> schmidl(N);
-        auto zc = generate_zc(127, 5);
-        auto bps = get_bits_per_symbol(modulation_type);
-
-        if (bits.size() % bps != 0)
-            bits.resize(bits.size() + (bps - bits.size() % bps), 0);
+        const size_t bps = get_bits_per_symbol(mod);
+        if (bps == 0 || bits.size() % bps != 0)
+            throw std::invalid_argument("Invalid modulation input");
         symbols.resize(bits.size() / bps);
-
-        switch (modulation_type)
+        switch (mod)
         {
         case Modulation::BPSK:
             bpsk_mapper_3gpp(bits, symbols);
@@ -866,94 +783,195 @@ namespace
         case Modulation::QAM64:
             qam64_mapper_3gpp(bits, symbols);
             break;
-        default:
-            qpsk_mapper_3gpp(bits, symbols);
-            break;
-        }
-
-        static FFTWPlan ifft(N, false);
-
-        int total_symbols = (int)symbols.size();
-
-        int symbols_per_ofdm = static_cast<int>(data.size());
-        int num_ofdm_symbols = (total_symbols + symbols_per_ofdm - 1) / symbols_per_ofdm;
-        header.ofdm_symbols_count = num_ofdm_symbols;
-        header.modulation = dsp_config.ofdm_cfg.mod;
-        auto h = generate_frame_header(ofdm_config, header, data, pilots);
-
-        const float scale = get_scale(modulation_type);
-        const std::complex<float> pilot = get_pilot(modulation_type);
-        buffer.reserve((num_ofdm_symbols + Ncp) * (N + 2));
-
-        auto ofdm_zc_symbol = ofdm_zadoff_chu_symbol(dsp_config);
-
-        for (size_t i = 0; i < ofdm_zc_symbol.size(); ++i)
-        {
-            buffer.push_back(static_cast<int16_t>(ofdm_zc_symbol[i].real()));
-            buffer.push_back(static_cast<int16_t>(ofdm_zc_symbol[i].imag()));
-        }
-
-        for (size_t i = 0; i < h.size(); ++i)
-        {
-            buffer.push_back(static_cast<int16_t>(h[i].real()));
-            buffer.push_back(static_cast<int16_t>(h[i].imag()));
-        }
-
-        for (int sym = 0; sym < num_ofdm_symbols; ++sym)
-        {
-            for (int i = 0; i < N; ++i)
-            {
-                ifft.in[i][0] = 0.0f;
-                ifft.in[i][1] = 0.0f;
-            }
-
-            for (int k : pilots)
-            {
-                ifft.in[k][0] = pilot.real();
-                ifft.in[k][1] = pilot.imag();
-            }
-
-            for (size_t i = 0; i < data.size(); ++i)
-            {
-                int idx = sym * symbols_per_ofdm + i;
-                int k = data[i];
-
-                if (idx < total_symbols)
-                {
-                    ifft.in[k][0] = std::real(symbols[idx]);
-                    ifft.in[k][1] = std::imag(symbols[idx]);
-                }
-                else
-                {
-                    ifft.in[k][0] = 0.0f;
-                    ifft.in[k][1] = 0.0f;
-                }
-            }
-
-            fftwf_execute(ifft.plan);
-
-            // Norm
-            for (int n = 0; n < N; ++n)
-            {
-                ifft.out[n][0] *= scale;
-                ifft.out[n][1] *= scale;
-            }
-
-            // Cyclic Prefix
-            for (int n = N - Ncp; n < N; ++n)
-            {
-                buffer.push_back(clip(ifft.out[n][0]));
-                buffer.push_back(clip(ifft.out[n][1]));
-            }
-
-            // Data
-            for (int n = 0; n < N; ++n)
-            {
-                buffer.push_back(clip(ifft.out[n][0]));
-                buffer.push_back(clip(ifft.out[n][1]));
-            }
         }
     }
+
+    void append_symbol(const std::vector<std::complex<float>> &symbol, size_t cp, std::vector<int16_t> &buffer)
+    {
+        for (size_t i = symbol.size() - cp; i < symbol.size(); ++i)
+        {
+            buffer.push_back(clip(symbol[i].real()));
+            buffer.push_back(clip(symbol[i].imag()));
+        }
+        for (const auto &sample : symbol)
+        {
+            buffer.push_back(clip(sample.real()));
+            buffer.push_back(clip(sample.imag()));
+        }
+    }
+
+    class OFDMTransmitter {
+        CarrierGrid grid_;
+        FFTWPlan ifft_;
+        std::vector<std::complex<float>> zadoff_chu_;
+        size_t header_coded_bits_;
+        size_t header_symbols_;
+
+        void append_ofdm_symbol(std::span<const std::complex<float>> symbols, Modulation mod, std::vector<int16_t> &buffer)
+        {
+            ifft_.clear();
+            const auto pilot = get_pilot(mod);
+            for (const size_t k : grid_.pilots)
+            {
+                ifft_.in[k][0] = pilot.real();
+                ifft_.in[k][1] = pilot.imag();
+            }
+            for (size_t i = 0; i < symbols.size(); ++i)
+            {
+                const size_t k = grid_.data[i];
+                ifft_.in[k][0] = symbols[i].real();
+                ifft_.in[k][1] = symbols[i].imag();
+            }
+            fftwf_execute(ifft_.plan);
+            append_symbol(scaled_ifft_output(ifft_, grid_.active_count()), grid_.cp, buffer);
+        }
+      public:
+        explicit OFDMTransmitter(const DSP::OFDMConfig &config)
+            : grid_(config),
+              ifft_(grid_.n, false),
+              zadoff_chu_(ofdm_zadoff_chu_symbol(grid_, ifft_)),
+              header_coded_bits_(encoded_header_length()),
+              header_symbols_(ceil_div(header_coded_bits_, grid_.data.size()))
+        {
+        }
+
+        bool matches(const DSP::OFDMConfig &config) const
+        {
+            return grid_.n == config.n_subcarriers && grid_.cp == config.n_cp && grid_.spacing == config.pilot_spacing;
+        }
+
+        void ofdm(const std::vector<uint8_t> &input, Modulation mod, std::vector<int16_t> &buffer)
+        {
+            buffer.clear();
+            const size_t bps = get_bits_per_symbol(mod);
+            if (bps == 0 || input.empty() || input.size() > max_payload_bits || std::any_of(input.begin(), input.end(), [](uint8_t bit)
+                                                                                            { return bit > 1; }))
+                throw std::invalid_argument("Invalid payload or payload exceeds 65535 bits");
+            const size_t count = ceil_div(input.size(), grid_.data.size() * bps);
+            if (count > max_data_symbols)
+                throw std::invalid_argument("Payload exceeds the 15-symbol PHY header limit");
+
+            FrameHeader header;
+            header.modulation = mod;
+            header.ofdm_symbols_count = static_cast<uint8_t>(count);
+            header.bits_count = static_cast<uint16_t>(input.size());
+            auto header_bits = encode(packFrameHeader(header));
+            if (header_bits.size() != header_coded_bits_)
+                throw std::runtime_error("Header encoder length changed");
+            header_bits.resize(header_symbols_ * grid_.data.size(), 0);
+            scramble(header_bits);
+            std::vector<std::complex<float>> header_symbols;
+            modulate(Modulation::BPSK, header_bits, header_symbols);
+
+            auto bits = input;
+            scramble(bits);
+            bits.resize(ceil_div(bits.size(), bps) * bps, 0);
+            std::vector<std::complex<float>> symbols;
+            modulate(mod, bits, symbols);
+            buffer.reserve((1 + header_symbols_ + count) * grid_.symbol_length() * 2);
+            append_symbol(zadoff_chu_, grid_.cp, buffer);
+            for (size_t s = 0; s < header_symbols_; ++s)
+                append_ofdm_symbol(std::span<const std::complex<float>>(header_symbols).subspan(s * grid_.data.size(), grid_.data.size()), Modulation::BPSK, buffer);
+            for (size_t s = 0; s < count; ++s)
+            {
+                const size_t start = s * grid_.data.size();
+                append_ofdm_symbol(std::span<const std::complex<float>>(symbols).subspan(start, std::min(grid_.data.size(), symbols.size() - start)), mod, buffer);
+            }
+        }
+    };
+
+    size_t correlation_fft_length(size_t signal_length, size_t reference_length)
+    {
+        const size_t required = signal_length + reference_length - 1;
+        size_t result = 1;
+        while (result < required)
+        {
+            if (result > static_cast<size_t>(std::numeric_limits<int>::max()) / 2)
+                throw std::invalid_argument("Correlation FFT is too large");
+            result *= 2;
+        }
+        return result;
+    }
+
+    class ZCCorrFFT {
+      private:
+        size_t reference_length_;
+        size_t max_signal_length_;
+        FFTWPlan forward_;
+        FFTWPlan backward_;
+        std::vector<std::complex<float>> reference_spectrum_;
+        std::vector<double> metrics_;
+        double reference_energy_ = 0.0;
+      public:
+        ZCCorrFFT(size_t signal_length, const std::vector<std::complex<float>> &reference)
+            : reference_length_(reference.size()),
+              max_signal_length_(signal_length),
+              forward_(correlation_fft_length(signal_length, reference.size())),
+              backward_(forward_.size, false),
+              reference_spectrum_(forward_.size)
+        {
+            forward_.clear();
+            for (size_t i = 0; i < reference.size(); ++i)
+            {
+                forward_.in[i][0] = reference[i].real();
+                forward_.in[i][1] = reference[i].imag();
+                reference_energy_ += std::norm(std::complex<float>(reference[i]));
+            }
+            if (reference_energy_ <= 0.0)
+                throw std::invalid_argument("Zero-energy synchronization reference");
+            fftwf_execute(forward_.plan);
+            for (size_t i = 0; i < forward_.size; ++i)
+                reference_spectrum_[i] = { forward_.out[i][0], -forward_.out[i][1] };
+        }
+
+        int find_peak(std::span<const std::complex<float>> signal, double omega, float threshold)
+        {
+            if (signal.size() <= reference_length_)
+                return -1;
+            if (signal.size() > max_signal_length_)
+                throw std::invalid_argument("Correlation input exceeds the planned size");
+
+            forward_.clear();
+            const std::complex<double> step = std::polar(1.0, -omega);
+            std::complex<float> rotation = 1.0;
+            for (size_t i = 0; i < signal.size(); ++i)
+            {
+                const std::complex<float> value = std::complex<float>(signal[i]) * rotation;
+                forward_.in[i][0] = static_cast<float>(value.real());
+                forward_.in[i][1] = static_cast<float>(value.imag());
+                rotation *= step;
+            }
+            fftwf_execute(forward_.plan);
+            for (size_t i = 0; i < forward_.size; ++i)
+            {
+                const std::complex<float> value = std::complex<float>(forward_.out[i][0], forward_.out[i][1]) * reference_spectrum_[i];
+                backward_.in[i][0] = value.real();
+                backward_.in[i][1] = value.imag();
+            }
+            fftwf_execute(backward_.plan);
+
+            const size_t count = signal.size() - reference_length_ + 1;
+            metrics_.resize(count);
+            double energy = 0.0;
+            for (size_t i = 0; i < reference_length_; ++i)
+                energy += std::norm(std::complex<float>(signal[i]));
+            const double normalization = 1.0 / static_cast<double>(forward_.size);
+            for (size_t i = 0; i < count; ++i)
+            {
+                if (i != 0)
+                {
+                    energy += std::norm(std::complex<float>(signal[i + reference_length_ - 1])) - std::norm(std::complex<float>(signal[i - 1]));
+                    energy = std::max(energy, 0.0);
+                }
+                const std::complex<float> corr(backward_.out[i][0] * normalization, backward_.out[i][1] * normalization);
+                metrics_[i] = energy > 1e-12 ? std::norm(corr) / (energy * reference_energy_) : 0.0;
+            }
+            for (size_t i = 0; i + 1 < count; ++i)
+                if (metrics_[i] >= threshold && (i == 0 || metrics_[i] >= metrics_[i - 1]) && metrics_[i] >= metrics_[i + 1])
+                    return static_cast<int>(i);
+            return -1;
+        }
+    };
 } // namespace
 
 int run_dsp_rx(SharedData &data)
@@ -961,22 +979,18 @@ int run_dsp_rx(SharedData &data)
     auto &dsp = data.dsp;
     dsp.sample_rate = data.sdr.get_sample_rate();
     auto buff_size = data.sdr.get_buffer_size();
-    float zc_energy = 0.0f;
     FrameHeader header;
     DSP::OFDMConfig rx_config;
     rx_config.mod = Modulation::QPSK;
 
+    CarrierGrid grid(dsp.ofdm_cfg);
     FFTWPlan fft(dsp.ofdm_cfg.n_subcarriers, true);
+
     std::chrono::steady_clock::time_point start;
     std::chrono::steady_clock::time_point end;
     auto clock = std::chrono::steady_clock::now();
-    std::vector<float> plato(buff_size * 2);
     std::vector<uint8_t> bits(4000);
 
-    float coarse_mean = 0.0f;
-    float coarse = 0.0f;
-    float alpha = 0.01f;
-    int cp_idx = -4;
     std::chrono::nanoseconds duration{};
 
     const int N = dsp.ofdm_cfg.n_subcarriers;
@@ -993,22 +1007,22 @@ int run_dsp_rx(SharedData &data)
     std::vector<uint8_t> header_bits;
 
     std::vector<std::complex<float>> for_processing;
-    std::vector<std::complex<float>> processed(buff_size * 2);
-    std::vector<std::complex<float>> equalized(buff_size * 2);
+    std::vector<std::complex<float>> equalized;
+    equalized.reserve(buff_size * 2);
     for_processing.reserve(buff_size * 2);
-    std::vector<std::complex<float>> zadoff_chu = ofdm_zadoff_chu_symbol(dsp);
+
+    std::vector<std::complex<float>> zadoff_chu = ofdm_zadoff_chu_symbol(grid);
     std::vector<float> llr;
     const int zc_len = static_cast<int>(zadoff_chu.size());
     size_t data_count = 0;
     size_t symbols_count = 0;
     size_t bits_per_symbol = 1;
 
-    const float *zptr = reinterpret_cast<const float *>(zadoff_chu.data());
-    for (size_t n = 0; n < zadoff_chu.size() * 2; ++n)
-        zc_energy += zptr[n] * zptr[n];
+    std::vector<std::complex<float>> channel_est;
 
-    auto convert = [](const std::vector<int16_t> &src,
-                      std::vector<std::complex<float>> &dst)
+    ZCCorrFFT zc_corr_fft(buff_size * 2, zadoff_chu);
+
+    auto convert = [](const std::vector<int16_t> &src, std::vector<std::complex<float>> &dst)
     {
         size_t n = src.size() / 2;
         dst.resize(n);
@@ -1030,33 +1044,16 @@ int run_dsp_rx(SharedData &data)
         for_processing.insert(for_processing.end(), raw_b.begin(), raw_b.end());
         data.dsp_sockets_raw.write(for_processing);
 
-        plato.resize(for_processing.size());
-
         std::atomic_signal_fence(std::memory_order_seq_cst);
         start = std::chrono::steady_clock::now();
         std::atomic_signal_fence(std::memory_order_seq_cst);
 
-        cp_idx = ofdm_cp_corr(for_processing, N, CP, plato);
-        if (cp_idx < 0)
-        {
-            dsp.max_index = zc_sync_full(for_processing, zadoff_chu, zc_energy, plato, 0.3f);
-            if (dsp.max_index < 0)
-            {
-                raw_a = std::move(raw_b);
-                continue;
-            }
-            cp_idx = dsp.max_index + zc_len + CP;
-        }
-        coarse = coarse_cfo(for_processing, cp_idx, N, CP, data.sdr.get_sample_rate());
-        coarse_mean = alpha * coarse + (1.0f - alpha) * coarse_mean;
+        int zc_idx = zc_corr_fft.find_peak(for_processing, 0.0, 0.3f);
 
-        int zc_idx = zc_sync(for_processing, zadoff_chu, zc_energy, 0.3f, cp_idx, CP);
-
-        data.snap.cp_found = cp_idx > 0;
-        data.snap.zc_found = zc_idx > 0;
-        data.snap.cp_pos = cp_idx;
+        data.snap.cp_found = false;
+        data.snap.zc_found = (zc_idx > 0);
+        data.snap.cp_pos = -1;
         data.snap.zc_pos = zc_idx;
-        data.snap.cfo = coarse;
 
         const size_t zc_end = zc_idx + zc_len;
         const size_t needed_after_zc = 10 * (N + CP);
@@ -1070,19 +1067,24 @@ int run_dsp_rx(SharedData &data)
         }
 
         dsp.max_index = zc_idx;
-        cfo_est(for_processing, dsp);
 
-        int next = 0;
+        double epsilon = cfo_est(for_processing, zc_idx, 5, grid, 0.0);
+        data.snap.cfo = epsilon * data.sdr.get_sample_rate() / tau;
 
-        if (static_cast<int>(for_processing.size()) > zc_idx + zc_len + N)
-            next = zc_idx + zc_len + dsp.offset;
-        else
+        if (std::abs(epsilon) > 1e-4)
         {
-            raw_a = std::move(raw_b);
-            continue;
+            float cfo_hz = data.snap.cfo;
+            float fs = data.sdr.get_sample_rate();
+            for (size_t n = 0; n < for_processing.size(); ++n)
+            {
+                float phase = tau * cfo_hz * n / fs;
+                for_processing[n] *= - std::complex<float>(std::cos(phase), std::sin(phase));
+            }
         }
 
+        int next = zc_idx + zc_len + dsp.offset;
         next += CP;
+
         for (size_t i = 0; i < static_cast<size_t>(N); ++i)
         {
             fft.in[i][0] = std::real(for_processing[next + i]);
@@ -1092,17 +1094,21 @@ int run_dsp_rx(SharedData &data)
         for (size_t i = 0; i < static_cast<size_t>(N); ++i)
             header_symbols_raw[i] = std::complex<float>(fft.out[i][0], fft.out[i][1]);
 
-        ofdm_equalize(header_symbols_raw, header_symbols_equalized, rx_config);
+        ofdm_equalize(header_symbols_raw, header_symbols_equalized, grid, Modulation::BPSK, channel_est);
         demodulate(Modulation::BPSK, header_symbols_equalized, header_bits, llr);
-        descramble_llr(llr);
-        header_bits = decode(llr);
-        header = unpackFrameHeader(header_bits);
+
+        decode(llr, encoded_header_length(), header_bits);
+        unpackFrameHeader(header_bits, grid, header);
+
         rx_config.mod = header.modulation;
         data_count = header.bits_count;
         bits_per_symbol = get_bits_per_symbol(rx_config.mod);
         symbols_count = (data_count + bits_per_symbol - 1) / bits_per_symbol;
 
         next += N;
+
+        equalized.clear();
+
         for (size_t s = 0; s < header.ofdm_symbols_count; ++s)
         {
             if (static_cast<int>(for_processing.size()) - next < N + CP)
@@ -1117,15 +1123,19 @@ int run_dsp_rx(SharedData &data)
             }
             fftwf_execute(fft.plan);
 
+            std::vector<std::complex<float>> current_symbol(N);
             for (size_t i = 0; i < static_cast<size_t>(N); ++i)
-                processed[i + s * static_cast<size_t>(N)] = std::complex<float>(fft.out[i][0], fft.out[i][1]);
+                current_symbol[i] = std::complex<float>(fft.out[i][0], fft.out[i][1]);
+
+            std::vector<std::complex<float>> current_equalized;
+            ofdm_equalize(current_symbol, current_equalized, grid, rx_config.mod, channel_est);
+
+            equalized.insert(equalized.end(), current_equalized.begin(), current_equalized.end());
 
             next += N;
         }
 
-        ofdm_equalize(processed, equalized, dsp.ofdm_cfg);
-
-        if (symbols_count > 0)
+        if (symbols_count > 0 && equalized.size() > symbols_count)
             equalized.resize(symbols_count);
 
         data.dsp_sockets_symbols.write(equalized);
@@ -1148,10 +1158,11 @@ int run_dsp_rx(SharedData &data)
             StatsSnapshot log;
             data.history.get_last(log);
             auto hist = data.history.get_summary();
+
             logs::dsp.debug(
-                "Stats: CP_idx: {} ZC_idx: {} CFO: {:.0f} CP_!F: {} ZC_!F: {} CFO_J: {} TIME: {:.2f}",
-                data.snap.cp_pos, data.snap.zc_pos, data.snap.cfo,
-                hist.cp_not_found, hist.zc_not_found, hist.cfo_jumped, hist.mean_time_us
+                "Stats: ZC_idx: {} CFO: {:.0f} ZC_!F: {} TIME: {:.2f}us",
+                data.snap.zc_pos, data.snap.cfo,
+                hist.zc_not_found, hist.mean_time_us
             );
             logs::tun.debug(
                 "{}: {:.4f}%, packets found: {}, packets lost: {}", fmt::format(fg(fmt::color::red), "PL"),
@@ -1174,6 +1185,8 @@ int run_dsp_tx(SharedData &data)
 
     uint64_t tx_dsp_counter = 0;
 
+    OFDMTransmitter tx(data.dsp.ofdm_cfg);
+
     while (!has_flag(data.sdr.get_flags(), Flags::IS_ACTIVE))
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
@@ -1182,11 +1195,18 @@ int run_dsp_tx(SharedData &data)
         data.ip_phy.read(bits, true);
         logs::dsp.trace("Get {} bits | {} bytes from [MAC]", bits.size(), bits.size() / 8);
 
-        scramble(bits);
-        ofdm(bits, buffer, data.dsp);
-        ++tx_dsp_counter;
-        logs::dsp.trace("[{}] modulate {} samples", fmt::format(fmt::fg(fmt::color::cyan), "OFDM"), buffer.size());
-        data.sdr_dsp_tx.write(buffer);
+        try
+        {
+            tx.ofdm(bits, data.dsp.ofdm_cfg.mod, buffer);
+
+            ++tx_dsp_counter;
+            logs::dsp.trace("[{}] modulate {} samples", fmt::format(fmt::fg(fmt::color::cyan), "OFDM"), buffer.size());
+            data.sdr_dsp_tx.write(buffer);
+        }
+        catch (const std::exception &e)
+        {
+            logs::dsp.error("TX Drop: {}", e.what());
+        }
     }
 
     return 0;
