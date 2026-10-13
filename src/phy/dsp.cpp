@@ -131,7 +131,7 @@ namespace
         size_t n;
         size_t cp;
         size_t spacing;
-        size_t half_active;
+        size_t num_rbs;
         std::vector<size_t> pilots;
         std::vector<size_t> data;
         std::vector<bool> is_guard;
@@ -140,32 +140,52 @@ namespace
             : n(config.n_subcarriers),
               cp(config.n_cp),
               spacing(config.pilot_spacing),
-              half_active(0)
+              num_rbs(6)
         {
-            if (n < 128 || n % 2 != 0 || n > static_cast<size_t>(std::numeric_limits<int>::max()) / 128 || cp == 0 || cp > n || spacing < 2)
-                throw std::invalid_argument("Invalid OFDM configuration");
+            if (n == 128)
+                num_rbs = 6;
+            else if (n == 256)
+                num_rbs = 15;
+            else if (n == 512)
+                num_rbs = 25;
+            else if (n == 1024)
+                num_rbs = 50;
+            else if (n == 2048)
+                num_rbs = 100;
+            else
+                throw std::invalid_argument("Unsupported FFT size. Use 128, 256, 512, 1024, or 2048.");
 
-            half_active = n * 9 / 32;
+            size_t active_subcarriers = num_rbs * 12;
+            size_t half_active = active_subcarriers / 2;
+
             is_guard.assign(n, true);
-            size_t counter = 0;
-            for (size_t k = 1; k < n; ++k)
-            {
-                if (k > half_active && k < n - half_active)
-                    continue;
 
-                is_guard[k] = false;
-                if (counter % spacing == 0 || k == half_active || k == n - half_active || k == n - 1)
-                    pilots.push_back(k);
+            auto assign_carrier = [&](size_t fft_idx, size_t v_idx)
+            {
+                is_guard[fft_idx] = false;
+
+                if (v_idx % spacing == 0 || fft_idx == half_active || fft_idx == n - half_active || fft_idx == n - 1)
+                    pilots.push_back(fft_idx);
                 else
-                    data.push_back(k);
-                ++counter;
-            }
-            if (data.empty() || pilots.size() < 4)
-                throw std::invalid_argument("OFDM grid has no usable data carriers");
+                    data.push_back(fft_idx);
+            };
+
+            size_t idx = 0;
+
+            for (size_t k = 1; k <= half_active; ++k)
+                assign_carrier(k, idx++);
+
+            for (size_t k = n - half_active; k < n; ++k)
+                assign_carrier(k, idx++);
+
+            if (data.empty() || pilots.empty())
+                throw std::invalid_argument("OFDM grid mapping failed");
         }
 
         size_t symbol_length() const { return n + cp; }
-        size_t active_count() const { return 2 * half_active; }
+        size_t active_count() const { return num_rbs * 12; }
+        size_t right_zone_end() const { return num_rbs * 6; }
+        size_t left_zone_start() const { return n - (num_rbs * 6); }
     };
 
     void scramble(std::vector<uint8_t> &bits, uint8_t seed = 0x5B)
@@ -412,167 +432,14 @@ namespace
         }
     }
 
-    int zc_sync_full(const std::vector<std::complex<float>> &for_ofdm, const std::vector<std::complex<float>> &zadoff_chu, const float zc_energy, std::vector<float> &plato, float threshold)
-    {
-        auto N = zadoff_chu.size();
-        auto L = for_ofdm.size();
-        static std::vector<float> r_re(L);
-        static std::vector<float> r_im(L);
-        static std::vector<float> zc_re(N);
-        static std::vector<float> zc_im(N);
-
-        split_to_float(for_ofdm.data(), r_re.data(), r_im.data(), r_im.size());
-        split_to_float(zadoff_chu.data(), zc_re.data(), zc_im.data(), zc_im.size());
-
-        float max_norm = -1.f;
-        int best_idx = -1;
-
-        for (size_t n = 0; n <= L - N; ++n)
-        {
-            float sum_re = 0.0f;
-            float sum_im = 0.0f;
-            float sig_energy = 0.0f;
-
-            for (size_t k = 0; k < N; ++k)
-            {
-                float sr = r_re[n + k];
-                float si = r_im[n + k];
-                float zr = zc_re[k];
-                float zi = zc_im[k];
-
-                sum_re += sr * zr + si * zi;
-                sum_im += si * zr - sr * zi;
-
-                sig_energy += sr * sr + si * si;
-            }
-
-            float corr = sum_re * sum_re + sum_im * sum_im;
-            float norm = corr / (sig_energy * zc_energy + 1e-12f);
-
-            plato[n] = norm;
-
-            if (norm > max_norm && norm > threshold)
-            {
-                max_norm = norm;
-                best_idx = n;
-            }
-        }
-
-        return best_idx;
-    }
-
-    int zc_sync(const std::vector<std::complex<float>> &for_ofdm, const std::vector<std::complex<float>> &zadoff_chu, const float zc_energy, float threshold, int cp_index, int Lcp)
-    {
-        auto N = zadoff_chu.size();
-        auto L = for_ofdm.size();
-        int sym_len = N + Lcp;
-
-        static std::vector<float> r_re(L);
-        static std::vector<float> r_im(L);
-        static std::vector<float> zc_re(N);
-        static std::vector<float> zc_im(N);
-
-        split_to_float(for_ofdm.data(), r_re.data(), r_im.data(), L);
-        split_to_float(zadoff_chu.data(), zc_re.data(), zc_im.data(), N);
-
-        float max_norm = -1.f;
-        int best_idx = -1;
-
-        for (int k = 1; k * sym_len <= cp_index; ++k)
-        {
-            int center = cp_index - k * sym_len;
-
-            for (int offset = -1.1 * Lcp; offset <= 1.1 * Lcp; ++offset)
-            {
-                int n = center + offset;
-                if (n < 0 || n + (int)N > (int)L)
-                    continue;
-
-                float sum_re = 0.0f;
-                float sum_im = 0.0f;
-                float sig_energy = 0.0f;
-
-                for (size_t i = 0; i < N; ++i)
-                {
-                    float sr = r_re[n + i];
-                    float si = r_im[n + i];
-                    float zr = zc_re[i];
-                    float zi = zc_im[i];
-
-                    sum_re += sr * zr + si * zi;
-                    sum_im += si * zr - sr * zi;
-                    sig_energy += sr * sr + si * si;
-                }
-
-                float corr = sum_re * sum_re + sum_im * sum_im;
-                float norm = corr / (sig_energy * zc_energy + 1e-12f);
-
-                if (norm > max_norm && norm > threshold)
-                {
-                    max_norm = norm;
-                    best_idx = n;
-                }
-                else if (best_idx > 0 && norm < threshold)
-                    return best_idx;
-            }
-        }
-
-        return best_idx;
-    }
-
-    int ofdm_cp_corr(const std::vector<std::complex<float>> &r, int N, int Lcp, std::vector<float> &plato)
-    {
-        int size = r.size();
-        float max_metric = 0.0f;
-        int max_index = -1;
-
-        std::complex<float> P = 0.0f;
-        float R = 0.0f;
-        float R_cp = 0.0f;
-
-        for (int i = 0; i < Lcp; i++)
-        {
-            P += r[i] * std::conj(r[i + N]);
-            R += std::norm(r[i + N]);
-            R_cp += std::norm(r[i]);
-        }
-        for (int d = 0; d < size - N - Lcp; d++)
-        {
-
-            float denom = 0.5f * (R_cp + R);
-            float metric = std::norm(P) / (denom * denom + 1e-12f);
-
-            if (metric > max_metric && metric > 0.85)
-            {
-                max_metric = metric;
-                max_index = d;
-            }
-            else if (max_index != -1 && metric < max_metric * 0.7f)
-                break;
-
-            if (d + 1 >= size - N - Lcp)
-                break;
-
-            P -= r[d] * std::conj(r[d + N]);
-            P += r[d + Lcp] * std::conj(r[d + N + Lcp]);
-
-            R -= std::norm(r[d + N]);
-            R += std::norm(r[d + N + Lcp]);
-
-            R_cp -= std::norm(r[d]);
-            R_cp += std::norm(r[d + Lcp]);
-            plato[d] = metric;
-        }
-
-        return max_index;
-    }
-
     void ofdm_equalize(const std::vector<std::complex<float>> &input, std::vector<std::complex<float>> &output, const CarrierGrid &grid, Modulation mod, std::vector<std::complex<float>> &channel)
     {
         if (input.size() != grid.n)
             throw std::invalid_argument("Equalizer input has the wrong FFT size");
+
         channel.assign(grid.n, std::complex<float>{});
         const std::complex<float> pilot = get_pilot(mod);
+
         float maximum_power = 0.0f;
         for (const size_t k : grid.pilots)
         {
@@ -583,21 +450,26 @@ namespace
         {
             const size_t k1 = grid.pilots[p];
             const size_t k2 = grid.pilots[p + 1];
-            if (k1 == grid.half_active && k2 == grid.n - grid.half_active)
+            if (k1 <= grid.right_zone_end() && k2 >= grid.left_zone_start())
                 continue;
+
             const float phase1 = std::arg(channel[k1]);
             const float delta_phase = std::remainder(std::arg(channel[k2]) - phase1, tau);
+
             const float magnitude1 = std::abs(channel[k1]);
             const float delta_magnitude = std::abs(channel[k2]) - magnitude1;
+
             for (size_t k = k1 + 1; k < k2; ++k)
             {
                 const float alpha = static_cast<float>(k - k1) / static_cast<float>(k2 - k1);
                 channel[k] = std::polar(magnitude1 + alpha * delta_magnitude, phase1 + alpha * delta_phase);
             }
         }
+
         const float minimum_power = std::max(1e-20f, maximum_power * 1e-8f);
         output.clear();
         output.reserve(grid.data.size());
+
         for (const size_t k : grid.data)
         {
             std::complex<float> value{};
@@ -638,18 +510,28 @@ namespace
     std::vector<std::complex<float>> ofdm_zadoff_chu_symbol(const CarrierGrid &grid, FFTWPlan &ifft)
     {
         const size_t length = grid.active_count();
+        const size_t half = length / 2;
         size_t root = 5;
         while (std::gcd(length, root) != 1)
             ++root;
+
         const auto zc = generate_zc(length, root);
         ifft.clear();
-        for (size_t i = 0; i < length; ++i)
+
+        for (size_t i = 0; i < half; ++i)
         {
-            const size_t k = i < grid.half_active ? grid.n - grid.half_active + i
-                                                  : i - grid.half_active + 1;
+            size_t k = 1 + i;
+            ifft.in[k][0] = zc[half + i].real();
+            ifft.in[k][1] = zc[half + i].imag();
+        }
+
+        for (size_t i = 0; i < half; ++i)
+        {
+            size_t k = grid.n - half + i;
             ifft.in[k][0] = zc[i].real();
             ifft.in[k][1] = zc[i].imag();
         }
+
         fftwf_execute(ifft.plan);
         auto output = scaled_ifft_output(ifft, grid.active_count());
         for (auto &sample : output)
@@ -663,27 +545,6 @@ namespace
         return ofdm_zadoff_chu_symbol(grid, ifft);
     }
 
-    float coarse_cfo(std::vector<std::complex<float>> &r, int max_index, int N, int Lcp, float fs)
-    {
-        if (max_index < 0)
-            return 0;
-        std::complex<float> P = 0.0f;
-        for (int i = 0; i < Lcp; ++i)
-            P += r[max_index + i] * std::conj(r[max_index + i + N]);
-
-        float epsilon = std::arg(P) / (tau);
-
-        float cfo_hz = epsilon * fs / N;
-
-        for (size_t n = 0; n < r.size(); ++n)
-        {
-            float phase = tau * cfo_hz * n / fs;
-            r[n] *= std::complex<float>(std::cos(phase), std::sin(phase));
-        }
-
-        return cfo_hz;
-    }
-
     double cfo_est(std::span<const std::complex<float>> signal, size_t zc_start, size_t following_symbols, const CarrierGrid &grid, double fallback)
     {
         std::complex<float> correlation = 0.0;
@@ -692,7 +553,7 @@ namespace
         {
             if (start + grid.symbol_length() > signal.size())
                 return;
-            for (size_t i = grid.cp / 4; i < grid.cp; ++i)
+            for (size_t i = 0; i < grid.cp; ++i)
             {
                 const std::complex<float> prefix(signal[start + i]);
                 const std::complex<float> tail(signal[start + i + grid.n]);
@@ -1073,12 +934,16 @@ int run_dsp_rx(SharedData &data)
 
         if (std::abs(epsilon) > 1e-4)
         {
+            float phase_step = -static_cast<float>(epsilon);
+            std::complex<float> rot(std::cos(phase_step), std::sin(phase_step));
+            std::complex<float> cur_rot(1.f, 0.f);
+
             float cfo_hz = data.snap.cfo;
             float fs = data.sdr.get_sample_rate();
             for (size_t n = 0; n < for_processing.size(); ++n)
             {
-                float phase = tau * cfo_hz * n / fs;
-                for_processing[n] *= - std::complex<float>(std::cos(phase), std::sin(phase));
+                for_processing[n] *= cur_rot;
+                cur_rot *= rot;
             }
         }
 
