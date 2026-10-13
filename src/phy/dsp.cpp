@@ -785,7 +785,7 @@ namespace
                 reference_spectrum_[i] = { forward_.out[i][0], -forward_.out[i][1] };
         }
 
-        int find_peak(std::span<const std::complex<float>> signal, double omega, float threshold)
+        int find_peak(std::span<const std::complex<float>> signal, float threshold)
         {
             if (signal.size() <= reference_length_)
                 return -1;
@@ -793,14 +793,10 @@ namespace
                 throw std::invalid_argument("Correlation input exceeds the planned size");
 
             forward_.clear();
-            const std::complex<double> step = std::polar(1.0, -omega);
-            std::complex<float> rotation = 1.0;
             for (size_t i = 0; i < signal.size(); ++i)
             {
-                const std::complex<float> value = std::complex<float>(signal[i]) * rotation;
-                forward_.in[i][0] = static_cast<float>(value.real());
-                forward_.in[i][1] = static_cast<float>(value.imag());
-                rotation *= step;
+                forward_.in[i][0] = static_cast<float>(signal[i].real());
+                forward_.in[i][1] = static_cast<float>(signal[i].imag());
             }
             fftwf_execute(forward_.plan);
             for (size_t i = 0; i < forward_.size; ++i)
@@ -909,7 +905,7 @@ int run_dsp_rx(SharedData &data)
         start = std::chrono::steady_clock::now();
         std::atomic_signal_fence(std::memory_order_seq_cst);
 
-        int zc_idx = zc_corr_fft.find_peak(for_processing, 0.0, 0.3f);
+        int zc_idx = zc_corr_fft.find_peak(for_processing, 0.3f);
 
         data.snap.cp_found = false;
         data.snap.zc_found = (zc_idx > 0);
