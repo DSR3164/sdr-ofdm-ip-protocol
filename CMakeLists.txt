@@ -1,4 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
+
 project(SOIP LANGUAGES CXX)
 
 find_program(CCACHE_PROGRAM ccache)

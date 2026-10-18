@@ -1,0 +1,49 @@
+name: SDR Hardware Performance CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Длительность теста iperf3 (секунды)'
+        required: false
+        default: '15'
+      modulation:
+        description: 'Модуляция (QAM64, QAM16, QPSK, BPSK)'
+        required: false
+        default: 'QAM64'
+      bitrate:
+        description: 'Целевой UDP битрейт (например: 12M, 15M)'
+        required: false
+        default: '12M'
+      min_speed:
+        description: 'Минимальная скорость (Мбит/с)'
+        required: false
+        default: '9.0'
+
+concurrency:
+  group: sdr-hardware-lock
+  cancel-in-progress: false
+
+jobs:
+  sdr-benchmark:
+    name: SDR Over-The-Air Speed Test
+    runs-on: [self-hosted, sdr]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build project (Release)
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          cmake --build build -j$(nproc)
+
+      - name: Run Speed Benchmark
+        env:
+          TEST_DURATION: ${{ github.event.inputs.duration || '15' }}
+          TEST_BITRATE: ${{ github.event.inputs.bitrate || '12M' }}
+          MODULATION: ${{ github.event.inputs.modulation || 'QAM64' }}
+          MIN_SPEED_MBPS: ${{ github.event.inputs.min_speed || '9.0' }}
+        run: |
+          ./scripts/ci_speed_test.sh

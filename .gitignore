@@ -11,7 +11,9 @@
 !CMakeLists.txt
 !.clang-format
 !config/sdr.conf
-!.github/workflows/ci.yaml
+!.github/workflows/*.yaml
+!scripts/**
+!*.sh
 
 !*.ttf
 
