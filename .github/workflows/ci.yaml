@@ -25,7 +25,6 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-
           sudo apt install -y \
             build-essential \
             cmake \
@@ -36,6 +35,8 @@ jobs:
             libsdl2-dev \
             libglew-dev \
             libsoapysdr-dev \
+            libuhd-dev \
+            uhd-host \
             libopengl-dev
 
       - name: Configure
@@ -62,7 +63,6 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-
           sudo apt install -y \
             clang-18 \
             clang-tidy-18 \
@@ -72,6 +72,8 @@ jobs:
             libsdl2-dev \
             libglew-dev \
             libsoapysdr-dev \
+            libuhd-dev \
+            uhd-host \
             libopengl-dev
 
       - name: Configure
