@@ -36,6 +36,8 @@ struct CliConfig {
     std::optional<Node> node;
     std::optional<double> rx_freq;
     std::optional<double> tx_freq;
+    std::optional<float> rx_gain;
+    std::optional<float> tx_gain;
     std::optional<std::string> ip;
     LogConfig log;
 };

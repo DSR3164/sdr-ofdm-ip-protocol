@@ -27,38 +27,37 @@ size_t calculate_mtu(const SharedData &data)
     const int ps = data.dsp.ofdm_cfg.pilot_spacing;
     const auto mod_type = data.dsp.ofdm_cfg.mod;
 
-    uint16_t bps = 1;
-
     size_t data_subs = 0;
-    int active_idx = 0;
+    size_t active_idx = 0;
+
+    const size_t guard_left = ns / 8;
+    const size_t guard_right = ns / 8;
 
     for (size_t k = 0; k < ns; ++k)
     {
-        if (k == 0 || (k >= 37 && k <= 91))
+        if (k == 0 || k < guard_left || k >= (ns - guard_right))
             continue;
 
-        bool is_pilot = (active_idx % ps == 0) || (k == ns / 2 - 28) || (k == ns / 2 + 28) || (k == ns - 1);
-
+        bool is_pilot = (active_idx % ps == 0) || (k == ns - guard_right - 1);
         if (!is_pilot)
             data_subs++;
 
         active_idx++;
     }
 
-    logs::tun.debug("MTU debug: data_subs={}, ps={}, mod={}", data_subs, ps, static_cast<int>(mod_type));
-
-    switch (static_cast<int>(mod_type))
+    uint16_t bps = 1;
+    switch (mod_type)
     {
-    case 0:
+    case Modulation::BPSK:
         bps = 1;
         break;
-    case 1:
+    case Modulation::QPSK:
         bps = 2;
         break;
-    case 2:
+    case Modulation::QAM16:
         bps = 4;
         break;
-    case 3:
+    case Modulation::QAM64:
         bps = 6;
         break;
     default:
@@ -66,38 +65,46 @@ size_t calculate_mtu(const SharedData &data)
         break;
     }
 
-    const size_t bits_per_stream = data_subs * bps * 10;
+    constexpr size_t num_ofdm_symbols = 10;
+    const size_t bits_per_frame = data_subs * bps * num_ofdm_symbols;
 
-    if (bits_per_stream / 8 <= (sizeof(FrameHeader) + 2))
+    const size_t raw_payload_bits = (bits_per_frame * data.punct_cfg.period) / (n * data.punct_cfg.kept);
+    const size_t raw_payload_bytes = raw_payload_bits / 8;
+
+    if (raw_payload_bytes <= sizeof(FrameHeader) + 4)
         return 0;
 
-    int result = (bits_per_stream * data.punct_cfg.period / (n * data.punct_cfg.kept)) / 8 - 20;
-    return result & ~7;
+    int result = static_cast<int>(raw_payload_bytes - sizeof(FrameHeader) - 4);
+
+    logs::tun.debug("MTU debug: data_subs={}, ps={}, mod={}", data_subs, ps, static_cast<int>(mod_type));
+
+    return static_cast<size_t>(result & ~7);
 }
 
 void run_tun_tx(SharedData &data)
 {
-    auto &tun_fd = data.tun_fd;
-    auto &tun_name = data.tun_name;
-    data.tun_fd = allocate_tun(tun_name);
+    data.tun = std::make_shared<TunDevice>(data.tun_name);
 
-    if (tun_fd < 0)
-        return;
-
-    std::string ip_address = data.ip_addr;
-
-    auto ip_addr = set_interface_ip(tun_name, ip_address);
-    if (ip_addr)
+    if (data.tun->get_fd() < 0)
     {
-        logs::tun.info("Interface {} started with IP {}", tun_name, *ip_addr);
+        logs::tun.error("[TX] Failed to create TUN device {}", data.tun_name);
+        return;
+    }
 
-        if (ip_addr->ends_with(".1"))
-            enable_nat(tun_name);
-        else if (!ip_addr->ends_with(".1"))
-            enable_client(tun_name);
+    data.tun_name = data.tun->get_name();
+    const std::string &ip_address = data.ip_addr;
+
+    if (data.tun->set_ip_and_up(ip_address, "255.255.255.252"))
+    {
+        logs::tun.info("Interface {} started with IP {}", data.tun_name, ip_address);
+
+        if (ip_address.ends_with(".1"))
+            enable_nat(data.tun_name);
+        else
+            enable_client(data.tun_name);
     }
     else
-        logs::tun.error("Failed to assign IP to {}", tun_name);
+        logs::tun.error("Failed to assign IP to {}", data.tun_name);
 
     struct IP ip;
 
@@ -107,11 +114,15 @@ void run_tun_tx(SharedData &data)
     const auto mtu = calculate_mtu(data);
     logs::tun.info("MTU: {}", mtu);
 
+    if (mtu > 0)
+        data.tun->set_mtu(static_cast<int>(1500));
+
     size_t max_frame_bytes = sizeof(FrameHeader) + mtu;
 
+    auto tun = data.tun;
     while (!data.stop.load())
     {
-        struct pollfd pfd = { tun_fd, POLLIN, 0 };
+        struct pollfd pfd = { tun->get_fd(), POLLIN, 0 };
         int ret = poll(&pfd, 1, 1000);
 
         if (ret < 0)
@@ -126,12 +137,12 @@ void run_tun_tx(SharedData &data)
 
         if (pfd.revents & POLLIN)
         {
-            ssize_t nbytes = read(tun_fd, buffer, sizeof(buffer));
+            ssize_t nbytes = tun->read_packet(buffer, sizeof(buffer));
             if (nbytes < 0)
             {
                 if (errno == EAGAIN || errno == EWOULDBLOCK)
                     continue;
-                logs::tun.error("[{}] Read error {}: {}", tun_name, errno, strerror(errno));
+                logs::tun.error("[{}] Read error {}: {}", tun->get_name(), errno, strerror(errno));
                 nbytes = 0;
                 continue;
             }
@@ -189,15 +200,20 @@ void run_tun_tx(SharedData &data)
             }
         }
     }
-
-    close(tun_fd);
-    logs::tun.info("TUN device {} (fd {}) closed", tun_name, tun_fd);
 }
 
 void run_tun_rx(SharedData &data)
 {
-    auto &tun_name = data.tun_name;
-    auto &tun_fd = data.tun_fd;
+    while (!data.stop.load() && (!data.tun || data.tun->get_fd() < 0))
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    if (data.stop.load() || !data.tun)
+        return;
+
+    auto tun = data.tun;
+
+    const std::string &tun_name = tun->get_name();
+
     std::vector<float> llr;
     std::vector<uint8_t> frame;
     std::vector<uint8_t> block;
@@ -216,6 +232,8 @@ void run_tun_rx(SharedData &data)
 
     std::vector<uint8_t> dummy(mother_bits_padded, 0);
     const size_t EXPECTED_LLR_SIZE = puncture(dummy, data.punct_cfg).size();
+
+    logs::tun.info("[RX] Thread started on {}, expected LLR size: {}", tun_name, EXPECTED_LLR_SIZE);
 
     while (!data.stop.load())
     {
@@ -242,6 +260,9 @@ void run_tun_rx(SharedData &data)
             logs::tun.debug("[{}] Bad magic: 0x{:04X}", tun_name, ntohs(hdr.magic));
             continue;
         }
+
+        logs::tun.debug("RX frame: {}, packet id: {}", ntohs(hdr.seq), ntohs(hdr.id));
+
         uint16_t current_id = ntohs(hdr.id);
         int16_t diff = (int16_t)(current_id - last_id);
         if (diff > 1 && last_id_valid)
@@ -304,7 +325,7 @@ void run_tun_rx(SharedData &data)
 
             if (full_packet.size() > 2)
             {
-                ssize_t written = write(tun_fd, full_packet.data(), full_packet.size());
+                ssize_t written = tun->write_packet(full_packet.data(), full_packet.size());
 
                 if (written >= 0)
                 {
