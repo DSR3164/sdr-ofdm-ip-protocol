@@ -1,6 +1,6 @@
 #pragma once
 
 #include "common.hpp"
+#include "phy/dsp_rx/dsp_rx.hpp"
+#include "phy/dsp_tx/dsp_tx.hpp"
 
-int run_dsp_rx(SharedData &data);
-int run_dsp_tx(SharedData &data);
