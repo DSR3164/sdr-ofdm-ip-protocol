@@ -2,9 +2,10 @@
 
 #include <stdexcept>
 
-ResourceGrid::ResourceGrid(size_t n_symbols, size_t n_rbs)
+ResourceGrid::ResourceGrid(size_t n_symbols, size_t n_rbs, size_t n_fft)
     : n_symbols_(n_symbols),
       n_rbs_(n_rbs),
+      n_fft_(n_fft),
       data_(n_symbols * n_rbs * RB_SIZE, Complex{})
 {
     if (n_symbols == 0 || n_rbs == 0)
@@ -46,4 +47,26 @@ Complex ResourceGrid::get_re(
         throw std::out_of_range("ResourceGrid index out of range");
     }
     return data_[(symbol * n_rbs_ + rb) * RB_SIZE + subcarrier];
+}
+
+size_t ResourceGrid::bin_of(size_t column) const
+{
+    const size_t half = n_rbs_ * RB_SIZE / 2;
+    if (column >= 2 * half)
+        throw std::out_of_range("ResourceGrid column out of range");
+
+    return column < half ? column + 1 : n_fft_ - half + (column - half);
+}
+
+void ResourceGrid::to_bins(size_t symbol, std::vector<Complex> &bins) const
+{
+    if (symbol >= n_symbols_)
+        throw std::out_of_range("ResourceGrid symbol out of range");
+
+    bins.assign(n_fft_, Complex{});
+
+    for (size_t column = 0; column < n_rbs_ * RB_SIZE; ++column)
+    {
+        bins[bin_of(column)] = data_[symbol * n_rbs_ * RB_SIZE + column];
+    }
 }
