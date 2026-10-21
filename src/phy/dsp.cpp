@@ -1,6 +1,6 @@
 #include "logger.hpp"
 #include "phy/dsp.hpp"
-#include "ip/bit_utils.hpp"
+#include "ip/utils.hpp"
 #include "ip/fec_codec.hpp"
 
 #include <cstddef>
