@@ -243,12 +243,15 @@ void run_tun_rx(SharedData &data)
             continue;
         llr.resize(EXPECTED_LLR_SIZE);
 
-        logs::tun.trace("[RX] bits size: {}", llr.size());
-
+        auto t_start = std::chrono::steady_clock::now();
         llr = depuncture(llr, data.punct_cfg);
         llr = deinterleaving_float(llr);
         frame = viterbi_decoder_llr(llr);
+        auto t_end = std::chrono::steady_clock::now();
 
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(t_end - t_start).count();
+
+        logs::tun.trace("[RX] Frame procesed for: {} us", duration);
         if (frame.size() < sizeof(FrameHeader) + 2)
             continue;
 
