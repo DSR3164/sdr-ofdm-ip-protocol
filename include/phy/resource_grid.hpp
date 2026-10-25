@@ -2,6 +2,7 @@
 
 #include <complex>
 #include <cstddef>
+#include <span>
 #include <vector>
 
 using Complex = std::complex<float>;
@@ -30,6 +31,15 @@ class ResourceGrid {
     size_t bin_of(size_t column) const;
 
     void to_bins(size_t symbol, std::vector<Complex> &bins) const;
+
+    void fill_symbol(
+        size_t symbol,
+        std::span<const Complex> data,
+        const std::vector<size_t> &pilot_bins,
+        Complex pilot
+    );
+
+    size_t column_count() const;
   private:
     size_t n_symbols_;
     size_t n_rbs_;

@@ -1,5 +1,6 @@
 #include "logger.hpp"
 #include "phy/dsp.hpp"
+#include "phy/resource_grid.hpp"
 #include "ip/bit_utils.hpp"
 #include "ip/fec_codec.hpp"
 
@@ -668,23 +669,44 @@ namespace
         size_t header_coded_bits_;
         size_t header_symbols_;
 
-        void append_ofdm_symbol(std::span<const std::complex<float>> symbols, Modulation mod, std::vector<int16_t> &buffer)
+        void append_ofdm_symbol(
+            std::span<const std::complex<float>> symbols,
+            Modulation mod,
+            std::vector<int16_t> &buffer
+        )
         {
+            if (symbols.size() > grid_.data.size())
+                throw std::invalid_argument(
+                    "OFDM symbol has too many data carriers"
+                );
+
+            ResourceGrid resource_grid(1, grid_.num_rbs, grid_.n);
+
+            resource_grid.fill_symbol(
+                0,
+                symbols,
+                grid_.pilots,
+                get_pilot(mod)
+            );
+
+            std::vector<Complex> bins;
+            resource_grid.to_bins(0, bins);
+
             ifft_.clear();
-            const auto pilot = get_pilot(mod);
-            for (const size_t k : grid_.pilots)
+
+            for (size_t k = 0; k < grid_.n; ++k)
             {
-                ifft_.in[k][0] = pilot.real();
-                ifft_.in[k][1] = pilot.imag();
+                ifft_.in[k][0] = bins[k].real();
+                ifft_.in[k][1] = bins[k].imag();
             }
-            for (size_t i = 0; i < symbols.size(); ++i)
-            {
-                const size_t k = grid_.data[i];
-                ifft_.in[k][0] = symbols[i].real();
-                ifft_.in[k][1] = symbols[i].imag();
-            }
+
             fftwf_execute(ifft_.plan);
-            append_symbol(scaled_ifft_output(ifft_, grid_.active_count()), grid_.cp, buffer);
+
+            append_symbol(
+                scaled_ifft_output(ifft_, grid_.active_count()),
+                grid_.cp,
+                buffer
+            );
         }
       public:
         explicit OFDMTransmitter(const DSP::OFDMConfig &config)
