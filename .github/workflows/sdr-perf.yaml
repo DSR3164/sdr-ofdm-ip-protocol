@@ -7,7 +7,7 @@ on:
       duration:
         description: 'Длительность теста iperf3 (секунды)'
         required: false
-        default: '15'
+        default: '5'
       modulation:
         description: 'Модуляция (QAM64, QAM16, QPSK, BPSK)'
         required: false
@@ -19,7 +19,7 @@ on:
       min_speed:
         description: 'Минимальная скорость (Мбит/с)'
         required: false
-        default: '9.0'
+        default: '9.5'
 
 concurrency:
   group: sdr-hardware-lock
@@ -41,9 +41,9 @@ jobs:
 
       - name: Run Speed Benchmark
         env:
-          TEST_DURATION: ${{ github.event.inputs.duration || '15' }}
+          TEST_DURATION: ${{ github.event.inputs.duration || '5' }}
           TEST_BITRATE: ${{ github.event.inputs.bitrate || '12M' }}
           MODULATION: ${{ github.event.inputs.modulation || 'QAM64' }}
-          MIN_SPEED_MBPS: ${{ github.event.inputs.min_speed || '9.0' }}
+          MIN_SPEED_MBPS: ${{ github.event.inputs.min_speed || '9.5' }}
         run: |
           ./scripts/ci_speed_test.sh

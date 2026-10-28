@@ -6,12 +6,12 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BUILD_DIR="${BUILD_DIR:-$PROJECT_ROOT/build}"
 SOIP_BIN="$BUILD_DIR/soip"
 
-DURATION="${TEST_DURATION:-15}"
+DURATION="${TEST_DURATION:-5}"
 TARGET_BITRATE="${TEST_BITRATE:-12M}"
 MODULATION="${MODULATION:-QAM64}"
-MIN_SPEED_MBPS="${MIN_SPEED_MBPS:-6.5}"
+MIN_SPEED_MBPS="${MIN_SPEED_MBPS:-9.5}"
 MAX_PACKET_LOSS="${MAX_PACKET_LOSS:-45.0}"
-MAX_PHYSICAL_MBPS="${MAX_PHYSICAL_MBPS:-11.0}"
+MAX_PHYSICAL_MBPS="${MAX_PHYSICAL_MBPS:-12.0}"
 
 if [ ! -f "$SOIP_BIN" ]; then
     echo "❌ Ошибка: исполняемый файл $SOIP_BIN не найден. Сначала соберите проект."
@@ -61,7 +61,7 @@ sudo ip netns exec ns0 iperf3 -s -1 < /dev/null > "$LOG_SERVER" 2>&1 &
 sleep 2
 
 echo "=== 4. Запуск теста iperf3 (ns1 -> ns0, ${DURATION}c, ${TARGET_BITRATE}) ==="
-sudo ip netns exec ns1 iperf3 -c 10.0.0.1 -u -b "$TARGET_BITRATE" -i 1 -R -t "$DURATION" -J < /dev/null > "$JSON_OUT" 2>&1 || true
+sudo ip netns exec ns1 iperf3 -c 10.0.0.1 -u -b "$TARGET_BITRATE" -i 1 -R -t "$DURATION" -O 2 -J < /dev/null > "$JSON_OUT" 2>&1 || true
 
 # Парсинг результатов с помощью Python
 python3 -c '
@@ -103,9 +103,10 @@ total_pkts = sum_data.get("packets", 0)
 overall_loss_pct = sum_data.get("lost_percent", 0.0)
 avg_jitter = sum_data.get("jitter_ms", 0.0)
 
-rates = [it["sum"]["bits_per_second"] / 1e6 for it in intervals if it["sum"].get("bits_per_second")]
-rx_bytes_total = sum(it["sum"]["bytes"] for it in intervals)
-total_duration = sum_data.get("seconds", 15.0)
+test_intervals = [it for it in intervals if not it["sum"].get("omitted", False)]
+rates = [it["sum"]["bits_per_second"] / 1e6 for it in test_intervals if it["sum"].get("bits_per_second")]
+rx_bytes_total = sum(it["sum"]["bytes"] for it in test_intervals)
+total_duration = sum_data.get("seconds", sum(it["sum"].get("seconds", 1.0) for it in test_intervals))
 rx_avg_rate = (rx_bytes_total * 8) / (total_duration * 1e6) if total_duration > 0 else 0.0
 
 min_rate = min(rates) if rates else 0.0

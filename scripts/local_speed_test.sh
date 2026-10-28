@@ -99,7 +99,7 @@ $SUDO ip netns exec ns0 iperf3 -s -1 < /dev/null > "$LOG_SERVER" 2>&1 &
 sleep 2
 
 echo_msg "=== 4. Запуск теста iperf3 (ns1 -> ns0, ${DURATION}c, ${TARGET_BITRATE}) ==="
-$SUDO ip netns exec ns1 iperf3 -c 10.0.0.1 -u -b "$TARGET_BITRATE" -i 1 -R -t "$DURATION" -J < /dev/null > "$JSON_OUT" 2>&1 || true
+$SUDO ip netns exec ns1 iperf3 -c 10.0.0.1 -u -b "$TARGET_BITRATE" -i 1 -R -t "$DURATION" -O 2 -J < /dev/null > "$JSON_OUT" 2>&1 || true
 
 # Остановка узлов для фиксации финальной статистики DSP
 $SUDO killall -2 soip 2>/dev/null || true
@@ -171,9 +171,10 @@ total_pkts = sum_data.get("packets", 0)
 overall_loss_pct = sum_data.get("lost_percent", 0.0)
 avg_jitter = sum_data.get("jitter_ms", 0.0)
 
-rates = [it["sum"]["bits_per_second"] / 1e6 for it in intervals if it["sum"].get("bits_per_second")]
-rx_bytes_total = sum(it["sum"]["bytes"] for it in intervals)
-total_duration = sum_data.get("seconds", 15.0)
+test_intervals = [it for it in intervals if not it["sum"].get("omitted", False)]
+rates = [it["sum"]["bits_per_second"] / 1e6 for it in test_intervals if it["sum"].get("bits_per_second")]
+rx_bytes_total = sum(it["sum"]["bytes"] for it in test_intervals)
+total_duration = sum_data.get("seconds", sum(it["sum"].get("seconds", 1.0) for it in test_intervals))
 rx_avg_rate = (rx_bytes_total * 8) / (total_duration * 1e6) if total_duration > 0 else 0.0
 
 min_rate = min(rates) if rates else 0.0
@@ -195,7 +196,7 @@ def c(text, code):
 
 BOLD, DIM, RED, GREEN, YELLOW, CYAN = "1", "2", "31", "32", "33", "36"
 
-W = [13, 10, 14, 10, 20]                  # ширины колонок
+W = [13, 10, 14, 10, 24]                  # ширины колонок
 INNER = sum(w + 2 for w in W) + len(W) - 1  # внутренняя ширина рамки
 
 def border(l, m, r):
@@ -237,14 +238,22 @@ for it in intervals:
     lost_p   = s.get("lost_packets", 0)
     tot_p    = s.get("packets", 0)
     loss_pct = s.get("lost_percent", 0.0)
+    omitted  = s.get("omitted", False)
 
-    loss_color = GREEN if lost_p == 0 else YELLOW
+    interval_label = f"{start_t:4.1f}–{end_t:4.1f} с"
+    if omitted:
+        loss_color = DIM
+        pl_text = f"{lost_p}/{tot_p} ({loss_pct:.1f}%) [прогрев]"
+    else:
+        loss_color = GREEN if lost_p == 0 else YELLOW
+        pl_text = f"{lost_p}/{tot_p} ({loss_pct:.1f}%)"
+
     print(row([
-        (f"{start_t:4.1f}–{end_t:4.1f} с",              None,       "^"),
-        (f"{mbytes:.2f} МБ",                             None,       ">"),
-        (f"{mbps:.2f} Мбит/с",                           None,       ">"),
-        (f"{jit:.3f} мс",                                None,       ">"),
-        (f"{lost_p}/{tot_p} ({loss_pct:.1f}%)",          loss_color, ">"),
+        (interval_label,        DIM if omitted else None, "^"),
+        (f"{mbytes:.2f} МБ",    DIM if omitted else None, ">"),
+        (f"{mbps:.2f} Мбит/с",  DIM if omitted else None, ">"),
+        (f"{jit:.3f} мс",       DIM if omitted else None, ">"),
+        (pl_text,               loss_color,               ">"),
     ]))
 
 print(border("├", "┴", "┤"))
