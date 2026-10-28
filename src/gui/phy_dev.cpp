@@ -26,7 +26,6 @@ void phy_dev(App &app, Buffers &data) // Phy layer
 
     data.dsp.read(symbols);
     data.sdr_raw.read(raw);
-    const float *raw_ptr = reinterpret_cast<const float *>(symbols.data());
 
     if (ImGui::Begin("Constellation"))
         app.begin_scatter<float, std::complex<float>>(label, symbols);

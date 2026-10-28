@@ -26,21 +26,21 @@ enum class Flags : uint16_t
 inline Flags operator|(Flags a, Flags b)
 {
     return static_cast<Flags>(
-        static_cast<uint16_t>(a) | static_cast<uint16_t>(b)
+        static_cast<uint16_t>(static_cast<uint16_t>(a) | static_cast<uint16_t>(b))
     );
 }
 
 inline Flags operator&(Flags a, Flags b)
 {
     return static_cast<Flags>(
-        static_cast<uint16_t>(a) & static_cast<uint16_t>(b)
+        static_cast<uint16_t>(static_cast<uint16_t>(a) & static_cast<uint16_t>(b))
     );
 }
 
 inline Flags operator~(Flags a)
 {
     return static_cast<Flags>(
-        ~static_cast<uint16_t>(a)
+        static_cast<uint16_t>(~static_cast<uint16_t>(a))
     );
 }
 
@@ -52,9 +52,7 @@ inline Flags &operator|=(Flags &a, Flags b)
 
 inline Flags &operator&=(Flags &a, Flags b)
 {
-    a = static_cast<Flags>(
-        static_cast<uint16_t>(a) & static_cast<uint16_t>(b)
-    );
+    a = a & b;
     return a;
 }
 

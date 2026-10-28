@@ -145,8 +145,6 @@ int SDR::readstream(std::vector<int16_t> &recv)
         throw std::runtime_error(md.strerror());
     }
 
-    const size_t samples = recv.size() / 2;
-
     recv.resize(offset * 2);
     return static_cast<int>(offset);
 }
