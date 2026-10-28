@@ -24,11 +24,19 @@ else
     SUDO="sudo"
 fi
 
+restore_tty() {
+    stty sane opost onlcr icrnl < /dev/tty 2>/dev/null || stty sane opost onlcr icrnl 2>/dev/null || true
+}
+
+echo_msg() {
+    restore_tty
+    printf "%b\r\n" "$*"
+}
+
 stop_processes() {
-    echo ""
-    echo "=== Остановка тестовых процессов ==="
+    printf "\r\n=== Остановка тестовых процессов ===\r\n"
     $SUDO killall -9 soip iperf3 2>/dev/null || true
-    stty sane 2>/dev/null || true
+    restore_tty
     sleep 1
 }
 
@@ -37,11 +45,11 @@ cleanup() {
     if [ -n "${TEST_TMP_DIR:-}" ] && [ -d "$TEST_TMP_DIR" ]; then
         rm -rf "$TEST_TMP_DIR" 2>/dev/null || $SUDO rm -rf "$TEST_TMP_DIR" || true
     fi
-    stty sane 2>/dev/null || true
+    restore_tty
 }
 trap cleanup EXIT
 
-echo "=== 1. Очистка старых процессов ==="
+echo_msg "=== 1. Очистка старых процессов ==="
 stop_processes
 
 TEST_TMP_DIR="$(mktemp -d /tmp/soip_speed_test_XXXXXX)"
@@ -56,55 +64,54 @@ export JSON_OUT MIN_SPEED_MBPS MAX_PACKET_LOSS MAX_PHYSICAL_MBPS LOG_A LOG_B
 # Проверка и создание сетевых пространств имён ns0 и ns1
 for ns in ns0 ns1; do
     if ! ip netns list | grep -qw "$ns"; then
-        echo "Создание сетевого пространства $ns..."
+        echo_msg "Создание сетевого пространства $ns..."
         $SUDO ip netns add "$ns"
         $SUDO ip netns exec "$ns" ip link set lo up
     fi
 done
 
-echo "=== 2. Запуск Node A (ns0) и Node B (ns1) с модуляцией ${MODULATION} ==="
-$SUDO ip netns exec ns0 "$SOIP_BIN" -n A -m "$MODULATION" > "$LOG_A" 2>&1 &
+echo_msg "=== 2. Запуск Node A (ns0) и Node B (ns1) с модуляцией ${MODULATION} ==="
+$SUDO ip netns exec ns0 "$SOIP_BIN" -n A -m "$MODULATION" < /dev/null > "$LOG_A" 2>&1 &
 PID_A=$!
 sleep 1
 
-$SUDO ip netns exec ns1 "$SOIP_BIN" -n B -m "$MODULATION" > "$LOG_B" 2>&1 &
+$SUDO ip netns exec ns1 "$SOIP_BIN" -n B -m "$MODULATION" < /dev/null > "$LOG_B" 2>&1 &
 PID_B=$!
 
-echo "Узлы запущены (PID A: $PID_A, PID B: $PID_B). Ожидание синхронизации линка (5 сек)..."
+echo_msg "Узлы запущены (PID A: $PID_A, PID B: $PID_B). Ожидание синхронизации линка (5 сек)..."
 sleep 5
 
 # Проверка, что узлы не упали
 if ! kill -0 "$PID_A" 2>/dev/null; then
-    echo "❌ Ошибка: Node A упал сразу после запуска! Лог:"
+    echo_msg "❌ Ошибка: Node A упал сразу после запуска! Лог:"
     cat "$LOG_A"
     exit 1
 fi
 
 if ! kill -0 "$PID_B" 2>/dev/null; then
-    echo "❌ Ошибка: Node B упал сразу после запуска! Лог:"
+    echo_msg "❌ Ошибка: Node B упал сразу после запуска! Лог:"
     cat "$LOG_B"
     exit 1
 fi
 
-echo "=== 3. Запуск iperf3 сервера в ns0 ==="
-$SUDO ip netns exec ns0 iperf3 -s -1 > "$LOG_SERVER" 2>&1 &
+echo_msg "=== 3. Запуск iperf3 сервера в ns0 ==="
+$SUDO ip netns exec ns0 iperf3 -s -1 < /dev/null > "$LOG_SERVER" 2>&1 &
 sleep 2
-stty sane 2>/dev/null || true
 
-echo "=== 4. Запуск теста iperf3 (ns1 -> ns0, ${DURATION}c, ${TARGET_BITRATE}) ==="
-$SUDO ip netns exec ns1 iperf3 -c 10.0.0.1 -u -b "$TARGET_BITRATE" -i 1 -R -t "$DURATION" -J > "$JSON_OUT" 2>&1 || true
-stty sane 2>/dev/null || true
+echo_msg "=== 4. Запуск теста iperf3 (ns1 -> ns0, ${DURATION}c, ${TARGET_BITRATE}) ==="
+$SUDO ip netns exec ns1 iperf3 -c 10.0.0.1 -u -b "$TARGET_BITRATE" -i 1 -R -t "$DURATION" -J < /dev/null > "$JSON_OUT" 2>&1 || true
 
 # Остановка узлов для фиксации финальной статистики DSP
 $SUDO killall -2 soip 2>/dev/null || true
 sleep 1
+restore_tty
 
 # Парсинг результатов с помощью Python
 python3 -c '
 import os, sys, json, statistics, re
 
 try:
-    os.system("stty sane 2>/dev/null")
+    os.system("stty sane opost onlcr icrnl < /dev/tty 2>/dev/null || stty sane 2>/dev/null")
 except Exception:
     pass
 

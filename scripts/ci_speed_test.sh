@@ -35,9 +35,9 @@ echo "=== 1. Очистка старых процессов ==="
 cleanup
 
 echo "=== 2. Запуск Node A (ns0) и Node B (ns1) с модуляцией ${MODULATION} ==="
-sudo ip netns exec ns0 "$SOIP_BIN" -n A -m "$MODULATION" > "$LOG_A" 2>&1 &
+sudo ip netns exec ns0 "$SOIP_BIN" -n A -m "$MODULATION" < /dev/null > "$LOG_A" 2>&1 &
 PID_A=$!
-sudo ip netns exec ns1 "$SOIP_BIN" -n B -m "$MODULATION" > "$LOG_B" 2>&1 &
+sudo ip netns exec ns1 "$SOIP_BIN" -n B -m "$MODULATION" < /dev/null > "$LOG_B" 2>&1 &
 PID_B=$!
 
 echo "Узлы запущены (PID A: $PID_A, PID B: $PID_B). Ожидание синхронизации линка (5 сек)..."
@@ -57,11 +57,11 @@ if ! kill -0 "$PID_B" 2>/dev/null; then
 fi
 
 echo "=== 3. Запуск iperf3 сервера в ns0 ==="
-sudo ip netns exec ns0 iperf3 -s -1 > "$LOG_SERVER" 2>&1 &
+sudo ip netns exec ns0 iperf3 -s -1 < /dev/null > "$LOG_SERVER" 2>&1 &
 sleep 2
 
 echo "=== 4. Запуск теста iperf3 (ns1 -> ns0, ${DURATION}c, ${TARGET_BITRATE}) ==="
-sudo ip netns exec ns1 iperf3 -c 10.0.0.1 -u -b "$TARGET_BITRATE" -i 1 -R -t "$DURATION" -J > "$JSON_OUT" 2>&1 || true
+sudo ip netns exec ns1 iperf3 -c 10.0.0.1 -u -b "$TARGET_BITRATE" -i 1 -R -t "$DURATION" -J < /dev/null > "$JSON_OUT" 2>&1 || true
 
 # Парсинг результатов с помощью Python
 python3 -c '
