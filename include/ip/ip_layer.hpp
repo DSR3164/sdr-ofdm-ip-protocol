@@ -2,6 +2,8 @@
 
 #include "common.hpp"
 
+constexpr size_t MTU = 1600;
+
 struct __attribute__((packed)) FrameHeader {
     uint16_t magic;
     uint16_t length;

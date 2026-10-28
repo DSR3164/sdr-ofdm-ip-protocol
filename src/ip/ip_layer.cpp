@@ -108,14 +108,14 @@ void run_tun_tx(SharedData &data)
 
     struct IP ip;
 
-    uint8_t buffer[1500];
+    uint8_t buffer[MTU];
     FrameHeader hdr;
 
     const auto mtu = calculate_mtu(data);
     logs::tun.info("MTU: {}", mtu);
 
     if (mtu > 0)
-        data.tun->set_mtu(static_cast<int>(1500));
+        data.tun->set_mtu(static_cast<int>(MTU));
 
     size_t max_frame_bytes = sizeof(FrameHeader) + mtu;
 
