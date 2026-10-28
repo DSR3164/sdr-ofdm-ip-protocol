@@ -61,7 +61,7 @@ sudo ip netns exec ns0 iperf3 -s -1 < /dev/null > "$LOG_SERVER" 2>&1 &
 sleep 2
 
 echo "=== 4. Запуск теста iperf3 (ns1 -> ns0, ${DURATION}c, ${TARGET_BITRATE}) ==="
-sudo ip netns exec ns1 iperf3 -c 10.0.0.1 -u -b "$TARGET_BITRATE" -i 1 -R -t "$DURATION" -O 2 -J < /dev/null > "$JSON_OUT" 2>&1 || true
+sudo ip netns exec ns1 iperf3 -c 10.0.0.1 -u -b "$TARGET_BITRATE" -i 1 -R -t "$DURATION" -O 1 -J < /dev/null > "$JSON_OUT" 2>&1 || true
 
 # Парсинг результатов с помощью Python
 python3 -c '
@@ -106,14 +106,15 @@ avg_jitter = sum_data.get("jitter_ms", 0.0)
 test_intervals = [it for it in intervals if not it["sum"].get("omitted", False)]
 rates = [it["sum"]["bits_per_second"] / 1e6 for it in test_intervals if it["sum"].get("bits_per_second")]
 rx_bytes_total = sum(it["sum"]["bytes"] for it in test_intervals)
-total_duration = sum_data.get("seconds", sum(it["sum"].get("seconds", 1.0) for it in test_intervals))
+total_duration = sum(it["sum"].get("seconds", 1.0) for it in test_intervals)
 rx_avg_rate = (rx_bytes_total * 8) / (total_duration * 1e6) if total_duration > 0 else 0.0
 
-min_rate = min(rates) if rates else 0.0
-max_rate = max(rates) if rates else 0.0
+min_rate = min(rates) if rates else rx_avg_rate
+max_rate = max(rates) if rates else rx_avg_rate
 std_dev = statistics.stdev(rates) if len(rates) > 1 else 0.0
 
-channel_cap = float(11.0)
+tx_rate = float(os.environ.get("TARGET_BITRATE", "12M").rstrip("MkmGKb"))
+channel_cap = float(12.0)
 saturation_loss_pct = max(0.0, (tx_rate - channel_cap) / tx_rate * 100.0) if tx_rate > channel_cap else 0.0
 radio_loss_pct = max(0.0, overall_loss_pct - saturation_loss_pct)
 
@@ -128,7 +129,7 @@ def c(text, code):
 
 BOLD, DIM, RED, GREEN, YELLOW, CYAN = "1", "2", "31", "32", "33", "36"
 
-W = [13, 10, 14, 10, 20]                  # ширины колонок
+W = [13, 10, 14, 10, 30]                  # ширины колонок
 INNER = sum(w + 2 for w in W) + len(W) - 1  # внутренняя ширина рамки
 
 def border(l, m, r):
@@ -146,7 +147,7 @@ def box_line(*segments):
     """segments: [(plain_text, color_or_None)] — строка внутри общей рамки."""
     plain_len = sum(len(t) for t, _ in segments)
     body = "".join(c(t, col) if col else t for t, col in segments)
-    return "│ " + body + " " * (INNER - 2 - plain_len) + " │"
+    return "│ " + body + " " * max(0, INNER - 2 - plain_len) + " │"
 
 def title(text):
     return "│" + c(f"{text:^{INNER}}", BOLD + ";" + CYAN) + "│"
@@ -170,14 +171,25 @@ for it in intervals:
     lost_p   = s.get("lost_packets", 0)
     tot_p    = s.get("packets", 0)
     loss_pct = s.get("lost_percent", 0.0)
+    omitted  = s.get("omitted", False)
 
-    loss_color = GREEN if lost_p == 0 else YELLOW
+    interval_label = f"{start_t:4.1f}–{end_t:4.1f} с"
+    if omitted:
+        loss_color = DIM
+        pl_text = f"{lost_p}/{tot_p} ({loss_pct:.1f}%) [прогрев]"
+    else:
+        loss_color = GREEN if lost_p == 0 else YELLOW
+        pl_text = f"{lost_p}/{tot_p} ({loss_pct:.1f}%)"
+
     print(row([
-        (f"{start_t:4.1f}–{end_t:4.1f} с",              None,       "^"),
-        (f"{mbytes:.2f} МБ",                             None,       ">"),
-        (f"{mbps:.2f} Мбит/с",                           None,       ">"),
-        (f"{jit:.3f} мс",                                None,       ">"),
-        (f"{lost_p}/{tot_p} ({loss_pct:.1f}%)",          loss_color, ">"),
+        (interval_label,        DIM if omitted else None, "^"),
+        (f"{mbytes:.2f} МБ",    DIM if omitted else None, ">"),
+        (f"{mbps:.2f} Мбит/с",  DIM if omitted else None, ">"),
+        (f"{jit:.3f} мс",       DIM if omitted else None, ">"),
+        (pl_text,               loss_color,               ">"),
+    ]))
+
+print(border("├", "┴", "┤"))
     ]))
 
 print(border("├", "┴", "┤"))
