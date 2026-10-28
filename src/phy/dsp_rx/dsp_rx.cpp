@@ -1,9 +1,9 @@
-#include "phy/dsp_rx/dsp_rx.hpp"
+#include "logger.hpp"
 #include "phy/dsp_common.hpp"
 #include "phy/dsp_rx/demodulator.hpp"
+#include "phy/dsp_rx/dsp_rx.hpp"
 #include "phy/dsp_rx/equalizer.hpp"
 #include "phy/dsp_rx/sync.hpp"
-#include "logger.hpp"
 
 #include <atomic>
 #include <chrono>

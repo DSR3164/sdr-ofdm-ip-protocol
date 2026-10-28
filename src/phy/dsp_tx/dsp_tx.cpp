@@ -1,6 +1,6 @@
+#include "logger.hpp"
 #include "phy/dsp_tx/dsp_tx.hpp"
 #include "phy/dsp_tx/transmitter.hpp"
-#include "logger.hpp"
 
 #include <chrono>
 #include <spdlog/fmt/bundled/color.h>

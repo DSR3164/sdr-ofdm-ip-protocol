@@ -2,8 +2,8 @@
 
 #include "common.hpp"
 #include "logger.hpp"
-#include "ip/utils.hpp"
 #include "ip/fec_codec.hpp"
+#include "ip/utils.hpp"
 
 #include <algorithm>
 #include <complex>

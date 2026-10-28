@@ -118,4 +118,4 @@ jobs:
             -not -path "./build/*" \
             -not -path "./third_party/*" \
             | xargs clang-format-18 -i
-          git diff --exit-code
+          git diff --name-only --exit-code

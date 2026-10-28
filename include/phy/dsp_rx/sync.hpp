@@ -35,7 +35,7 @@ inline double cfo_est(std::span<const std::complex<float>> signal, size_t zc_sta
 size_t correlation_fft_length(size_t signal_length, size_t reference_length);
 
 class ZCCorrFFT {
-private:
+  private:
     size_t reference_length_;
     size_t max_signal_length_;
     FFTWPlan forward_;
@@ -43,8 +43,7 @@ private:
     std::vector<std::complex<float>> reference_spectrum_;
     std::vector<double> metrics_;
     double reference_energy_ = 0.0;
-
-public:
+  public:
     ZCCorrFFT(size_t signal_length, const std::vector<std::complex<float>> &reference);
 
     int find_peak(std::span<const std::complex<float>> signal, float threshold);

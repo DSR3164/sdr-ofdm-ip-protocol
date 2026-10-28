@@ -28,8 +28,7 @@ class OFDMTransmitter {
     size_t header_symbols_;
 
     void append_ofdm_symbol(std::span<const std::complex<float>> symbols, Modulation mod, std::vector<int16_t> &buffer);
-
-public:
+  public:
     explicit OFDMTransmitter(const DSP::OFDMConfig &config);
 
     bool matches(const DSP::OFDMConfig &config) const;
