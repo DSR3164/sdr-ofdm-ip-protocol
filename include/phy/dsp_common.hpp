@@ -2,7 +2,7 @@
 
 #include "common.hpp"
 #include "logger.hpp"
-#include "ip/bit_utils.hpp"
+#include "ip/utils.hpp"
 #include "ip/fec_codec.hpp"
 
 #include <algorithm>
