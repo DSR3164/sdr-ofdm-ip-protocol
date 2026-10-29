@@ -67,6 +67,13 @@ def parse_args():
 def main():
     args = parse_args()
 
+    use_color = "NO_COLOR" not in os.environ
+
+    def c(text, code):
+        return f"\033[{code}m{text}\033[0m" if use_color else text
+
+    bold, dim, red, green, yellow, cyan = "1", "2", "31", "32", "33", "36"
+
     if args.restore_tty:
         try:
             os.system("stty sane opost onlcr icrnl < /dev/tty 2>/dev/null || stty sane 2>/dev/null")
@@ -107,7 +114,7 @@ def main():
         with open(args.json) as f:
             data = json.load(f)
     except Exception as e:
-        print(f"❌ Ошибка чтения JSON iperf3 ({args.json}): {e}")
+        print(f"{c('[ERROR]', bold + ';' + red)} Ошибка чтения JSON iperf3 ({args.json}): {e}")
         try:
             with open(args.json) as f:
                 print("Содержимое вывода:")
@@ -118,7 +125,7 @@ def main():
 
     err_msg = data.get("error")
     if err_msg:
-        print("❌ iperf3 вернул ошибку: " + str(err_msg))
+        print(f"{c('[ERROR]', bold + ';' + red)} iperf3 вернул ошибку: {err_msg}")
         sys.exit(1)
 
     intervals = data.get("intervals", [])
@@ -151,13 +158,6 @@ def main():
     max_loss = args.max_loss
 
     # ── оформление ──────────────────────────────────────────────────────────
-    use_color = "NO_COLOR" not in os.environ
-
-    def c(text, code):
-        return f"\033[{code}m{text}\033[0m" if use_color else text
-
-    bold, dim, red, green, yellow, cyan = "1", "2", "31", "32", "33", "36"
-
     w_cols = [13, 10, 14, 10, 30]
     inner = sum(w + 2 for w in w_cols) + len(w_cols) - 1
 
@@ -271,17 +271,17 @@ def main():
 
     failed = False
     if rx_avg_rate < min_speed:
-        print(f"❌ ПРОВАЛ: Реальная скорость {rx_avg_rate:.2f} Мбит/с ниже порога {min_speed:.1f} Мбит/с!")
+        print(f"{c('[FAIL]', bold + ';' + red)} Реальная скорость {rx_avg_rate:.2f} Мбит/с ниже порога {min_speed:.1f} Мбит/с!")
         failed = True
 
     if overall_loss_pct > max_loss:
-        print(f"❌ ПРОВАЛ: Потери пакетов {overall_loss_pct:.2f}% выше допустимого порога {max_loss:.1f}%!")
+        print(f"{c('[FAIL]', bold + ';' + red)} Потери пакетов {overall_loss_pct:.2f}% выше допустимого порога {max_loss:.1f}%!")
         failed = True
 
     if failed:
         sys.exit(1)
 
-    print("✅ Тест скорости радиоканала успешно пройден!")
+    print(f"{c('[ OK ]', bold + ';' + green)} Тест скорости радиоканала успешно пройден!")
 
 
 if __name__ == "__main__":
