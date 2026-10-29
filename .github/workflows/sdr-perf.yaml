@@ -2,6 +2,14 @@ name: SDR Hardware Performance CI
 
 on:
   pull_request:
+    paths:
+      - 'src/**'
+      - 'include/**'
+      - 'CMakeLists.txt'
+      - 'config/sdr.conf'
+      - 'scripts/ci_speed_test.sh'
+      - 'scripts/parse_speed_test.py'
+      - '.github/workflows/sdr-perf.yaml'
   workflow_dispatch:
     inputs:
       duration:
