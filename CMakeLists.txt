@@ -1,4 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
+
 project(SOIP LANGUAGES CXX)
 
 find_program(CCACHE_PROGRAM ccache)
@@ -194,7 +196,13 @@ add_library(soip_core STATIC
 
   ${PROJECT_SOURCE_DIR}/src/phy/phy_layer.cpp
   ${PROJECT_SOURCE_DIR}/src/phy/sdr.cpp
-  ${PROJECT_SOURCE_DIR}/src/phy/dsp.cpp
+  ${PROJECT_SOURCE_DIR}/src/phy/dsp_common.cpp
+
+  ${PROJECT_SOURCE_DIR}/src/phy/dsp_rx/sync.cpp
+  ${PROJECT_SOURCE_DIR}/src/phy/dsp_rx/dsp_rx.cpp
+
+  ${PROJECT_SOURCE_DIR}/src/phy/dsp_tx/transmitter.cpp
+  ${PROJECT_SOURCE_DIR}/src/phy/dsp_tx/dsp_tx.cpp
 
   ${PROJECT_SOURCE_DIR}/src/sockets.cpp
   ${PROJECT_SOURCE_DIR}/src/logger.cpp
@@ -208,7 +216,8 @@ if(DEBUG_FLAGS)
   target_compile_options(soip_core PRIVATE -mavx2)
   target_link_options(soip_core PRIVATE ${DEBUG_FLAGS})
 else()
-  target_compile_options(soip_core PRIVATE -mavx2 -ffast-math)
+  target_compile_options(soip_core PRIVATE -mavx2 -ffast-math -flto)
+  target_link_options(soip_core PRIVATE -flto)
 endif()
 
 add_library(soip_gui STATIC
@@ -276,4 +285,7 @@ if(DEBUG_FLAGS)
 
   target_compile_options(gui PRIVATE ${DEBUG_FLAGS})
   target_link_options(gui PRIVATE ${DEBUG_FLAGS})
+else()
+  target_compile_options(soip PRIVATE -flto)
+  target_link_options(soip PRIVATE -flto)
 endif()

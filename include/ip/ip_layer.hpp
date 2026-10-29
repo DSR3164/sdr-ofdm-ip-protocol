@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cstdint>
 
+constexpr size_t MTU = 1600;
 constexpr uint16_t FRAME_MAGIC = 0x1F35;
 
 enum class FrameType : uint8_t

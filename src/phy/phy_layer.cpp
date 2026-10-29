@@ -5,7 +5,6 @@
 
 #include <cstdint>
 #include <cstring>
-#include <random>
 #include <thread>
 #include <vector>
 
@@ -53,21 +52,14 @@ int run_sdr_tx(SharedData &data)
     int ret_tx = sdr.get_buffer_size();
 
     std::vector<int16_t> writebuffer(ret_tx * 2);
-
-    std::vector<int16_t> noise(ret_tx * 2);
-    std::random_device rd;
-    std::mt19937 device(rd());
-    std::uniform_int_distribution<int16_t> dist(-2000, 2000);
-
-    for (size_t i = 0; i < noise.size(); ++i)
-        noise[i] = dist(device);
+    std::vector<int16_t> silence(ret_tx * 2, 0);
 
     while (!data.stop.load())
     {
         if (data.sdr_dsp_tx.read(writebuffer) == 0)
             ret_tx = sdr.writestream(writebuffer);
         else
-            ret_tx = sdr.writestream(noise);
+            ret_tx = sdr.writestream(silence);
 
         if (ret_tx < 0)
         {

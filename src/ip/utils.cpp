@@ -72,5 +72,4 @@ void send_phy_frame(SharedData &data, std::vector<uint8_t> &frame, size_t max_fr
     bits = puncture(bits, data.punct_cfg);
 
     data.ip_phy.write(bits, true);
-    std::this_thread::sleep_for(std::chrono::milliseconds(2));
 }
