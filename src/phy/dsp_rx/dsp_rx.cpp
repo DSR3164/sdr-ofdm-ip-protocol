@@ -135,8 +135,8 @@ int run_dsp_rx(SharedData &data)
         for (size_t i = 0; i < static_cast<size_t>(N); ++i)
             header_symbols_raw[i] = std::complex<float>(fft.out[i][0], fft.out[i][1]);
 
-        ofdm_equalize(header_symbols_raw, header_symbols_equalized, grid, Modulation::BPSK, channel_est);
-        demodulate(Modulation::BPSK, header_symbols_equalized, header_bits, llr);
+        ofdm_equalize(header_symbols_raw, header_symbols_equalized, grid, Modulation::QPSK, channel_est);
+        demodulate(Modulation::QPSK, header_symbols_equalized, header_bits, llr);
 
         decode(llr, encoded_header_length(), header_bits);
         unpackFrameHeader(header_bits, grid, header);
@@ -180,7 +180,7 @@ int run_dsp_rx(SharedData &data)
             equalized.resize(symbols_count);
 
         data.dsp_sockets_symbols.write(equalized);
-        demodulate(dsp.ofdm_cfg.mod, equalized, bits, llr);
+        demodulate(rx_config.mod, equalized, bits, llr);
         descramble_llr(llr);
 
         if (data_count > 0)
