@@ -268,6 +268,8 @@ void run_tun_rx(SharedData &data)
         uint16_t dest_id = ntohs(hdr.dest_id);
         uint16_t payload_len = ntohs(hdr.length);
 
+        logs::tun.debug("[TUN] Type: {}", hdr.type);
+
         if (frame.size() < sizeof(FrameHeader) + payload_len)
             continue;
 
