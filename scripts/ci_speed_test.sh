@@ -22,6 +22,7 @@ LOG_A="/tmp/soip_a_ci.log"
 LOG_B="/tmp/soip_b_ci.log"
 LOG_SERVER="/tmp/iperf_server_ci.log"
 JSON_OUT="/tmp/iperf_client_ci.json"
+LOG_CLIENT_ERR="/tmp/iperf_client_ci.err"
 
 cleanup() {
     echo ""
@@ -34,24 +35,52 @@ trap cleanup EXIT
 echo "=== 1. Очистка старых процессов ==="
 cleanup
 
+# Проверка и создание сетевых пространств имён ns0 и ns1
+for ns in ns0 ns1; do
+    if ! ip netns list | grep -qw "$ns"; then
+        echo "Создание сетевого пространства $ns..."
+        sudo ip netns add "$ns"
+        sudo ip netns exec "$ns" ip link set lo up
+    fi
+done
+
 echo "=== 2. Запуск Node A (ns0) и Node B (ns1) с модуляцией ${MODULATION} ==="
 sudo ip netns exec ns0 "$SOIP_BIN" -n A -m "$MODULATION" < /dev/null > "$LOG_A" 2>&1 &
 PID_A=$!
+sleep 1
+
 sudo ip netns exec ns1 "$SOIP_BIN" -n B -m "$MODULATION" < /dev/null > "$LOG_B" 2>&1 &
 PID_B=$!
 
-echo "Узлы запущены (PID A: $PID_A, PID B: $PID_B). Ожидание синхронизации линка (5 сек)..."
-sleep 5
+echo "Узлы запущены (PID A: $PID_A, PID B: $PID_B). Ожидание синхронизации линка..."
 
-# Проверка, что узлы не упали
-if ! kill -0 "$PID_A" 2>/dev/null; then
-    echo "❌ Ошибка: Node A упал сразу после запуска! Лог:"
+LINK_READY=0
+for i in $(seq 1 30); do
+    if ! kill -0 "$PID_A" 2>/dev/null; then
+        echo "❌ Ошибка: Node A упал во время ожидания линка! Лог:"
+        cat "$LOG_A"
+        exit 1
+    fi
+
+    if ! kill -0 "$PID_B" 2>/dev/null; then
+        echo "❌ Ошибка: Node B упал во время ожидания линка! Лог:"
+        cat "$LOG_B"
+        exit 1
+    fi
+
+    if sudo ip netns exec ns1 ping -c 1 -W 1 10.0.0.1 >/dev/null 2>&1; then
+        LINK_READY=1
+        echo "Линк синхронизирован (${i} сек)."
+        break
+    fi
+    sleep 1
+done
+
+if [ "$LINK_READY" -ne 1 ]; then
+    echo "❌ Ошибка: таймаут синхронизации линка (10.0.0.1 недоступен из ns1)."
+    echo "=== Лог Node A ==="
     cat "$LOG_A"
-    exit 1
-fi
-
-if ! kill -0 "$PID_B" 2>/dev/null; then
-    echo "❌ Ошибка: Node B упал сразу после запуска! Лог:"
+    echo "=== Лог Node B ==="
     cat "$LOG_B"
     exit 1
 fi
@@ -61,7 +90,7 @@ sudo ip netns exec ns0 iperf3 -s -1 < /dev/null > "$LOG_SERVER" 2>&1 &
 sleep 2
 
 echo "=== 4. Запуск теста iperf3 (ns1 -> ns0, ${DURATION}c, ${TARGET_BITRATE}) ==="
-sudo ip netns exec ns1 iperf3 -c 10.0.0.1 -u -b "$TARGET_BITRATE" -i 1 -R -t "$DURATION" -O 1 -J < /dev/null > "$JSON_OUT" 2>&1 || true
+sudo ip netns exec ns1 iperf3 -c 10.0.0.1 -u -b "$TARGET_BITRATE" -i 1 -R -t "$DURATION" -O 1 -J < /dev/null > "$JSON_OUT" 2> "$LOG_CLIENT_ERR" || true
 
 # Остановка узлов для фиксации финальной статистики DSP
 sudo killall -2 soip 2>/dev/null || true
