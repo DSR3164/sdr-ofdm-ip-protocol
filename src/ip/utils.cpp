@@ -1,6 +1,6 @@
+#include "phy/dsp_common.hpp"
 #include "ip/ip_layer.hpp"
 #include "ip/utils.hpp"
-#include "phy/dsp_common.hpp"
 
 size_t calculate_mtu(const SharedData &data)
 {
