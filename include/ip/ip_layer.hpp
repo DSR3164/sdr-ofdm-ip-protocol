@@ -5,7 +5,7 @@
 #include <chrono>
 #include <cstdint>
 
-constexpr size_t MTU = 1600;
+constexpr size_t MAX_IP_PACKET_SIZE = 1600;
 constexpr uint16_t FRAME_MAGIC = 0x1F35;
 
 enum class FrameType : uint8_t
