@@ -72,10 +72,10 @@ void run_tun_tx(SharedData &data)
     logs::tun.info("MTU: {}", mtu);
 
     if (mtu > 0)
-        data.tun->set_mtu(static_cast<int>(MAX_IP_PACKET_SIZE));
+        data.tun->set_mtu(static_cast<int>(mtu));
 
     const size_t max_frame_bytes = sizeof(FrameHeader) + mtu;
-    uint8_t buffer[MAX_IP_PACKET_SIZE];
+    uint8_t buffer[mtu];
     uint16_t packet_seq = 0;
 
     auto last_join_send = std::chrono::steady_clock::now() - std::chrono::seconds(2);
