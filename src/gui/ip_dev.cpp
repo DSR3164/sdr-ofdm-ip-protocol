@@ -9,7 +9,7 @@ void ip_dev(App &app, Buffers &data) // IP layer
 {
     (void)app;
     static ImPlotSpec specs;
-    std::vector<uint8_t> bytes(1500);
+    std::vector<uint8_t> bytes(MTU);
 
     data.ip.read(bytes);
 

@@ -26,21 +26,14 @@ enum class Flags : uint16_t
 inline Flags operator|(Flags a, Flags b)
 {
     return static_cast<Flags>(
-        static_cast<uint16_t>(a) | static_cast<uint16_t>(b)
+        static_cast<uint16_t>(static_cast<uint16_t>(a) | static_cast<uint16_t>(b))
     );
 }
 
 inline Flags operator&(Flags a, Flags b)
 {
     return static_cast<Flags>(
-        static_cast<uint16_t>(a) & static_cast<uint16_t>(b)
-    );
-}
-
-inline Flags operator~(Flags a)
-{
-    return static_cast<Flags>(
-        ~static_cast<uint16_t>(a)
+        static_cast<uint16_t>(static_cast<uint16_t>(a) & static_cast<uint16_t>(b))
     );
 }
 
@@ -52,9 +45,7 @@ inline Flags &operator|=(Flags &a, Flags b)
 
 inline Flags &operator&=(Flags &a, Flags b)
 {
-    a = static_cast<Flags>(
-        static_cast<uint16_t>(a) & static_cast<uint16_t>(b)
-    );
+    a = a & b;
     return a;
 }
 
@@ -63,9 +54,16 @@ inline bool has_flag(Flags flags, Flags f)
     return (flags & f) != Flags::None;
 }
 
+inline void remove_flag(Flags &flags, Flags f)
+{
+    flags = static_cast<Flags>(
+        static_cast<uint16_t>(flags) & ~static_cast<uint16_t>(f)
+    );
+}
+
 inline bool has_any_except(Flags flags, Flags excluded)
 {
-    return (flags & ~excluded) != Flags::None;
+    return (static_cast<uint16_t>(flags) & ~static_cast<uint16_t>(excluded)) != 0;
 }
 
 struct SDRConfig {
@@ -142,6 +140,11 @@ class SDR {
     bool add_flag(Flags flag)
     {
         (flags |= flag);
+        return true;
+    }
+    bool remove_flag(Flags flag)
+    {
+        ::remove_flag(flags, flag);
         return true;
     }
   private:

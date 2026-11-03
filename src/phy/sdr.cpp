@@ -145,8 +145,6 @@ int SDR::readstream(std::vector<int16_t> &recv)
         throw std::runtime_error(md.strerror());
     }
 
-    const size_t samples = recv.size() / 2;
-
     recv.resize(offset * 2);
     return static_cast<int>(offset);
 }
@@ -252,8 +250,8 @@ bool SDR::deinit()
 
     usrp.reset();
 
-    flags &= ~Flags::IS_ACTIVE;
-    flags &= ~Flags::FOUND;
+    remove_flag(Flags::IS_ACTIVE);
+    remove_flag(Flags::FOUND);
 
     return true;
 }
@@ -274,7 +272,7 @@ bool SDR::reinit()
     if (SDR::deinit())
         if (SDR::init())
         {
-            flags &= ~Flags::REINIT;
+            remove_flag(Flags::REINIT);
             return true;
         }
     return false;
@@ -406,7 +404,7 @@ void SDR::apply_runtime()
         usrp->set_tx_freq(cfg.tx_freq, 0);
         usrp->set_rx_freq(cfg.rx_freq, 0);
 
-        flags &= ~Flags::APPLY_FREQUENCY;
+        remove_flag(Flags::APPLY_FREQUENCY);
     }
 
     if ((flags & Flags::APPLY_BANDWIDTH) != Flags::None)
@@ -414,7 +412,7 @@ void SDR::apply_runtime()
         usrp->set_tx_bandwidth(cfg.tx_bandwidth, 0);
         usrp->set_rx_bandwidth(cfg.rx_bandwidth, 0);
 
-        flags &= ~Flags::APPLY_BANDWIDTH;
+        remove_flag(Flags::APPLY_BANDWIDTH);
     }
 
     if ((flags & Flags::APPLY_GAIN) != Flags::None)
@@ -422,7 +420,7 @@ void SDR::apply_runtime()
         usrp->set_tx_gain(cfg.tx_gain, 0);
         usrp->set_rx_gain(cfg.rx_gain, 0);
 
-        flags &= ~Flags::APPLY_GAIN;
+        remove_flag(Flags::APPLY_GAIN);
     }
 
     if ((flags & Flags::APPLY_SAMPLE_RATE) != Flags::None)
@@ -430,6 +428,6 @@ void SDR::apply_runtime()
         usrp->set_rx_rate(cfg.sample_rate, 0);
         usrp->set_tx_rate(cfg.sample_rate, 0);
 
-        flags &= ~Flags::APPLY_SAMPLE_RATE;
+        remove_flag(Flags::APPLY_SAMPLE_RATE);
     }
 }

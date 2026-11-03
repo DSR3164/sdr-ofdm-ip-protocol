@@ -40,6 +40,7 @@ int main(int argc, char *argv[])
     data_ptr = &data;
 
     std::signal(SIGINT, signal_handler);
+    std::signal(SIGTERM, signal_handler);
 
     if (getuid() != 0)
     {

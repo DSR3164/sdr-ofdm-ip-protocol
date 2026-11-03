@@ -11,10 +11,12 @@
 #include <type_traits>
 
 template <typename T>
-struct is_complex : std::false_type {};
+struct is_complex : std::false_type {
+};
 
 template <typename T>
-struct is_complex<std::complex<T>> : std::true_type {};
+struct is_complex<std::complex<T>> : std::true_type {
+};
 
 struct WaterfallData {
     int fft_size;

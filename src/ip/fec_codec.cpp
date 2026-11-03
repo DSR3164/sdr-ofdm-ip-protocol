@@ -62,25 +62,26 @@ std::vector<uint8_t> viterbi_decoder_llr(const std::vector<float> &llr)
 
     size_t T = llr.size() / 2;
 
-    logs::tun.trace("[VIT] llr.size() = {}", llr.size());
-    logs::tun.trace("[VIT] T = {}", T);
-
-    std::array<std::array<TransitionTarget, 2>, num_states> transitions;
-    for (uint8_t state = 0; state < num_states; ++state)
+    static const auto transitions = []()
     {
-        for (uint8_t input_bit = 0; input_bit < 2; ++input_bit)
+        std::array<std::array<TransitionTarget, 2>, num_states> temp_transitions{};
+        for (uint8_t state = 0; state < num_states; ++state)
         {
-            uint8_t win = (state << 1) | input_bit;
-            uint8_t b1 = (__builtin_popcount(win & g_1)) % 2;
-            uint8_t b2 = (__builtin_popcount(win & g_2)) % 2;
-            uint8_t next_state = win & ((1 << m) - 1);
-            transitions[state][input_bit] = { next_state, b1, b2 };
+            for (uint8_t input_bit = 0; input_bit < 2; ++input_bit)
+            {
+                uint8_t win = (state << 1) | input_bit;
+                uint8_t b1 = (__builtin_popcount(win & g_1)) % 2;
+                uint8_t b2 = (__builtin_popcount(win & g_2)) % 2;
+                uint8_t next_state = win & ((1 << m) - 1);
+                temp_transitions[state][input_bit] = { next_state, b1, b2 };
+            }
         }
-    }
+        return temp_transitions;
+    }();
     std::array<float, num_states> cur_metrics;
     cur_metrics[0] = 0.0f;
     std::fill(cur_metrics.begin() + 1, cur_metrics.end(), VINF_F);
-    std::vector<int> history(T * num_states, -1);
+    thread_local std::vector<uint8_t> history(T * num_states, -1);
 
     for (size_t t = 0; t < T; ++t)
     {
@@ -109,12 +110,6 @@ std::vector<uint8_t> viterbi_decoder_llr(const std::vector<float> &llr)
                 {
                     next_metrics[next_state] = candidate;
                     size_t idx = t * num_states + next_state;
-
-                    if (idx >= history.size())
-                    {
-                        logs::tun.error("[VIT] history OOB idx={} size={}", idx, history.size());
-                        return {};
-                    }
 
                     history[idx] = prev_state;
                 }
@@ -154,7 +149,8 @@ std::vector<uint8_t> viterbi_decoder_llr(const std::vector<float> &llr)
     return decoded_bytes;
 }
 
-std::vector<uint8_t> interleaving_(const std::vector<uint8_t> &input)
+std::vector<uint8_t>
+interleaving_(const std::vector<uint8_t> &input)
 {
     size_t c = 8;
     size_t n = input.size();

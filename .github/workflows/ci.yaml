@@ -5,6 +5,7 @@ on:
   pull_request:
     branches:
       - main
+      - uhd
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -12,10 +13,56 @@ concurrency:
 
 env:
   BUILD_DIR: build
+  CCACHE_DIR: ~/.cache/ccache
 
 jobs:
+  filter:
+    name: Check Changed Paths
+    runs-on: ubuntu-24.04
+    outputs:
+      code: ${{ steps.changes.outputs.code }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Paths Filter
+        uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            code:
+              - 'src/**'
+              - 'include/**'
+              - 'CMakeLists.txt'
+              - 'config/**'
+              - '.github/workflows/ci.yaml'
+
+  clang-format:
+    name: Format Check
+    needs: filter
+    if: needs.filter.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: |
+          sudo apt update
+          sudo apt install -y clang-format-18
+
+      - name: Check formatting
+        run: |
+          find src include \
+            \( -name "*.cpp" -o -name "*.hpp" \) \
+            | xargs clang-format-18 -i
+          git diff --name-only --exit-code
+
   build-gcc:
     name: Build (GCC Release)
+    needs: filter
+    if: needs.filter.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
 
     steps:
@@ -29,6 +76,7 @@ jobs:
             build-essential \
             cmake \
             ninja-build \
+            ccache \
             gcc-14 \
             g++-14 \
             libfftw3-dev \
@@ -39,6 +87,13 @@ jobs:
             uhd-host \
             libopengl-dev
 
+      - name: Setup ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-gcc-${{ github.sha }}
+          restore-keys: ccache-gcc-
+
       - name: Configure
         env:
           CC: gcc-14
@@ -46,14 +101,22 @@ jobs:
         run: |
           cmake -B $BUILD_DIR \
                 -G Ninja \
-                -DCMAKE_BUILD_TYPE=Release
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+                -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
         run: |
           cmake --build $BUILD_DIR -j$(nproc)
 
+      - name: ccache stats
+        run: |
+          ccache -s
+
   build-clang:
     name: Build (Clang Debug) + clang-tidy
+    needs: filter
+    if: needs.filter.outputs.code == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
 
     steps:
@@ -68,6 +131,7 @@ jobs:
             clang-tidy-18 \
             cmake \
             ninja-build \
+            ccache \
             libfftw3-dev \
             libsdl2-dev \
             libglew-dev \
@@ -75,6 +139,13 @@ jobs:
             libuhd-dev \
             uhd-host \
             libopengl-dev
+
+      - name: Setup ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-clang-${{ github.sha }}
+          restore-keys: ccache-clang-
 
       - name: Configure
         env:
@@ -84,7 +155,9 @@ jobs:
           cmake -B $BUILD_DIR \
                 -G Ninja \
                 -DCMAKE_BUILD_TYPE=Debug \
-                -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+                -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+                -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+                -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
         run: |
@@ -94,27 +167,9 @@ jobs:
         run: |
           find src include \
             \( -name "*.cpp" -o -name "*.hpp" \) \
-            | xargs clang-tidy-18 \
+            | xargs -P $(nproc) clang-tidy-18 \
                 -p $BUILD_DIR
 
-  clang-format:
-    name: clang-format
-    runs-on: ubuntu-24.04
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install clang-format
+      - name: ccache stats
         run: |
-          sudo apt update
-          sudo apt install -y clang-format-18
-
-      - name: Check formatting
-        run: |
-          find . \
-            \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" -o -name "*.cc" \) \
-            -not -path "./build/*" \
-            -not -path "./third_party/*" \
-            | xargs clang-format-18 -i
-          git diff --exit-code
+          ccache -s
