@@ -2,6 +2,7 @@
 
 #include <complex>
 #include <cstddef>
+#include <cstdint>
 #include <span>
 #include <vector>
 
@@ -30,6 +31,8 @@ class ResourceGrid {
 
     size_t bin_of(size_t column) const;
 
+    void from_bins(size_t symbol, const std::vector<Complex> &bins);
+
     void to_bins(size_t symbol, std::vector<Complex> &bins) const;
 
     void fill_symbol(
@@ -40,10 +43,13 @@ class ResourceGrid {
     );
 
     size_t column_count() const;
+    bool allocate_rb(size_t rb, uint16_t rnti);
+    void release_rb(size_t rb);
+    uint16_t owner_of(size_t rb) const;
   private:
     size_t n_symbols_;
     size_t n_rbs_;
     size_t n_fft_;
-
+    std::vector<uint16_t> owners_;
     std::vector<Complex> data_;
 };
