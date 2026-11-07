@@ -110,9 +110,20 @@ def main():
             pass
 
     # Read iperf3 JSON
+    data = None
     try:
         with open(args.json) as f:
-            data = json.load(f)
+            raw_content = f.read().strip()
+        try:
+            data = json.loads(raw_content)
+        except json.JSONDecodeError:
+            # Fallback: try extracting JSON block {...} if stderr or extra text was appended
+            start = raw_content.find('{')
+            end = raw_content.rfind('}')
+            if start != -1 and end != -1 and end > start:
+                data = json.loads(raw_content[start:end + 1])
+            else:
+                raise
     except Exception as e:
         print(f"{c('[ERROR]', bold + ';' + red)} Ошибка чтения JSON iperf3 ({args.json}): {e}")
         try:

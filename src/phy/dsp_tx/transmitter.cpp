@@ -27,7 +27,7 @@ OFDMTransmitter::OFDMTransmitter(const DSP::OFDMConfig &config)
       ifft_(grid_.n, false),
       zadoff_chu_(ofdm_zadoff_chu_symbol(grid_, ifft_)),
       header_coded_bits_(encoded_header_length()),
-      header_symbols_(ceil_div(header_coded_bits_, grid_.data.size()))
+      header_symbols_(ceil_div(header_coded_bits_, grid_.data.size() * get_bits_per_symbol(Modulation::QPSK)))
 {
 }
 
@@ -54,20 +54,21 @@ void OFDMTransmitter::ofdm(const std::vector<uint8_t> &input, Modulation mod, st
     auto header_bits = encode(packFrameHeader(header));
     if (header_bits.size() != header_coded_bits_)
         throw std::runtime_error("Header encoder length changed");
-    header_bits.resize(header_symbols_ * grid_.data.size(), 0);
+    const size_t hdr_bps = get_bits_per_symbol(Modulation::QPSK);
+    header_bits.resize(header_symbols_ * grid_.data.size() * hdr_bps, 0);
     scramble(header_bits);
     std::vector<std::complex<float>> header_symbols;
-    modulate(Modulation::BPSK, header_bits, header_symbols);
+    modulate(Modulation::QPSK, header_bits, header_symbols);
 
     auto bits = input;
     scramble(bits);
-    bits.resize(ceil_div(bits.size(), bps) * bps, 0);
+    bits.resize(count * grid_.data.size() * bps, 0);
     std::vector<std::complex<float>> symbols;
     modulate(mod, bits, symbols);
     buffer.reserve((1 + header_symbols_ + count) * grid_.symbol_length() * 2);
     append_symbol(zadoff_chu_, grid_.cp, buffer);
     for (size_t s = 0; s < header_symbols_; ++s)
-        append_ofdm_symbol(std::span<const std::complex<float>>(header_symbols).subspan(s * grid_.data.size(), grid_.data.size()), Modulation::BPSK, buffer);
+        append_ofdm_symbol(std::span<const std::complex<float>>(header_symbols).subspan(s * grid_.data.size(), grid_.data.size()), Modulation::QPSK, buffer);
     for (size_t s = 0; s < count; ++s)
     {
         const size_t start = s * grid_.data.size();
