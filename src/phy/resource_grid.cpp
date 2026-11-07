@@ -72,11 +72,11 @@ void ResourceGrid::from_bins(
     if (bins.size() != n_fft_)
         throw std::invalid_argument("FFT bins have the wrong size");
 
-    for (size_t column = 0; column < column_count(); ++column)
+    for (size_t column = 0; column < active_subcarriers(); ++column)
     {
         const size_t fft_bin = bin_of(column);
 
-        data_[symbol * column_count() + column] = bins[fft_bin];
+        data_[symbol * active_subcarriers() + column] = bins[fft_bin];
     }
 }
 
@@ -93,7 +93,7 @@ void ResourceGrid::to_bins(size_t symbol, std::vector<Complex> &bins) const
     }
 }
 
-size_t ResourceGrid::column_count() const
+size_t ResourceGrid::active_subcarriers() const
 {
     return n_rbs_ * RB_SIZE;
 }
@@ -108,7 +108,7 @@ void ResourceGrid::fill_symbol(
     if (symbol >= n_symbols_)
         throw std::out_of_range("ResourceGrid symbol out of range");
 
-    const size_t columns = column_count();
+    const size_t columns = active_subcarriers();
 
     if (pilot_bins.size() > columns || data.size() > columns - pilot_bins.size())
     {

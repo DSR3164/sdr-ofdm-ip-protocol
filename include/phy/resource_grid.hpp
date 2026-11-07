@@ -42,7 +42,7 @@ class ResourceGrid {
         Complex pilot
     );
 
-    size_t column_count() const;
+    size_t active_subcarriers() const;
     bool allocate_rb(size_t rb, uint16_t rnti);
     void release_rb(size_t rb);
     uint16_t owner_of(size_t rb) const;
