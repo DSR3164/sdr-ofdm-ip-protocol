@@ -6,7 +6,7 @@
 
 void phy_dev(App &app, Buffers &data) // Phy layer
 {
-    static WaterfallData waterfall(1920, 100);
+    static WaterfallData waterfall(2048, 100);
     static std::vector<std::complex<float>> symbols(1920);
     static std::vector<std::complex<float>> raw(3840);
     static ImPlotSpec specs;
