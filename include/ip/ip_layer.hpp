@@ -20,16 +20,18 @@ enum class FrameType : uint8_t
 constexpr uint8_t FLAG_LAST = 0x01;
 constexpr uint8_t FLAG_FIRST = 0x02;
 
-constexpr uint16_t BS_USER_ID = 0x0000;
-constexpr uint16_t BROADCAST_USER_ID = 0xFFFF;
-constexpr uint16_t UNASSIGNED_ID = 0xFFFF;
+constexpr uint16_t BS_RNTI = 0x0000;
+constexpr uint16_t MIN_UE_RNTI = 0x0001;
+constexpr uint16_t MAX_UE_RNTI = 0xFFFE;
+constexpr uint16_t BROADCAST_RNTI = 0xFFFF;
+constexpr uint16_t UNASSIGNED_RNTI = 0xFFFF;
 
 #pragma pack(push, 1)
 struct FrameHeader {
     uint16_t magic;
     uint8_t type;
-    uint16_t src_id;
-    uint16_t dest_id;
+    uint16_t src_rnti;
+    uint16_t dest_rnti;
     uint16_t seq;
     uint16_t length;
     uint8_t flags;
@@ -42,7 +44,7 @@ struct JoinPayload {
 
 struct JoinAckPayload {
     uint32_t user_token;
-    uint16_t assigned_id;
+    uint16_t assigned_rnti;
     uint32_t assigned_ip; // in network byte order
     uint32_t netmask;     // in network byte order
     uint32_t gateway;     // in network byte order
@@ -50,7 +52,7 @@ struct JoinAckPayload {
 #pragma pack(pop)
 
 struct ClientSession {
-    uint16_t user_id;
+    uint16_t rnti;
     uint32_t user_token;
     uint32_t ip; // in network byte order
     std::chrono::steady_clock::time_point last_seen;

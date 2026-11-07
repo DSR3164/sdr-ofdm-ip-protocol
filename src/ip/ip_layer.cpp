@@ -32,13 +32,32 @@ void enqueue_ctrl_frame(std::vector<uint8_t> frame)
     g_ctrl_tx_queue.push(std::move(frame));
 }
 
-static std::unordered_map<uint16_t, ClientSession> g_clients_by_id;
-static std::unordered_map<uint32_t, uint16_t> g_id_by_ip;
-static uint16_t g_next_client_id = 1;
+static std::unordered_map<uint16_t, ClientSession> g_clients_by_rnti;
+static std::unordered_map<uint32_t, uint16_t> g_rnti_by_ip;
+
+static uint16_t g_next_rnti = MIN_UE_RNTI;
+
+static std::atomic<uint16_t> g_ue_rnti{ UNASSIGNED_RNTI };
+static uint32_t g_ue_token = 0;
 
 static std::atomic<bool> g_ue_registered{ false };
-static std::atomic<uint16_t> g_ue_my_id{ UNASSIGNED_ID };
-static uint32_t g_ue_token = 0;
+
+static uint16_t allocate_rnti_locked()
+{
+    for (uint32_t i = MIN_UE_RNTI; i <= MAX_UE_RNTI; ++i)
+    {
+        const uint16_t candidate = g_next_rnti;
+
+        g_next_rnti = (candidate == MAX_UE_RNTI)
+                          ? MIN_UE_RNTI
+                          : candidate + 1;
+
+        if (!g_clients_by_rnti.contains(candidate))
+            return candidate;
+    }
+
+    return UNASSIGNED_RNTI;
+}
 
 void run_tun_tx(SharedData &data)
 {
@@ -103,8 +122,8 @@ void run_tun_tx(SharedData &data)
                 FrameHeader join_hdr{};
                 join_hdr.magic = htons(FRAME_MAGIC);
                 join_hdr.type = static_cast<uint8_t>(FrameType::JOIN);
-                join_hdr.src_id = htons(UNASSIGNED_ID);
-                join_hdr.dest_id = htons(BS_USER_ID);
+                join_hdr.src_rnti = htons(UNASSIGNED_RNTI);
+                join_hdr.dest_rnti = htons(BS_RNTI);
                 join_hdr.seq = htons(packet_seq++);
                 join_hdr.length = htons(static_cast<uint16_t>(p_bytes.size()));
 
@@ -164,15 +183,15 @@ void run_tun_tx(SharedData &data)
             {
                 std::vector<uint8_t> payload(buffer, buffer + nbytes);
 
-                uint16_t target_dest_id = BS_USER_ID;
+                uint16_t target_dest_rnti = BS_RNTI;
                 if (is_bs && nbytes >= 20)
                 {
                     uint32_t dest_ip = *reinterpret_cast<uint32_t *>(buffer + 16);
                     std::scoped_lock lock(g_state_mtx);
-                    if (g_id_by_ip.contains(dest_ip))
-                        target_dest_id = g_id_by_ip[dest_ip];
+                    if (g_rnti_by_ip.contains(dest_ip))
+                        target_dest_rnti = g_rnti_by_ip[dest_ip];
                     else
-                        target_dest_id = BROADCAST_USER_ID;
+                        target_dest_rnti = BROADCAST_RNTI;
                 }
 
                 auto crc = calculateCRC16(payload);
@@ -180,7 +199,7 @@ void run_tun_tx(SharedData &data)
 
                 size_t total_len = payload.size();
                 size_t offset = 0;
-                uint16_t my_id = is_bs ? BS_USER_ID : g_ue_my_id.load();
+                uint16_t my_rnti = is_bs ? BS_RNTI : g_ue_rnti.load();
 
                 while (offset < total_len)
                 {
@@ -194,8 +213,8 @@ void run_tun_tx(SharedData &data)
                     FrameHeader hdr{};
                     hdr.magic = htons(FRAME_MAGIC);
                     hdr.type = static_cast<uint8_t>(FrameType::DATA);
-                    hdr.src_id = htons(my_id);
-                    hdr.dest_id = htons(target_dest_id);
+                    hdr.src_rnti = htons(my_rnti);
+                    hdr.dest_rnti = htons(target_dest_rnti);
                     hdr.length = htons(static_cast<uint16_t>(chunk_size));
                     hdr.seq = htons(packet_seq++);
                     hdr.flags = hflag;
@@ -264,8 +283,8 @@ void run_tun_rx(SharedData &data)
         }
 
         auto type = static_cast<FrameType>(hdr.type);
-        uint16_t src_id = ntohs(hdr.src_id);
-        uint16_t dest_id = ntohs(hdr.dest_id);
+        uint16_t src_rnti = ntohs(hdr.src_rnti);
+        uint16_t dest_rnti = ntohs(hdr.dest_rnti);
         uint16_t payload_len = ntohs(hdr.length);
 
         logs::tun.debug("[TUN] Type: {}", hdr.type);
@@ -293,44 +312,52 @@ void run_tun_rx(SharedData &data)
             JoinPayload join_req;
             memcpy(&join_req, p_bytes.data(), sizeof(JoinPayload));
 
-            uint16_t assigned_id = 0;
+            uint16_t assigned_rnti = UNASSIGNED_RNTI;
             uint32_t assigned_ip = 0;
 
             {
                 std::scoped_lock lock(g_state_mtx);
-                for (auto &[cid, sess] : g_clients_by_id)
+                for (auto &[cid, sess] : g_clients_by_rnti)
                 {
                     if (sess.user_token == join_req.user_token)
                     {
-                        assigned_id = sess.user_id;
+                        assigned_rnti = sess.rnti;
                         assigned_ip = sess.ip;
                         sess.last_seen = std::chrono::steady_clock::now();
                         break;
                     }
                 }
 
-                if (assigned_id == 0)
+                if (assigned_rnti == UNASSIGNED_RNTI)
                 {
-                    assigned_id = g_next_client_id++;
-                    assigned_ip = htonl(0x0A000000 | (assigned_id + 1));
-                    g_clients_by_id[assigned_id] = {
-                        assigned_id,
+                    assigned_rnti = allocate_rnti_locked();
+
+                    if (assigned_rnti == UNASSIGNED_RNTI)
+                    {
+                        logs::tun.warn("[BS] No free RNTI available");
+                        continue;
+                    }
+
+                    assigned_ip = htonl(0x0A000000 | (assigned_rnti + 1));
+                    g_clients_by_rnti[assigned_rnti] = {
+                        assigned_rnti,
                         join_req.user_token,
                         assigned_ip,
                         std::chrono::steady_clock::now()
                     };
-                    g_id_by_ip[assigned_ip] = assigned_id;
+
+                    g_rnti_by_ip[assigned_ip] = assigned_rnti;
                 }
             }
 
             logs::tun.info(
-                "[BS] Valid JOIN! Token: 0x{:08X} -> ID={}, IP=10.0.0.{}",
-                join_req.user_token, assigned_id, (assigned_id + 1)
+                "[BS] Valid JOIN! Token: 0x{:08X} -> RNTI={}, IP=10.0.0.{}",
+                join_req.user_token, assigned_rnti, (assigned_rnti + 1)
             );
 
             JoinAckPayload ack_payload{};
             ack_payload.user_token = join_req.user_token;
-            ack_payload.assigned_id = htons(assigned_id);
+            ack_payload.assigned_rnti = htons(assigned_rnti);
             ack_payload.assigned_ip = assigned_ip;
             ack_payload.netmask = inet_addr("255.255.255.0");
             ack_payload.gateway = inet_addr("10.0.0.1");
@@ -345,8 +372,8 @@ void run_tun_rx(SharedData &data)
             FrameHeader ack_hdr{};
             ack_hdr.magic = htons(FRAME_MAGIC);
             ack_hdr.type = static_cast<uint8_t>(FrameType::JOIN_ACK);
-            ack_hdr.src_id = htons(BS_USER_ID);
-            ack_hdr.dest_id = htons(UNASSIGNED_ID);
+            ack_hdr.src_rnti = htons(BS_RNTI);
+            ack_hdr.dest_rnti = htons(UNASSIGNED_RNTI);
             ack_hdr.length = htons(static_cast<uint16_t>(ack_bytes.size()));
 
             std::vector<uint8_t> ack_frame(sizeof(FrameHeader) + ack_bytes.size());
@@ -377,14 +404,17 @@ void run_tun_rx(SharedData &data)
 
             if (ack.user_token == g_ue_token && !g_ue_registered.load())
             {
-                g_ue_my_id = ntohs(ack.assigned_id);
+                g_ue_rnti = ntohs(ack.assigned_rnti);
 
                 in_addr ip_addr_struct{ ack.assigned_ip };
                 in_addr mask_addr_struct{ ack.netmask };
                 std::string ip_str = inet_ntoa(ip_addr_struct);
                 std::string mask_str = inet_ntoa(mask_addr_struct);
 
-                logs::tun.info("[UE] Successfully registered! ID: {}, IP: {}/{}", g_ue_my_id.load(), ip_str, mask_str);
+                logs::tun.info(
+                    "[UE] Successfully registered! RNTI: {}, IP: {}/{}",
+                    g_ue_rnti.load(), ip_str, mask_str
+                );
 
                 tun->set_ip_and_up(ip_str, mask_str);
                 enable_client(tun_name);
@@ -396,13 +426,13 @@ void run_tun_rx(SharedData &data)
 
         if (type == FrameType::DATA)
         {
-            uint16_t my_id = is_bs ? BS_USER_ID : g_ue_my_id.load();
+            uint16_t my_rnti = is_bs ? BS_RNTI : g_ue_rnti.load();
 
-            if (dest_id != my_id && dest_id != BROADCAST_USER_ID)
+            if (dest_rnti != my_rnti && dest_rnti != BROADCAST_RNTI)
                 continue;
 
             uint16_t seq = ntohs(hdr.seq);
-            auto &res_buf = assembly_map[src_id];
+            auto &res_buf = assembly_map[src_rnti];
 
             if (hdr.flags & FLAG_FIRST)
             {
