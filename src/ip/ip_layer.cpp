@@ -59,6 +59,19 @@ static uint16_t allocate_rnti_locked()
     return UNASSIGNED_RNTI;
 }
 
+static uint32_t allocate_ip_locked()
+{
+    for (uint16_t host = MIN_UE_IP; host <= MAX_UE_IP; ++host)
+    {
+        uint32_t candidate = htonl(IP_NETWORK | host);
+
+        if (!g_rnti_by_ip.contains(candidate))
+            return candidate;
+    }
+
+    return 0;
+}
+
 void run_tun_tx(SharedData &data)
 {
     data.tun = std::make_shared<TunDevice>(data.tun_name);
@@ -338,7 +351,13 @@ void run_tun_rx(SharedData &data)
                         continue;
                     }
 
-                    assigned_ip = htonl(0x0A000000 | (assigned_rnti + 1));
+                    assigned_ip = allocate_ip_locked();
+                    if (assigned_ip == 0)
+                    {
+                        logs::tun.warn("[BS] No free IP addresses available");
+                        continue;
+                    }
+
                     g_clients_by_rnti[assigned_rnti] = {
                         assigned_rnti,
                         join_req.user_token,
@@ -352,7 +371,9 @@ void run_tun_rx(SharedData &data)
 
             logs::tun.info(
                 "[BS] Valid JOIN! Token: 0x{:08X} -> RNTI={}, IP=10.0.0.{}",
-                join_req.user_token, assigned_rnti, (assigned_rnti + 1)
+                join_req.user_token,
+                assigned_rnti,
+                (ntohl(assigned_ip) & 0xFF)
             );
 
             JoinAckPayload ack_payload{};

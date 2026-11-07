@@ -26,6 +26,10 @@ constexpr uint16_t MAX_UE_RNTI = 0xFFFE;
 constexpr uint16_t BROADCAST_RNTI = 0xFFFF;
 constexpr uint16_t UNASSIGNED_RNTI = 0xFFFF;
 
+constexpr uint32_t IP_NETWORK = 0x0A000000; // 10.0.0.0
+constexpr uint8_t MIN_UE_IP = 2;
+constexpr uint8_t MAX_UE_IP = 254;
+
 #pragma pack(push, 1)
 struct FrameHeader {
     uint16_t magic;
