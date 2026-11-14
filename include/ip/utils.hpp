@@ -6,6 +6,13 @@
 #include <cstdint>
 #include <vector>
 
+struct SchedulerUser {
+    uint16_t rnti;
+    uint32_t ip;
+};
+
+std::vector<SchedulerUser> get_scheduler_users();
+
 template <typename T>
 std::vector<uint8_t> byte_to_bits(const std::vector<T> &data, int16_t r)
 {

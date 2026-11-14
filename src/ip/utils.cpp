@@ -2,6 +2,8 @@
 #include "ip/ip_layer.hpp"
 #include "ip/utils.hpp"
 
+#include <algorithm>
+
 size_t calculate_mtu(const SharedData &data)
 {
     CarrierGrid grid(data.dsp.ofdm_cfg);
@@ -41,4 +43,20 @@ void send_phy_frame(SharedData &data, std::vector<uint8_t> &frame, size_t max_fr
     bits = puncture(bits, data.punct_cfg);
 
     data.ip_phy.write(bits, true);
+}
+
+std::vector<SchedulerUser> get_scheduler_users()
+{
+    auto clients = get_clients_snapshot();
+
+    std::vector<SchedulerUser> users;
+    users.reserve(clients.size());
+
+    for (const auto &client : clients)
+        users.push_back({ client.rnti, client.ip });
+
+    std::sort(users.begin(), users.end(), [](const SchedulerUser &a, const SchedulerUser &b)
+              { return a.rnti < b.rnti; });
+
+    return users;
 }
