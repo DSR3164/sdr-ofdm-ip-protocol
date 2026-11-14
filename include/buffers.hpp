@@ -7,6 +7,7 @@ struct Buffers {
     DoubleBuffer<std::complex<float>> dsp;
     DoubleBuffer<uint8_t> stats;
     DoubleBuffer<uint8_t> ip;
+    DoubleBuffer<uint8_t> users;
     DoubleBuffer<std::string> socket;
 
     Buffers(int size1 = 3840, int size2 = 3840)

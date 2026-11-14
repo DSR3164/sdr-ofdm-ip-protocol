@@ -257,6 +257,7 @@ struct SharedData {
     DoubleBuffer<std::complex<float>> dsp_sockets_raw;
     DoubleBuffer<std::complex<float>> dsp_sockets_symbols;
     DoubleBuffer<uint8_t> ip_sockets_bytes;
+    DoubleBuffer<uint8_t> users_sockets_bytes;
 
     StatsHistory<60000> history;
     StatsSnapshot snap;
@@ -277,6 +278,7 @@ struct SharedData {
         dsp_sockets_raw.stop();
         dsp_sockets_symbols.stop();
         ip_sockets_bytes.stop();
+        users_sockets_bytes.stop();
     }
 
     SharedData(SDRConfig cfg = SDRConfig{})
