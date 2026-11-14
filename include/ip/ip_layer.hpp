@@ -62,6 +62,14 @@ struct ClientSession {
     std::chrono::steady_clock::time_point last_seen;
 };
 
+struct ClientInfo {
+    uint16_t rnti;
+    uint32_t user_token;
+    uint32_t ip; // network byte order
+};
+
+std::vector<ClientInfo> get_clients_snapshot();
+
 struct ReassemblyBuffer {
     std::vector<uint8_t> data;
     uint16_t last_seq = 0;

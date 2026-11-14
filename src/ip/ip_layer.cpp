@@ -72,6 +72,19 @@ static uint32_t allocate_ip_locked()
     return 0;
 }
 
+std::vector<ClientInfo> get_clients_snapshot()
+{
+    std::scoped_lock lock(g_state_mtx);
+
+    std::vector<ClientInfo> clients;
+    clients.reserve(g_clients_by_rnti.size());
+
+    for (const auto &[rnti, session] : g_clients_by_rnti)
+        clients.push_back({ session.rnti, session.user_token, session.ip });
+
+    return clients;
+}
+
 void run_tun_tx(SharedData &data)
 {
     data.tun = std::make_shared<TunDevice>(data.tun_name);
