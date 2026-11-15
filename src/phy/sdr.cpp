@@ -4,12 +4,55 @@
 #include <cstdint>
 #include <stdexcept>
 #include <uhd/types/device_addr.hpp>
+#include <uhd/utils/log.hpp>
+#include <uhd/utils/log_add.hpp>
 
 SDR::SDR(const SDRConfig &config, std::atomic<bool> &stop_condition)
     : cond(stop_condition),
       cfg(config)
 {
     scan();
+    uhd::log::set_console_level(uhd::log::off);
+
+    uhd::log::add_logger("spdlog_bridge", [](const auto &info)
+                         {
+        std::string msg = info.component.empty()
+            ? info.message
+            : fmt::format("[{}] {}", info.component, info.message);
+
+        const std::string prefix = "[B200] ";
+        if (msg.rfind(prefix, 0) == 0) {
+            msg.erase(0, prefix.length());
+        }
+            
+        if (!msg.empty() && msg.back() == '\n') {
+            msg.pop_back();
+        }
+
+        if (info.verbosity == uhd::log::info) {
+            if (msg.find("Asking for clock rate") != std::string::npos ||
+                msg.find("Detect") != std::string::npos ||
+                msg.find("Actually got clock rate") != std::string::npos ||
+                msg.find("Operating over") != std::string::npos ||
+                msg.find("Setting master clock rate") != std::string::npos) {
+            }
+            else
+                return;
+        }
+
+        if (!msg.empty() && msg.back() == '\n') {
+            msg.pop_back();
+        }
+
+        switch (info.verbosity) {
+            case uhd::log::trace:   logs::sdr.trace(msg); break;
+            case uhd::log::debug:   logs::sdr.debug(msg); break;
+            case uhd::log::info:    logs::sdr.info(msg); break;
+            case uhd::log::warning: logs::sdr.warn(msg); break;
+            case uhd::log::error:   logs::sdr.error(msg); break;
+            case uhd::log::fatal:   logs::sdr.critical(msg); break;
+            default: break;
+        } });
 }
 
 /*!
