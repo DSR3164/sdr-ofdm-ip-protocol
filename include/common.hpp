@@ -23,6 +23,8 @@ enum class Modulation
     QAM64,
 };
 
+using M = Modulation;
+
 inline const std::string mod_to_string(Modulation mod)
 {
     switch (mod)
@@ -38,6 +40,22 @@ inline const std::string mod_to_string(Modulation mod)
     default:
         return "ERROR";
     }
+}
+
+inline int pin_to_core(int core_id)
+{
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(core_id, &cpuset);
+
+    pthread_t current_thread = pthread_self();
+    if (pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset) != 0)
+    {
+        logs::main.critical("Pin to core {} error", core_id);
+        return -1;
+    }
+    logs::main.info("Pin to core {}", core_id);
+    return 0;
 }
 
 struct DSP {

@@ -14,6 +14,8 @@ int run_dsp_tx(SharedData &data)
     std::vector<uint8_t> bits;
     std::vector<int16_t> buffer;
 
+    pin_to_core(0);
+
     uint64_t tx_dsp_counter = 0;
 
     OFDMTransmitter tx(data.dsp.ofdm_cfg);
