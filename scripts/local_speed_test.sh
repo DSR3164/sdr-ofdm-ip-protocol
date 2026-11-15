@@ -35,16 +35,17 @@ echo_msg() {
 
 stop_processes() {
     printf "\r\n=== Остановка тестовых процессов ===\r\n"
-    $SUDO killall -9 soip iperf3 2>/dev/null || true
+    $SUDO killall -2 soip iperf3 2>/dev/null || true
     restore_tty
     sleep 1
 }
 
 cleanup() {
     stop_processes
-    if [ -n "${TEST_TMP_DIR:-}" ] && [ -d "$TEST_TMP_DIR" ]; then
-        rm -rf "$TEST_TMP_DIR" 2>/dev/null || $SUDO rm -rf "$TEST_TMP_DIR" || true
-    fi
+    echo_msg "Логи оставлены в: $TEST_TMP_DIR"
+    # if [ -n "${TEST_TMP_DIR:-}" ] && [ -d "$TEST_TMP_DIR" ]; then
+    #     rm -rf "$TEST_TMP_DIR" 2>/dev/null || $SUDO rm -rf "$TEST_TMP_DIR" || true
+    # fi
     restore_tty
 }
 trap cleanup EXIT
@@ -59,6 +60,7 @@ LOG_B="$TEST_TMP_DIR/soip_b_ci.log"
 LOG_SERVER="$TEST_TMP_DIR/iperf_server_ci.log"
 JSON_OUT="$TEST_TMP_DIR/iperf_client_ci.json"
 LOG_CLIENT_ERR="$TEST_TMP_DIR/iperf_client_ci.err"
+IPERF_TIMEOUT=$((DURATION + 10))
 
 export JSON_OUT MIN_SPEED_MBPS MAX_PACKET_LOSS MAX_PHYSICAL_MBPS LOG_A LOG_B
 
@@ -72,11 +74,11 @@ for ns in ns0 ns1; do
 done
 
 echo_msg "=== 2. Запуск Node A (ns0) и Node B (ns1) с модуляцией ${MODULATION} ==="
-$SUDO ip netns exec ns0 "$SOIP_BIN" -n A -m "$MODULATION" < /dev/null > "$LOG_A" 2>&1 &
+$SUDO setsid ip netns exec ns0 stdbuf -o0 -e0 "$SOIP_BIN" -n A -m "$MODULATION" < /dev/null > "$LOG_A" 2>&1 &
 PID_A=$!
-sleep 1
+sleep 3
 
-$SUDO ip netns exec ns1 "$SOIP_BIN" -n B -m "$MODULATION" < /dev/null > "$LOG_B" 2>&1 &
+$SUDO setsid ip netns exec ns1 stdbuf -o0 -e0 "$SOIP_BIN" -n B -m "$MODULATION" < /dev/null > "$LOG_B" 2>&1 &
 PID_B=$!
 
 echo_msg "Узлы запущены (PID A: $PID_A, PID B: $PID_B). Ожидание синхронизации линка..."
@@ -117,7 +119,9 @@ $SUDO ip netns exec ns0 iperf3 -s -1 < /dev/null > "$LOG_SERVER" 2>&1 &
 sleep 2
 
 echo_msg "=== 4. Запуск теста iperf3 (ns1 -> ns0, ${DURATION}c, ${TARGET_BITRATE}) ==="
-$SUDO ip netns exec ns1 iperf3 -c 10.0.0.1 -u -b "$TARGET_BITRATE" -i 1 -R -t "$DURATION" -O 1 -J < /dev/null > "$JSON_OUT" 2> "$LOG_CLIENT_ERR" || true
+$SUDO timeout -k 2 "$IPERF_TIMEOUT" ip netns exec ns1 iperf3 \
+    -c 10.0.0.1 -u -b "$TARGET_BITRATE" -i 1 -R -t "$DURATION" -O 1 -J \
+    < /dev/null > "$JSON_OUT" 2> "$LOG_CLIENT_ERR" || true
 
 # Остановка узлов для фиксации финальной статистики DSP
 $SUDO killall -2 soip 2>/dev/null || true
