@@ -42,10 +42,10 @@ void OFDMTransmitter::ofdm(const std::vector<uint8_t> &input, Modulation mod, st
     const size_t bps = get_bits_per_symbol(mod);
     if (bps == 0 || input.empty() || input.size() > max_payload_bits || std::any_of(input.begin(), input.end(), [](uint8_t bit)
                                                                                     { return bit > 1; }))
-        throw std::invalid_argument("Invalid payload or payload exceeds 65535 bits");
+        logs::dsp.warn("Invalid payload or payload exceeds 65535 bits");
     const size_t count = ceil_div(input.size(), grid_.data.size() * bps);
     if (count > max_data_symbols)
-        throw std::invalid_argument("Payload exceeds the 15-symbol PHY header limit");
+        logs::dsp.warn("Payload exceeds the 15-symbol PHY header limit");
 
     DSPFrameHeader header;
     header.modulation = mod;
@@ -53,7 +53,7 @@ void OFDMTransmitter::ofdm(const std::vector<uint8_t> &input, Modulation mod, st
     header.bits_count = static_cast<uint16_t>(input.size());
     auto header_bits = encode(packFrameHeader(header));
     if (header_bits.size() != header_coded_bits_)
-        throw std::runtime_error("Header encoder length changed");
+        logs::dsp.warn("Header encoder length changed");
     const size_t hdr_bps = get_bits_per_symbol(Modulation::QPSK);
     header_bits.resize(header_symbols_ * grid_.data.size() * hdr_bps, 0);
     scramble(header_bits);

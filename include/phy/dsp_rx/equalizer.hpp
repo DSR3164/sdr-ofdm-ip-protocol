@@ -12,7 +12,7 @@
 inline void ofdm_equalize(const std::vector<std::complex<float>> &input, std::vector<std::complex<float>> &output, const CarrierGrid &grid, Modulation mod, std::vector<std::complex<float>> &channel)
 {
     if (input.size() != grid.n)
-        throw std::invalid_argument("Equalizer input has the wrong FFT size");
+        logs::dsp.error("Equalizer input has the wrong FFT size");
 
     channel.assign(grid.n, std::complex<float>{});
     const std::complex<float> pilot = get_pilot(mod);

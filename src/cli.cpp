@@ -15,14 +15,15 @@ static Modulation stringToModulation(const std::string &str)
         return Modulation::QAM16;
     if (str == "QAM64")
         return Modulation::QAM64;
-    throw std::invalid_argument("Unknown modulation: " + str);
+    logs::dsp.error("Unknown modulation: " + str);
+    return Modulation::BPSK;
 }
 
 static spdlog::level::level_enum parseLevel(const std::string &name, const std::string &val)
 {
     auto level = spdlog::level::from_str(val);
     if (level == spdlog::level::off && val != "off")
-        throw std::invalid_argument("Unknown log level for " + name + ": '" + val + "'");
+        logs::main.error("Unknown log level for " + name + ": '" + val + "'");
     return level;
 }
 
@@ -52,16 +53,7 @@ std::optional<CliConfig> parse_cli(int argc, char *argv[])
     // clang-format on
 
     cxxopts::ParseResult result;
-    try
-    {
-        result = options.parse(argc, argv);
-    }
-    catch (const cxxopts::exceptions::exception &e)
-    {
-        std::cerr << "Argument error: " << e.what() << std::endl;
-        std::cerr << options.help() << std::endl;
-        return std::nullopt;
-    }
+    result = options.parse(argc, argv);
 
     if (result.count("help"))
     {
@@ -85,54 +77,29 @@ std::optional<CliConfig> parse_cli(int argc, char *argv[])
 
         int merged_argc = static_cast<int>(merged_argv.size());
 
-        try
-        {
-            result = options.parse(merged_argc, const_cast<char **>(merged_argv.data()));
-        }
-        catch (const cxxopts::exceptions::exception &e)
-        {
-            logs::main.critical("Argument error: {}", e.what());
-            return std::nullopt;
-        }
+        result = options.parse(merged_argc, const_cast<char **>(merged_argv.data()));
     }
 
     CliConfig cfg;
 
-    try
-    {
-        const auto global = result["log-level"].as<std::string>();
-        auto base = parseLevel("global", global);
-        cfg.log.set_all(base);
+    const auto global = result["log-level"].as<std::string>();
+    auto base = parseLevel("global", global);
+    cfg.log.set_all(base);
 
-        if (result.count("log-sdr"))
-            cfg.log.sdr = parseLevel("sdr", result["log-sdr"].as<std::string>());
-        if (result.count("log-tun"))
-            cfg.log.tun = parseLevel("tun", result["log-tun"].as<std::string>());
-        if (result.count("log-gui"))
-            cfg.log.gui = parseLevel("gui", result["log-gui"].as<std::string>());
-        if (result.count("log-dsp"))
-            cfg.log.dsp = parseLevel("dsp", result["log-dsp"].as<std::string>());
-        if (result.count("log-main"))
-            cfg.log.main = parseLevel("main", result["log-main"].as<std::string>());
-        if (result.count("log-socket"))
-            cfg.log.socket = parseLevel("socket", result["log-socket"].as<std::string>());
-    }
-    catch (const std::invalid_argument &e)
-    {
-        logs::main.critical("{}", e.what());
-        return std::nullopt;
-    }
+    if (result.count("log-sdr"))
+        cfg.log.sdr = parseLevel("sdr", result["log-sdr"].as<std::string>());
+    if (result.count("log-tun"))
+        cfg.log.tun = parseLevel("tun", result["log-tun"].as<std::string>());
+    if (result.count("log-gui"))
+        cfg.log.gui = parseLevel("gui", result["log-gui"].as<std::string>());
+    if (result.count("log-dsp"))
+        cfg.log.dsp = parseLevel("dsp", result["log-dsp"].as<std::string>());
+    if (result.count("log-main"))
+        cfg.log.main = parseLevel("main", result["log-main"].as<std::string>());
+    if (result.count("log-socket"))
+        cfg.log.socket = parseLevel("socket", result["log-socket"].as<std::string>());
 
-    try
-    {
-        cfg.modulation = stringToModulation(result["modulation"].as<std::string>());
-    }
-    catch (const std::invalid_argument &e)
-    {
-        std::cerr << e.what() << std::endl;
-        std::cerr << options.help() << std::endl;
-        return std::nullopt;
-    }
+    cfg.modulation = stringToModulation(result["modulation"].as<std::string>());
 
     const auto rate_str = result["rate"].as<std::string>();
     if (rate_str == "1/2")

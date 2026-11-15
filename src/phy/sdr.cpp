@@ -68,7 +68,7 @@ bool SDR::init()
         txStream = usrp->get_tx_stream(stream_args);
 
         logs::sdr.info(
-            "{} stream is active",
+            "[{}] stream is active",
             fmt::format(fg(fmt::color::cyan), "TX")
         );
     }
@@ -81,13 +81,13 @@ bool SDR::init()
 void SDR::start_rx()
 {
     if (!rxStream)
-        throw std::runtime_error("RX stream is not init");
+        logs::sdr.critical("RX Stream init error");
 
     uhd::stream_cmd_t stream_cmd(uhd::stream_cmd_t::STREAM_MODE_START_CONTINUOUS);
     stream_cmd.stream_now = true;
     rxStream->issue_stream_cmd(stream_cmd);
     logs::sdr.info(
-        "{} stream is active",
+        "[{}] stream is active",
         fmt::format(fg(fmt::color::cyan), "RX")
     );
 }
@@ -118,7 +118,7 @@ int SDR::readstream(std::vector<int16_t> &recv)
         return 0;
     }
     if (!rxStream || cfg.buffer_size <= 0)
-        throw std::runtime_error("Invalid RX stream or buffer size");
+        logs::sdr.error("Invalid RX stream or buffer size");
 
     const auto requested = static_cast<size_t>(cfg.buffer_size);
     recv.resize(requested * 2);
@@ -129,7 +129,7 @@ int SDR::readstream(std::vector<int16_t> &recv)
         uhd::rx_metadata_t md;
         const auto received = rxStream->recv(recv.data() + 2 * offset, requested - offset, md, 0.05, true);
         if (received > requested - offset)
-            throw std::runtime_error("UHD returned too many RX samples");
+            logs::sdr.error("UHD returned too many RX samples");
 
         if (md.error_code == uhd::rx_metadata_t::ERROR_CODE_NONE || md.error_code == uhd::rx_metadata_t::ERROR_CODE_TIMEOUT)
         {
@@ -142,7 +142,7 @@ int SDR::readstream(std::vector<int16_t> &recv)
         recv.clear();
         if (md.error_code == uhd::rx_metadata_t::ERROR_CODE_OVERFLOW)
             return -2;
-        throw std::runtime_error(md.strerror());
+        logs::sdr.error(md.strerror());
     }
 
     recv.resize(offset * 2);
@@ -161,14 +161,14 @@ int SDR::readstream(std::vector<int16_t> &recv)
 int SDR::writestream(std::vector<int16_t> &send)
 {
     if (!txStream)
-        throw std::runtime_error("TX stream is not initialized");
+        logs::sdr.critical("TX Stream init error");
     if (send.size() % 2 != 0 || send.size() / 2 > static_cast<size_t>(std::numeric_limits<int>::max()))
-        throw std::invalid_argument("Invalid TX I/Q buffer length");
+        logs::sdr.error("Invalid TX I/Q buffer length");
 
     const size_t total = send.size() / 2;
     const size_t packet_size = txStream->get_max_num_samps();
     if (packet_size == 0)
-        throw std::runtime_error("Invalid UHD TX packet size");
+        logs::sdr.error("Invalid UHD TX packet size");
 
     size_t offset = 0;
     auto last_progress = std::chrono::steady_clock::now();
@@ -181,11 +181,11 @@ int SDR::writestream(std::vector<int16_t> &send)
         const size_t requested = std::min(packet_size, total - offset);
         const size_t sent = txStream->send(send.data() + 2 * offset, requested, md, 0.05);
         if (sent > requested)
-            throw std::runtime_error("UHD returned too many TX samples");
+            logs::sdr.error("UHD returned too many TX samples");
         if (sent == 0)
         {
             if (std::chrono::steady_clock::now() - last_progress >= std::chrono::milliseconds(500))
-                throw std::runtime_error("TX has made no progress for 500 ms");
+                logs::sdr.warn("TX has made no progress for 500 ms");
             continue;
         }
         tx_burst_started_ = true;

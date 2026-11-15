@@ -41,21 +41,14 @@ socketData::~socketData()
 
     if (is_owner && !socketPath.empty())
     {
-        try
+        if (fs::exists(socketPath))
         {
-            if (fs::exists(socketPath))
-            {
-                fs::remove_all(socketPath);
-                logs::socket.info("Socket directory cleaned up: {}", socketPath);
-            }
-            else
-            {
-                logs::socket.error("Socket directory not found: {}", socketPath);
-            }
+            fs::remove_all(socketPath);
+            logs::socket.info("Socket directory cleaned up: {}", socketPath);
         }
-        catch (const fs::filesystem_error &e)
+        else
         {
-            logs::main.error("Cleanup error: {}", e.what());
+            logs::socket.error("Socket directory not found: {}", socketPath);
         }
     }
     else
@@ -71,19 +64,12 @@ std::string socketData::setup_socket_dir(const std::string &folder_name)
     std::string uniq_folder = folder_name + "_" + socketPid;
     fs::path p = fs::temp_directory_path() / uniq_folder;
 
-    try
-    {
-        fs::create_directories(p);
-        fs::permissions(p, fs::perms::owner_all | fs::perms::group_all | fs::perms::others_all, fs::perm_options::replace);
-        logs::main.info("Socket directory ready: {}", p.string());
+    fs::create_directories(p);
+    fs::permissions(p, fs::perms::owner_all | fs::perms::group_all | fs::perms::others_all, fs::perm_options::replace);
+    logs::main.info("Socket directory ready: {}", p.string());
 
-        if (p.string().length() > 100)
-            logs::main.warn("Path is too long for Unix Sockets! (> 100 chars)");
-    }
-    catch (const fs::filesystem_error &e)
-    {
-        logs::main.error("Filesystem library error {}", e.what());
-    }
+    if (p.string().length() > 100)
+        logs::main.warn("Path is too long for Unix Sockets! (> 100 chars)");
 
     return p.string();
 }
@@ -93,32 +79,25 @@ void socketData::cleanup_old_sockets(const std::string &base_name)
     namespace fs = std::filesystem;
     const std::string tmp_path = "/tmp";
 
-    try
+    for (const auto &entry : fs::directory_iterator(tmp_path))
     {
-        for (const auto &entry : fs::directory_iterator(tmp_path))
+        std::string filename = entry.path().filename().string();
+
+        if (filename.find(base_name) != 0)
+            continue;
+
+        std::string pid_str = filename.substr(base_name.size());
+        logs::main.info("Parsed PID string: '{}' from '{}'", pid_str, filename);
+        pid_t pid = std::stoi(pid_str);
+
+        if (kill(pid, 0) == 0)
         {
-            std::string filename = entry.path().filename().string();
-
-            if (filename.find(base_name) != 0)
-                continue;
-
-            std::string pid_str = filename.substr(base_name.size());
-            logs::main.info("Parsed PID string: '{}' from '{}'", pid_str, filename);
-            pid_t pid = std::stoi(pid_str);
-
-            if (kill(pid, 0) == 0)
-            {
-                logs::main.warn("Process {} still alive, skipping {}", pid, filename);
-                continue;
-            }
-
-            logs::main.info("Removing stale socket dir: {}", filename);
-            fs::remove_all(entry.path());
+            logs::main.warn("Process {} still alive, skipping {}", pid, filename);
+            continue;
         }
-    }
-    catch (const fs::filesystem_error &e)
-    {
-        logs::main.error("Cleanup error: {}", e.what());
+
+        logs::main.info("Removing stale socket dir: {}", filename);
+        fs::remove_all(entry.path());
     }
 }
 
@@ -132,33 +111,26 @@ void found_sockets(std::vector<std::string> &sockets, const std::string base_nam
 
     if (!searching.exchange(true))
     {
-        try
+        if (fs::exists(tmp_path) && fs::is_directory(tmp_path))
         {
-            if (fs::exists(tmp_path) && fs::is_directory(tmp_path))
+            for (const auto &entry : fs::directory_iterator(tmp_path))
             {
-                for (const auto &entry : fs::directory_iterator(tmp_path))
+                std::string filename = entry.path().filename().string();
+
+                if (filename.find(base_name) == 0)
                 {
-                    std::string filename = entry.path().filename().string();
+                    logs::gui.info("Found socket directory: {}", filename);
+                    sockets.push_back(filename);
 
-                    if (filename.find(base_name) == 0)
+                    if (fs::is_directory(entry))
                     {
-                        logs::gui.info("Found socket directory: {}", filename);
-                        sockets.push_back(filename);
-
-                        if (fs::is_directory(entry))
+                        for (const auto &sock : fs::directory_iterator(entry))
                         {
-                            for (const auto &sock : fs::directory_iterator(entry))
-                            {
-                                logs::gui.info("  -> Socket file: {}", sock.path().filename().string());
-                            }
+                            logs::gui.info("  -> Socket file: {}", sock.path().filename().string());
                         }
                     }
                 }
             }
-        }
-        catch (const fs::filesystem_error &e)
-        {
-            logs::gui.error("FS error: {}", e.what());
         }
         searching.store(false);
     }
@@ -166,49 +138,25 @@ void found_sockets(std::vector<std::string> &sockets, const std::string base_nam
 
 bool IPC::start_server(const std::string &path)
 {
-    try
-    {
-        _socket.set(zmq::sockopt::linger, 0);
-        _socket.set(zmq::sockopt::sndhwm, 1000);
-        _socket.bind(path);
-        return true;
-    }
-    catch (const zmq::error_t &e)
-    {
-        logs::socket.error("Failed to bind to {}: {}", path, e.what());
-        return false;
-    }
+    _socket.set(zmq::sockopt::linger, 0);
+    _socket.set(zmq::sockopt::sndhwm, 1000);
+    _socket.bind(path);
+    return true;
 }
 
 bool IPC::connect_to(const std::string &path)
 {
-    try
-    {
-        _socket.set(zmq::sockopt::subscribe, "");
-        _socket.set(zmq::sockopt::rcvtimeo, 500);
-        _socket.connect(path);
+    _socket.set(zmq::sockopt::subscribe, "");
+    _socket.set(zmq::sockopt::rcvtimeo, 500);
+    _socket.connect(path);
 
-        logs::socket.info("SUB socket connected to {}", path);
-        return true;
-    }
-    catch (const zmq::error_t &e)
-    {
-        logs::socket.error("Failed to connect to {}: {}", path, e.what());
-        return false;
-    }
+    logs::socket.info("SUB socket connected to {}", path);
+    return true;
 }
 
 bool IPC::disconnect_from(const std::string &path)
 {
-    try
-    {
-        _socket.disconnect(path);
-        logs::socket.info("SUB socket disconnected from {}", path);
-        return true;
-    }
-    catch (const zmq::error_t &e)
-    {
-        logs::socket.error("Failed to connect to {}: {}", path, e.what());
-        return false;
-    }
+    _socket.disconnect(path);
+    logs::socket.info("SUB socket disconnected from {}", path);
+    return true;
 }

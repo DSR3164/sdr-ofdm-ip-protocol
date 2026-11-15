@@ -1,3 +1,4 @@
+#include "logger.hpp"
 #include "phy/dsp_common.hpp"
 
 #include <stdexcept>
@@ -12,7 +13,7 @@ FFTWPlan::FFTWPlan(int size, bool direction)
     : size(size)
 {
     if (size == 0 || size > std::numeric_limits<int>::max())
-        throw std::invalid_argument("Invalid FFT length");
+        logs::dsp.critical("Invalid FFT length");
 
     std::scoped_lock lock(fftw_mutex());
 
@@ -23,7 +24,7 @@ FFTWPlan::FFTWPlan(int size, bool direction)
     {
         fftwf_free(in);
         fftwf_free(out);
-        throw std::bad_alloc{};
+        logs::dsp.critical("FFT plan allocation error");
     }
 
     plan = fftwf_plan_dft_1d(static_cast<int>(size), in, out, direction ? FFTW_FORWARD : FFTW_BACKWARD, FFTW_ESTIMATE);
@@ -31,7 +32,7 @@ FFTWPlan::FFTWPlan(int size, bool direction)
     {
         fftwf_free(in);
         fftwf_free(out);
-        throw std::runtime_error("fftwf_plan_dft_1d failed");
+        logs::dsp.critical("fftwf_plan_dft_1d failed");
     }
 }
 
@@ -58,18 +59,27 @@ CarrierGrid::CarrierGrid(const DSP::OFDMConfig &config)
       spacing(config.pilot_spacing),
       num_rbs(6)
 {
-    if (n == 128)
+    switch (n)
+    {
+    case 128:
         num_rbs = 6;
-    else if (n == 256)
+        break;
+    case 256:
         num_rbs = 15;
-    else if (n == 512)
+        break;
+    case 512:
         num_rbs = 25;
-    else if (n == 1024)
+        break;
+    case 1024:
         num_rbs = 50;
-    else if (n == 2048)
+        break;
+    case 2048:
         num_rbs = 100;
-    else
-        throw std::invalid_argument("Unsupported FFT size. Use 128, 256, 512, 1024, or 2048.");
+        break;
+    default:
+        logs::dsp.error("Unsupported FFT size. Use 128, 256, 512, 1024, or 2048.");
+        return;
+    }
 
     size_t active_subcarriers = num_rbs * 12;
     size_t half_active = active_subcarriers / 2;
@@ -95,7 +105,7 @@ CarrierGrid::CarrierGrid(const DSP::OFDMConfig &config)
         assign_carrier(k, idx++);
 
     if (data.empty() || pilots.empty())
-        throw std::invalid_argument("OFDM grid mapping failed");
+        logs::dsp.error("OFDM grid mapping failed");
 }
 
 void scramble(std::vector<uint8_t> &bits, uint8_t seed)
@@ -185,7 +195,7 @@ size_t encoded_header_length()
 {
     const auto encoded = encode(std::vector<uint8_t>(header_raw_bits, 0));
     if (encoded.empty())
-        throw std::runtime_error("Header encoder returned no bits");
+        logs::dsp.error("Header encoder returned no bits");
     return encoded.size();
 }
 
