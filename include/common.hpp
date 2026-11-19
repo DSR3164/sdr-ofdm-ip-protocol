@@ -2,7 +2,9 @@
 
 #include "phy/sdr.hpp"
 #include "ip/fec_codec.hpp"
+#include "ip/scheduled_frame.hpp"
 #include "ip/tun_layer.hpp"
+#include "ip/tx_queue.hpp"
 
 #include <atomic>
 #include <cmath>
@@ -250,6 +252,8 @@ struct SharedData {
 
     DoubleBuffer<uint8_t> ip_phy;
     DoubleBuffer<float> phy_ip;
+
+    TxQueue tx_queue{ 16, std::chrono::microseconds(500), 512 };
 
     DoubleBuffer<int16_t> sdr_dsp_tx;
     DoubleBuffer<int16_t> sdr_dsp_rx;

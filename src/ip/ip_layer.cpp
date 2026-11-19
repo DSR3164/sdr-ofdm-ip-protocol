@@ -4,6 +4,7 @@
 #include "ip/fec_codec.hpp"
 #include "ip/ip_layer.hpp"
 #include "ip/ip_nat.hpp"
+#include "ip/scheduled_frame.hpp"
 #include "ip/tun_layer.hpp"
 #include "ip/utils.hpp"
 
@@ -21,7 +22,6 @@
 #include <string>
 #include <sys/poll.h>
 #include <thread>
-#include <vector>
 
 static std::mutex g_state_mtx;
 static std::queue<std::vector<uint8_t>> g_ctrl_tx_queue;
@@ -157,7 +157,8 @@ void run_tun_tx(SharedData &data)
                 memcpy(frame.data(), &join_hdr, sizeof(FrameHeader));
                 memcpy(frame.data() + sizeof(FrameHeader), p_bytes.data(), p_bytes.size());
 
-                send_phy_frame(data, frame, max_frame_bytes);
+                auto bits = encode_phy_frame(data, frame, max_frame_bytes);
+                data.tx_queue.push({ BS_RNTI, std::move(bits) }, true);
             }
 
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -176,7 +177,9 @@ void run_tun_tx(SharedData &data)
             }
             if (!ctrl_frame.empty())
             {
-                send_phy_frame(data, ctrl_frame, max_frame_bytes);
+                auto bits = encode_phy_frame(data, ctrl_frame, max_frame_bytes);
+                data.tx_queue.push({ UNASSIGNED_RNTI, std::move(bits) }, true);
+
                 continue;
             }
         }
@@ -227,6 +230,7 @@ void run_tun_tx(SharedData &data)
                 size_t offset = 0;
                 uint16_t my_rnti = is_bs ? BS_RNTI : g_ue_rnti.load();
 
+                std::vector<ScheduledFrame> pkt_frames;
                 while (offset < total_len)
                 {
                     size_t chunk_size = std::min<size_t>(mtu, total_len - offset);
@@ -250,9 +254,13 @@ void run_tun_tx(SharedData &data)
                     frame.insert(frame.end(), hdr_ptr, hdr_ptr + sizeof(FrameHeader));
                     frame.insert(frame.end(), payload.begin() + offset, payload.begin() + offset + chunk_size);
 
-                    send_phy_frame(data, frame, max_frame_bytes);
+                    auto bits = encode_phy_frame(data, frame, max_frame_bytes);
+                    pkt_frames.push_back({ target_dest_rnti, std::move(bits) });
                     offset += chunk_size;
                 }
+
+                if (!data.tx_queue.push_many(std::move(pkt_frames)))
+                    logs::tun.warn("[TX] Queue full, IP packet dropped (total dropped: {})", data.tx_queue.dropped());
             }
         }
     }

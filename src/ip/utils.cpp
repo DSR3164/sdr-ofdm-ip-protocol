@@ -32,7 +32,7 @@ size_t calculate_mtu(const SharedData &data)
     return static_cast<size_t>(std::max(0, aligned));
 }
 
-void send_phy_frame(SharedData &data, std::vector<uint8_t> &frame, size_t max_frame_bytes)
+std::vector<uint8_t> encode_phy_frame(SharedData &data, std::vector<uint8_t> &frame, size_t max_frame_bytes)
 {
     if (frame.size() < max_frame_bytes)
         frame.resize(max_frame_bytes, 0);
@@ -42,6 +42,11 @@ void send_phy_frame(SharedData &data, std::vector<uint8_t> &frame, size_t max_fr
     bits = interleaving_(bits);
     bits = puncture(bits, data.punct_cfg);
 
+    return bits;
+}
+
+void send_phy_frame(SharedData &data, std::vector<uint8_t> &bits)
+{
     data.ip_phy.write(bits, true);
 }
 
