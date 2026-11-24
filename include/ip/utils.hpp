@@ -46,5 +46,6 @@ std::vector<T> bits_to_bytes(const std::vector<uint8_t> &bits, int16_t r)
 }
 
 size_t calculate_mtu(const SharedData &data);
-void send_phy_frame(SharedData &data, std::vector<uint8_t> &frame, size_t max_frame_bytes);
+std::vector<uint8_t> encode_phy_frame(SharedData &data, std::vector<uint8_t> &frame, size_t max_frame_bytes);
+void send_phy_frame(SharedData &data, std::vector<uint8_t> &bits);
 std::vector<ClientInfo> get_clients_snapshot();

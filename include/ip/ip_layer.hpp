@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <vector>
 
 constexpr size_t MAX_IP_PACKET_SIZE = 1600;
 constexpr uint16_t FRAME_MAGIC = 0x1F35;
