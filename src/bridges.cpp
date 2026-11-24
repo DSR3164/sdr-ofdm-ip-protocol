@@ -1,4 +1,7 @@
+#include "ip/utils.hpp"
 #include "bridges.hpp"
+
+#include <arpa/inet.h>
 
 extern float lat;
 
@@ -84,6 +87,8 @@ int run_ip_gui_bridge(SharedData &data, socketData &socket)
     while (!has_flag(data.sdr.get_flags(), Flags::IS_ACTIVE))
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
+    auto next_users_update = std::chrono::steady_clock::now();
+
     while (!data.stop.load() && data.is_gui_run.load())
     {
         std::vector<uint8_t> bytes;
@@ -91,10 +96,48 @@ int run_ip_gui_bridge(SharedData &data, socketData &socket)
         if (data.ip_sockets_bytes.read(bytes) == 0)
         {
             if (!server.send_frame(MsgType::Vector, bytes))
-                logs::socket.error("Frame send failed");
+                logs::socket.error("IP frame send failed");
         }
-        else
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+        auto now = std::chrono::steady_clock::now();
+
+        if (now >= next_users_update)
+        {
+            auto clients = get_clients_snapshot();
+
+            std::vector<uint8_t> users_bytes;
+            users_bytes.reserve(4 + clients.size() * 10);
+
+            auto append_u16 = [&users_bytes](uint16_t value)
+            {
+                users_bytes.push_back(static_cast<uint8_t>(value >> 8));
+                users_bytes.push_back(static_cast<uint8_t>(value));
+            };
+
+            auto append_u32 = [&users_bytes](uint32_t value)
+            {
+                users_bytes.push_back(static_cast<uint8_t>(value >> 24));
+                users_bytes.push_back(static_cast<uint8_t>(value >> 16));
+                users_bytes.push_back(static_cast<uint8_t>(value >> 8));
+                users_bytes.push_back(static_cast<uint8_t>(value));
+            };
+
+            append_u32(static_cast<uint32_t>(clients.size()));
+
+            for (const auto &client : clients)
+            {
+                append_u16(client.rnti);
+                append_u32(client.user_token);
+                append_u32(ntohl(client.ip));
+            }
+
+            if (!server.send_frame(MsgType::Users, users_bytes))
+                logs::socket.error("Users frame send failed");
+
+            next_users_update = now + std::chrono::seconds(1);
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
     logs::tun.info("GUI bridge stopped");
@@ -307,7 +350,21 @@ int run_ip_brigde(Buffers &data, socketData &socket)
         }
 
         if (client.recv_frame(header, bytes))
-            data.ip.write(bytes);
+        {
+            switch (header.type)
+            {
+            case MsgType::Vector:
+                data.ip.write(bytes);
+                break;
+
+            case MsgType::Users:
+                data.users.write(bytes);
+                break;
+
+            default:
+                break;
+            }
+        }
     }
 
     return 0;

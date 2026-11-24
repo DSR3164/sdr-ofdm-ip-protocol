@@ -1,9 +1,17 @@
 #pragma once
 
 #include "common.hpp"
+#include "ip/ip_layer.hpp"
 
 #include <cstdint>
 #include <vector>
+
+struct SchedulerUser {
+    uint16_t rnti;
+    uint32_t ip;
+};
+
+std::vector<SchedulerUser> get_scheduler_users();
 
 template <typename T>
 std::vector<uint8_t> byte_to_bits(const std::vector<T> &data, int16_t r)
@@ -39,3 +47,4 @@ std::vector<T> bits_to_bytes(const std::vector<uint8_t> &bits, int16_t r)
 
 size_t calculate_mtu(const SharedData &data);
 void send_phy_frame(SharedData &data, std::vector<uint8_t> &frame, size_t max_frame_bytes);
+std::vector<ClientInfo> get_clients_snapshot();

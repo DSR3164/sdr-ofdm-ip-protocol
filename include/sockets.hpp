@@ -39,6 +39,7 @@ enum class MsgType : uint32_t
     pid,
     Stats,
     Control,
+    Users,
 };
 
 struct ipc_header {
