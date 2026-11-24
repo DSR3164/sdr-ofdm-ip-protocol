@@ -1,6 +1,11 @@
+#include "common.hpp"
 #include "phy/scheduler.hpp"
+#include "ip/tx_queue.hpp"
 
+#include <SDL2/SDL_gamecontroller.h>
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <stdexcept>
 
 Scheduler::Scheduler(size_t n_rbs)
@@ -67,7 +72,27 @@ void Scheduler::clear_users()
     next_user_ = 0;
 }
 
-size_t Scheduler::schedule(ResourceGrid &grid)
+bool Scheduler::get_pending_frames(SharedData &data)
+{
+    num_pending_frames_ = data.tx_queue.pop_batch(pending_frames_);
+    if (num_pending_frames_ == 0)
+    {
+        return false;
+    }
+
+    for (const auto &user : pending_frames_)
+    {
+        if (!add_user(user.rnti))
+            continue;
+    }
+
+    // TODO:
+    // В будущем тут стоит добавить вызов `get_scheduler_users()` для получения RNTI <-> IP
+
+    return true;
+}
+
+size_t Scheduler::round_robin_scheduling(ResourceGrid &grid, SharedData &data)
 {
     for (size_t rb = 0; rb < n_rbs_; ++rb)
     {
@@ -79,11 +104,16 @@ size_t Scheduler::schedule(ResourceGrid &grid)
         return 0;
     }
 
-    for (size_t rb = 0; rb < n_rbs_; ++rb)
+    if (get_pending_frames(data))
     {
-        grid.allocate_rb(rb, users_[next_user_]);
+        // TODO:
+        // Выделять RB в зависимости от payload для frame
+        for (size_t rb = 0; rb < n_rbs_; ++rb)
+        {
+            grid.allocate_rb(rb, users_[next_user_]);
 
-        next_user_ = (next_user_ + 1) % users_.size();
+            next_user_ = (next_user_ + 1) % users_.size();
+        }
     }
 
     return n_rbs_;
