@@ -1,9 +1,9 @@
 #include "common.hpp"
+#include "logger.hpp"
 #include "phy/scheduler.hpp"
 #include "ip/scheduled_frame.hpp"
 #include "ip/tx_queue.hpp"
 
-#include <SDL2/SDL_gamecontroller.h>
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -100,7 +100,7 @@ bool Scheduler::get_pending_frames(SharedData &data)
     return true;
 }
 
-size_t Scheduler::round_robin_scheduling(ResourceGrid &grid, SharedData &data)
+size_t Scheduler::sequential_scheduling(ResourceGrid &grid, SharedData &data)
 {
     for (size_t rb = 0; rb < n_rbs_; ++rb)
     {
@@ -122,6 +122,9 @@ size_t Scheduler::round_robin_scheduling(ResourceGrid &grid, SharedData &data)
         for (size_t i = 0; i < pending_frames_.size(); ++i)
         {
             size_t needed_rb = estimate_payload(pending_frames_[i].payload);
+            if (needed_rb == 0)
+                continue;
+
             if (last_rb + needed_rb > n_rbs_)
             {
                 deferred_frames_.push_back(pending_frames_[i]);
@@ -143,6 +146,9 @@ size_t Scheduler::round_robin_scheduling(ResourceGrid &grid, SharedData &data)
             for (size_t i = 0; i < deferred_frames_.size(); ++i)
             {
                 size_t needed_rb = estimate_payload(deferred_frames_[i].payload);
+                if (needed_rb == 0)
+                    continue;
+
                 if (last_rb + needed_rb > n_rbs_)
                 {
                     remaining_frames.push_back(deferred_frames_[i]);
@@ -156,27 +162,10 @@ size_t Scheduler::round_robin_scheduling(ResourceGrid &grid, SharedData &data)
         }
     }
 
-    // Случай, когда внутренняя очерель deferred_frames_ была распланирована, и надо вызывать новую через get_pending_frames()
-    if (grid.get_remaining_rb_num() > 0 && deferred_frames_.empty())
-    {
-        if (get_pending_frames(data))
-        {
-            for (size_t i = 0; i < pending_frames_.size(); ++i)
-            {
-                size_t needed_rb = estimate_payload(pending_frames_[i].payload);
-                if (last_rb + needed_rb > n_rbs_)
-                {
-                    deferred_frames_.push_back(pending_frames_[i]);
-                    continue;
-                }
-                for (size_t rb = last_rb; rb < (last_rb + needed_rb); ++rb)
-                    grid.allocate_rb(rb, pending_frames_[i].rnti);
-
-                last_rb += needed_rb;
-            }
-        }
-        pending_frames_.clear();
-    }
+    // TODO:
+    // Реализовать неблокирующее получение пакетов из TxQueue.
+    // Планировщик не должен ожидать поступления новых кадров во время планирования текущего интервала.
+    // Пока за один вызов планировщика обрабатывается только одна партия кадров.
 
     return last_rb;
 }
@@ -184,8 +173,14 @@ size_t Scheduler::round_robin_scheduling(ResourceGrid &grid, SharedData &data)
 size_t Scheduler::estimate_payload(std::vector<uint8_t> &payload)
 {
     size_t needed_bits = payload.size();
-    size_t rb_size = 12 * 10 * 4;
-    return (needed_bits + rb_size - 1) / rb_size;
+    size_t rb_size = 12 * 10 * 6; // QAM64(6), 12 subcarriers, 10 OFDM symbols
+    size_t needed_rb_num = (needed_bits + rb_size - 1) / rb_size;
+    if (needed_rb_num > n_rbs_)
+    {
+        logs::scheduler.warn("Frame payload need {} RB, when {} is maximum", needed_rb_num, n_rbs_);
+        needed_rb_num = 0;
+    }
+    return needed_rb_num;
 }
 
 size_t Scheduler::user_count() const

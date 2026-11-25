@@ -19,7 +19,7 @@ class Scheduler {
 
     bool get_pending_frames(SharedData &data);
 
-    size_t round_robin_scheduling(ResourceGrid &grid, SharedData &data);
+    size_t sequential_scheduling(ResourceGrid &grid, SharedData &data);
 
     size_t estimate_payload(std::vector<uint8_t> &payload);
 
