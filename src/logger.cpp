@@ -15,4 +15,5 @@ namespace logs
     spdlog::logger &dsp = create_logger("DSP", "[%Y-%m-%d %H:%M:%S.%e] [\033[33m%n\033[0m]  [%^%l%$] %v");
     spdlog::logger &main = create_logger("MAIN", "[%Y-%m-%d %H:%M:%S.%e] [\033[31m%n\033[0m] [%^%l%$] %v");
     spdlog::logger &socket = create_logger("SOCK", "[%Y-%m-%d %H:%M:%S.%e] [\033[34m%n\033[0m] [%^%l%$] %v");
+    spdlog::logger &scheduler = create_logger("SCHD", "[%Y-%m-%d %H:%M:%S.%e] [\033[37m%n\033[0m] [%^%l%$] %v");
 } // namespace logs

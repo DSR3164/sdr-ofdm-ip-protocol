@@ -10,4 +10,5 @@ namespace logs
     extern spdlog::logger &dsp;
     extern spdlog::logger &main;
     extern spdlog::logger &socket;
+    extern spdlog::logger &scheduler;
 } // namespace logs
