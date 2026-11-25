@@ -1,6 +1,7 @@
 #include "phy/resource_grid.hpp"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <stdexcept>
 
@@ -183,4 +184,15 @@ uint16_t ResourceGrid::owner_of(size_t rb) const
         throw std::out_of_range("ResourceGrid RB index out of range");
 
     return owners_[rb];
+}
+
+size_t ResourceGrid::get_remaining_rb_num() const
+{
+    size_t remaining_rb_num = 0;
+    for (const auto &owner : owners_)
+    {
+        if (owner == 0)
+            remaining_rb_num++;
+    }
+    return remaining_rb_num;
 }

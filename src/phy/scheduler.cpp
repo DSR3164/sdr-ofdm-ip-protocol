@@ -1,12 +1,15 @@
 #include "common.hpp"
 #include "phy/scheduler.hpp"
+#include "ip/scheduled_frame.hpp"
 #include "ip/tx_queue.hpp"
 
 #include <SDL2/SDL_gamecontroller.h>
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <stdexcept>
+#include <vector>
 
 Scheduler::Scheduler(size_t n_rbs)
     : n_rbs_(n_rbs)
@@ -17,6 +20,8 @@ Scheduler::Scheduler(size_t n_rbs)
             "Scheduler must have at least one RB"
         );
     }
+
+    deferred_frames_.reserve(16);
 }
 
 bool Scheduler::add_user(uint16_t rnti)
@@ -74,6 +79,9 @@ void Scheduler::clear_users()
 
 bool Scheduler::get_pending_frames(SharedData &data)
 {
+    if (!deferred_frames_.empty())
+        return false;
+
     num_pending_frames_ = data.tx_queue.pop_batch(pending_frames_);
     if (num_pending_frames_ == 0)
     {
@@ -99,24 +107,85 @@ size_t Scheduler::round_robin_scheduling(ResourceGrid &grid, SharedData &data)
         grid.release_rb(rb);
     }
 
+    bool is_pending_frames = false;
+    if (deferred_frames_.empty() && pending_frames_.empty())
+        is_pending_frames = get_pending_frames(data);
+
     if (users_.empty())
     {
         return 0;
     }
 
-    if (get_pending_frames(data))
+    size_t last_rb = 0;
+    if (is_pending_frames)
     {
-        // TODO:
-        // Выделять RB в зависимости от payload для frame
-        for (size_t rb = 0; rb < n_rbs_; ++rb)
+        for (size_t i = 0; i < pending_frames_.size(); ++i)
         {
-            grid.allocate_rb(rb, users_[next_user_]);
+            size_t needed_rb = estimate_payload(pending_frames_[i].payload);
+            if (last_rb + needed_rb > n_rbs_)
+            {
+                deferred_frames_.push_back(pending_frames_[i]);
+                continue;
+            }
+            for (size_t rb = last_rb; rb < (last_rb + needed_rb); ++rb)
+                grid.allocate_rb(rb, pending_frames_[i].rnti);
 
-            next_user_ = (next_user_ + 1) % users_.size();
+            last_rb += needed_rb;
+        }
+        pending_frames_.clear();
+    }
+    else
+    {
+        if (!deferred_frames_.empty())
+        {
+            std::vector<ScheduledFrame> remaining_frames;
+            remaining_frames.reserve(deferred_frames_.size());
+            for (size_t i = 0; i < deferred_frames_.size(); ++i)
+            {
+                size_t needed_rb = estimate_payload(deferred_frames_[i].payload);
+                if (last_rb + needed_rb > n_rbs_)
+                {
+                    remaining_frames.push_back(deferred_frames_[i]);
+                    continue;
+                }
+                for (size_t rb = last_rb; rb < (last_rb + needed_rb); ++rb)
+                    grid.allocate_rb(rb, deferred_frames_[i].rnti);
+                last_rb += needed_rb;
+            }
+            deferred_frames_ = remaining_frames;
         }
     }
 
-    return n_rbs_;
+    // Случай, когда внутренняя очерель deferred_frames_ была распланирована, и надо вызывать новую через get_pending_frames()
+    if (grid.get_remaining_rb_num() > 0 && deferred_frames_.empty())
+    {
+        if (get_pending_frames(data))
+        {
+            for (size_t i = 0; i < pending_frames_.size(); ++i)
+            {
+                size_t needed_rb = estimate_payload(pending_frames_[i].payload);
+                if (last_rb + needed_rb > n_rbs_)
+                {
+                    deferred_frames_.push_back(pending_frames_[i]);
+                    continue;
+                }
+                for (size_t rb = last_rb; rb < (last_rb + needed_rb); ++rb)
+                    grid.allocate_rb(rb, pending_frames_[i].rnti);
+
+                last_rb += needed_rb;
+            }
+        }
+        pending_frames_.clear();
+    }
+
+    return last_rb;
+}
+
+size_t Scheduler::estimate_payload(std::vector<uint8_t> &payload)
+{
+    size_t needed_bits = payload.size();
+    size_t rb_size = 12 * 10 * 4;
+    return (needed_bits + rb_size - 1) / rb_size;
 }
 
 size_t Scheduler::user_count() const

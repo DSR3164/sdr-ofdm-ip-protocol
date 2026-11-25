@@ -46,6 +46,7 @@ class ResourceGrid {
     bool allocate_rb(size_t rb, uint16_t rnti);
     void release_rb(size_t rb);
     uint16_t owner_of(size_t rb) const;
+    size_t get_remaining_rb_num() const;
   private:
     size_t n_symbols_;
     size_t n_rbs_;

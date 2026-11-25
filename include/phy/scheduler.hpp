@@ -21,6 +21,8 @@ class Scheduler {
 
     size_t round_robin_scheduling(ResourceGrid &grid, SharedData &data);
 
+    size_t estimate_payload(std::vector<uint8_t> &payload);
+
     size_t user_count() const;
   private:
     size_t n_rbs_;
@@ -30,6 +32,7 @@ class Scheduler {
 
     std::vector<uint16_t> users_;
     std::vector<ScheduledFrame> pending_frames_;
+    std::vector<ScheduledFrame> deferred_frames_;
 
     size_t next_user_ = 0;
 };
