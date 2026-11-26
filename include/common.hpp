@@ -2,7 +2,6 @@
 
 #include "phy/sdr.hpp"
 #include "ip/fec_codec.hpp"
-#include "ip/scheduled_frame.hpp"
 #include "ip/tun_layer.hpp"
 #include "ip/tx_queue.hpp"
 
