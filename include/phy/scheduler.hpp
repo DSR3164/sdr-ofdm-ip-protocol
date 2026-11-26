@@ -28,8 +28,6 @@ class Scheduler {
     size_t n_rbs_;
     size_t num_pending_frames_;
 
-    bool all_pending_user_scheduled_ = true;
-
     std::vector<uint16_t> users_;
     std::vector<ScheduledFrame> pending_frames_;
     std::vector<ScheduledFrame> deferred_frames_;
