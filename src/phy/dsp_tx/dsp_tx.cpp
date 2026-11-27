@@ -10,11 +10,11 @@
 
 int run_dsp_tx(SharedData &data)
 {
+    pin_to_core();
+
     logs::dsp.info("[{}] Starting", fmt::format(fmt::fg(fmt::color::cyan), "TX"));
     std::vector<uint8_t> bits;
     std::vector<int16_t> buffer;
-
-    pin_to_core(0);
 
     uint64_t tx_dsp_counter = 0;
 

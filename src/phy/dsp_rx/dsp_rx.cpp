@@ -15,6 +15,9 @@
 
 int run_dsp_rx(SharedData &data)
 {
+    pin_to_core();
+
+    logs::dsp.info("[{}] Starting", fmt::format(fmt::fg(fmt::color::cyan), "RX"));
     auto &dsp = data.dsp;
     dsp.sample_rate = data.sdr.get_sample_rate();
     auto buff_size = data.sdr.get_buffer_size();
