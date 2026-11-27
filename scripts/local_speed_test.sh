@@ -9,6 +9,7 @@ SOIP_BIN="$BUILD_DIR/soip"
 DURATION="${TEST_DURATION:-5}"
 TARGET_BITRATE="${TEST_BITRATE:-12M}"
 MODULATION="${MODULATION:-QAM64}"
+ARGS=""
 MIN_SPEED_MBPS="${MIN_SPEED_MBPS:-9.5}"
 MAX_PACKET_LOSS="${MAX_PACKET_LOSS:-45.0}"
 MAX_PHYSICAL_MBPS="${MAX_PHYSICAL_MBPS:-12.0}"
@@ -74,11 +75,11 @@ for ns in ns0 ns1; do
 done
 
 echo_msg "=== 2. Запуск Node A (ns0) и Node B (ns1) с модуляцией ${MODULATION} ==="
-$SUDO setsid ip netns exec ns0 stdbuf -o0 -e0 "$SOIP_BIN" -n A -m "$MODULATION" < /dev/null > "$LOG_A" 2>&1 &
+$SUDO setsid ip netns exec ns0 stdbuf -o0 -e0 "$SOIP_BIN" -n A -m "$MODULATION" "$ARGS"< /dev/null > "$LOG_A" 2>&1 &
 PID_A=$!
 sleep 3
 
-$SUDO setsid ip netns exec ns1 stdbuf -o0 -e0 "$SOIP_BIN" -n B -m "$MODULATION" < /dev/null > "$LOG_B" 2>&1 &
+$SUDO setsid ip netns exec ns1 stdbuf -o0 -e0 "$SOIP_BIN" -n B -m "$MODULATION" "$ARGS"< /dev/null > "$LOG_B" 2>&1 &
 PID_B=$!
 
 echo_msg "Узлы запущены (PID A: $PID_A, PID B: $PID_B). Ожидание синхронизации линка..."
@@ -97,7 +98,7 @@ for i in $(seq 1 30); do
         exit 1
     fi
 
-    if $SUDO ip netns exec ns1 ping -c 1 -W 1 10.0.0.1 >/dev/null 2>&1; then
+    if $SUDO ip netns exec ns1 ping -f -c 10 -W 0.05 10.0.0.1 >/dev/null 2>&1; then
         LINK_READY=1
         echo_msg "Линк синхронизирован (${i} сек)."
         break
