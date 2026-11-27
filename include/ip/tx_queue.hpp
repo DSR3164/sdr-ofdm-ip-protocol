@@ -2,9 +2,9 @@
 
 #include "ip/scheduled_frame.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
-#include <condition_variable>
 #include <deque>
 #include <mutex>
 #include <vector>
@@ -26,10 +26,18 @@ class TxQueue {
         const auto now = std::chrono::steady_clock::now();
         {
             std::scoped_lock lock(m_mtx);
+            if (m_stopped)
+                return false;
+
             if (!priority && m_q.size() + frames.size() > m_max_pending)
             {
                 m_dropped.fetch_add(frames.size(), std::memory_order_relaxed);
                 return false;
+            }
+            if (m_q.empty())
+            {
+                m_flush_deadline = now + m_timeout;
+                m_timer_active = true;
             }
             if (priority)
             {
@@ -48,7 +56,7 @@ class TxQueue {
                 }
             }
         }
-        m_cv.notify_one();
+
         return true;
     }
 
@@ -62,16 +70,17 @@ class TxQueue {
     size_t pop_batch(std::vector<ScheduledFrame> &out)
     {
         out.clear();
-        std::unique_lock lock(m_mtx);
+        std::scoped_lock lock(m_mtx);
 
-        m_cv.wait(lock, [&]
-                  { return m_stopped || !m_q.empty(); });
         if (m_q.empty())
             return 0;
+        const auto now = std::chrono::steady_clock::now();
 
-        const auto deadline = m_q.front().enqueued + m_timeout;
-        m_cv.wait_until(lock, deadline, [&]
-                        { return m_stopped || m_q.size() >= m_max_batch; });
+        const bool batch_full = m_q.size() >= m_max_batch;
+        const bool timeout = m_timer_active && now >= m_flush_deadline;
+
+        if (!batch_full && !timeout)
+            return 0;
 
         const size_t n = std::min(m_q.size(), m_max_batch);
         out.reserve(n);
@@ -80,6 +89,9 @@ class TxQueue {
             out.push_back(std::move(m_q.front()));
             m_q.pop_front();
         }
+        if (m_q.empty())
+            m_timer_active = false;
+
         return out.size();
     }
 
@@ -89,7 +101,6 @@ class TxQueue {
             std::scoped_lock lock(m_mtx);
             m_stopped = true;
         }
-        m_cv.notify_all();
     }
 
     size_t size() const
@@ -100,7 +111,6 @@ class TxQueue {
     size_t dropped() const { return m_dropped.load(std::memory_order_relaxed); }
   private:
     mutable std::mutex m_mtx;
-    std::condition_variable m_cv;
     std::deque<ScheduledFrame> m_q;
     bool m_stopped = false;
 
@@ -108,4 +118,7 @@ class TxQueue {
     const std::chrono::microseconds m_timeout;
     const size_t m_max_pending;
     std::atomic<size_t> m_dropped{ 0 };
+
+    std::chrono::steady_clock::time_point m_flush_deadline{};
+    bool m_timer_active = false;
 };
