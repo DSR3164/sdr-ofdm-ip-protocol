@@ -79,20 +79,22 @@ bool SDR::init()
         return false;
     }
 
-    uhd::tune_request_t rx_tune(cfg.rx_freq, 4.0e6);
-    uhd::tune_request_t tx_tune(cfg.tx_freq, 4.0e6);
+    double bandwidth = 2.0 * (std::abs(cfg.lo_offset) + (cfg.sample_rate / 2.0)) * 1.15;
+
+    uhd::tune_request_t rx_tune(cfg.rx_freq, cfg.lo_offset);
+    uhd::tune_request_t tx_tune(cfg.tx_freq, cfg.lo_offset);
 
     // RX
     usrp->set_rx_rate(cfg.sample_rate, 0);
     usrp->set_rx_freq(rx_tune, 0);
     usrp->set_rx_gain(cfg.rx_gain, 0);
-    usrp->set_rx_bandwidth(16.0e6f, 0);
+    usrp->set_rx_bandwidth(bandwidth, 0);
 
     // TX
     usrp->set_tx_rate(cfg.sample_rate, 0);
     usrp->set_tx_freq(tx_tune, 0);
     usrp->set_tx_gain(cfg.tx_gain, 0);
-    usrp->set_tx_bandwidth(16.0e6f, 0);
+    usrp->set_tx_bandwidth(bandwidth, 0);
 
     if (cfg.enable_rx)
     {
