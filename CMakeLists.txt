@@ -198,6 +198,7 @@ add_library(soip_core STATIC
   ${PROJECT_SOURCE_DIR}/src/phy/sdr.cpp
   ${PROJECT_SOURCE_DIR}/src/phy/dsp_common.cpp
   ${PROJECT_SOURCE_DIR}/src/phy/resource_grid.cpp
+  ${PROJECT_SOURCE_DIR}/src/phy/scheduler.cpp
 
   ${PROJECT_SOURCE_DIR}/src/phy/dsp_rx/sync.cpp
   ${PROJECT_SOURCE_DIR}/src/phy/dsp_rx/dsp_rx.cpp
