@@ -15,74 +15,149 @@
 #include <cstddef>
 #include <cstdint>
 #include <linux/if.h>
+#include <mutex>
 #include <netinet/in.h>
+#include <optional>
 #include <poll.h>
 #include <queue>
 #include <random>
 #include <string>
 #include <sys/poll.h>
 #include <thread>
+#include <utility>
 
-static std::mutex g_state_mtx;
-static std::queue<std::vector<uint8_t>> g_ctrl_tx_queue;
-
-void enqueue_ctrl_frame(std::vector<uint8_t> frame)
+namespace
 {
-    std::scoped_lock lock(g_state_mtx);
-    g_ctrl_tx_queue.push(std::move(frame));
-}
+    struct LinkSessionState {
+      private:
+        std::mutex m_state_mtx;
+        std::queue<std::vector<uint8_t>> m_ctrl_tx_queue;
+        std::unordered_map<uint16_t, ClientSession> m_clients_by_rnti;
+        std::unordered_map<uint32_t, uint16_t> m_rnti_by_ip;
+        uint16_t m_next_rnti = MIN_UE_RNTI;
 
-static std::unordered_map<uint16_t, ClientSession> g_clients_by_rnti;
-static std::unordered_map<uint32_t, uint16_t> g_rnti_by_ip;
+        uint16_t allocate_rnti_locked()
+        {
+            for (uint32_t i = MIN_UE_RNTI; i <= MAX_UE_RNTI; ++i)
+            {
+                const uint16_t candidate = m_next_rnti;
 
-static uint16_t g_next_rnti = MIN_UE_RNTI;
+                m_next_rnti = (candidate == MAX_UE_RNTI)
+                                  ? MIN_UE_RNTI
+                                  : candidate + 1;
 
-static std::atomic<uint16_t> g_ue_rnti{ UNASSIGNED_RNTI };
-static uint32_t g_ue_token = 0;
+                if (!m_clients_by_rnti.contains(candidate))
+                    return candidate;
+            }
 
-static std::atomic<bool> g_ue_registered{ false };
+            return UNASSIGNED_RNTI;
+        }
 
-static uint16_t allocate_rnti_locked()
-{
-    for (uint32_t i = MIN_UE_RNTI; i <= MAX_UE_RNTI; ++i)
-    {
-        const uint16_t candidate = g_next_rnti;
+        uint32_t allocate_ip_locked()
+        {
+            for (uint16_t host = MIN_UE_IP; host <= MAX_UE_IP; ++host)
+            {
+                uint32_t candidate = htonl(IP_NETWORK | host);
 
-        g_next_rnti = (candidate == MAX_UE_RNTI)
-                          ? MIN_UE_RNTI
-                          : candidate + 1;
+                if (!m_rnti_by_ip.contains(candidate))
+                    return candidate;
+            }
 
-        if (!g_clients_by_rnti.contains(candidate))
-            return candidate;
-    }
+            return 0;
+        }
+      public:
+        std::atomic<uint16_t> m_ue_rnti{ UNASSIGNED_RNTI };
+        uint32_t m_ue_token = 0;
+        std::atomic<bool> m_ue_registered{ false };
+        void enqueue_ctrl_frame(std::vector<uint8_t> frame)
+        {
+            std::scoped_lock lock(m_state_mtx);
+            m_ctrl_tx_queue.push(std::move(frame));
+        }
 
-    return UNASSIGNED_RNTI;
-}
+        std::vector<uint8_t> pop_ctrl_frame()
+        {
+            std::vector<uint8_t> ctrl_frame;
+            {
+                std::scoped_lock lock(m_state_mtx);
+                if (!m_ctrl_tx_queue.empty())
+                {
+                    ctrl_frame = std::move(m_ctrl_tx_queue.front());
+                    m_ctrl_tx_queue.pop();
+                }
+            }
 
-static uint32_t allocate_ip_locked()
-{
-    for (uint16_t host = MIN_UE_IP; host <= MAX_UE_IP; ++host)
-    {
-        uint32_t candidate = htonl(IP_NETWORK | host);
+            return ctrl_frame;
+        }
 
-        if (!g_rnti_by_ip.contains(candidate))
-            return candidate;
-    }
+        uint16_t resolve_dest_rnti(uint32_t dest_ip)
+        {
+            std::scoped_lock lock(m_state_mtx);
+            if (m_rnti_by_ip.contains(dest_ip))
+                return m_rnti_by_ip[dest_ip];
+            else
+                return BROADCAST_RNTI;
+        }
 
-    return 0;
-}
+        std::optional<std::pair<uint16_t, uint32_t>> register_or_refresh_client(uint32_t user_token)
+        {
+            std::scoped_lock lock(m_state_mtx);
+            for (auto &[cid, sess] : m_clients_by_rnti)
+            {
+                if (sess.user_token == user_token)
+                {
+                    sess.last_seen = std::chrono::steady_clock::now();
+                    return std::make_pair(sess.rnti, sess.ip);
+                }
+            }
+
+            auto assigned_rnti = allocate_rnti_locked();
+
+            if (assigned_rnti == UNASSIGNED_RNTI)
+            {
+                logs::tun.warn("[BS] No free RNTI available");
+                return std::nullopt;
+            }
+
+            auto assigned_ip = allocate_ip_locked();
+            if (assigned_ip == 0)
+            {
+                logs::tun.warn("[BS] No free IP addresses available");
+                return std::nullopt;
+            }
+
+            m_clients_by_rnti[assigned_rnti] = {
+                assigned_rnti,
+                user_token,
+                assigned_ip,
+                std::chrono::steady_clock::now()
+            };
+
+            m_rnti_by_ip[assigned_ip] = assigned_rnti;
+
+            return std::make_pair(assigned_rnti, assigned_ip);
+        }
+
+        std::vector<ClientInfo> clients_snapshot()
+        {
+            std::scoped_lock lock(m_state_mtx);
+
+            std::vector<ClientInfo> clients;
+            clients.reserve(m_clients_by_rnti.size());
+
+            for (const auto &[rnti, session] : m_clients_by_rnti)
+                clients.push_back({ session.rnti, session.user_token, session.ip });
+
+            return clients;
+        }
+    };
+
+    LinkSessionState g_state;
+} // namespace
 
 std::vector<ClientInfo> get_clients_snapshot()
 {
-    std::scoped_lock lock(g_state_mtx);
-
-    std::vector<ClientInfo> clients;
-    clients.reserve(g_clients_by_rnti.size());
-
-    for (const auto &[rnti, session] : g_clients_by_rnti)
-        clients.push_back({ session.rnti, session.user_token, session.ip });
-
-    return clients;
+    return g_state.clients_snapshot();
 }
 
 void run_tun_tx(SharedData &data)
@@ -109,15 +184,15 @@ void run_tun_tx(SharedData &data)
     else
     {
         std::random_device rd;
-        g_ue_token = static_cast<uint32_t>(rd());
-        logs::tun.info("[UE] Waiting for registration with BS. Token: 0x{:08X}", g_ue_token);
+        g_state.m_ue_token = static_cast<uint32_t>(rd());
+        logs::tun.info("[UE] Waiting for registration with BS. Token: 0x{:08X}", g_state.m_ue_token);
     }
 
     const auto mtu = calculate_mtu(data);
     logs::tun.info("MTU: {}", mtu);
 
     if (mtu > 0)
-        data.tun->set_mtu(static_cast<int>(mtu));
+        data.tun->set_mtu(static_cast<int>(mtu - 2));
 
     const size_t max_frame_bytes = sizeof(FrameHeader) + mtu;
     uint8_t buffer[mtu];
@@ -128,15 +203,15 @@ void run_tun_tx(SharedData &data)
     auto tun = data.tun;
     while (!data.stop.load())
     {
-        if (!is_bs && !g_ue_registered.load())
+        if (!is_bs && !g_state.m_ue_registered.load())
         {
             auto now = std::chrono::steady_clock::now();
             if (now - last_join_send > std::chrono::milliseconds(3000))
             {
                 last_join_send = now;
-                logs::tun.debug("[UE] Sending JOIN request (token 0x{:08X})...", g_ue_token);
+                logs::tun.debug("[UE] Sending JOIN request (token 0x{:08X})...", g_state.m_ue_token);
 
-                JoinPayload payload{ g_ue_token, 0 };
+                JoinPayload payload{ g_state.m_ue_token, 0 };
                 std::vector<uint8_t> p_bytes(
                     reinterpret_cast<uint8_t *>(&payload),
                     reinterpret_cast<uint8_t *>(&payload) + sizeof(JoinPayload)
@@ -165,23 +240,13 @@ void run_tun_tx(SharedData &data)
             continue;
         }
 
+        auto ctrl_frame = g_state.pop_ctrl_frame();
+        if (!ctrl_frame.empty())
         {
-            std::vector<uint8_t> ctrl_frame;
-            {
-                std::scoped_lock lock(g_state_mtx);
-                if (!g_ctrl_tx_queue.empty())
-                {
-                    ctrl_frame = std::move(g_ctrl_tx_queue.front());
-                    g_ctrl_tx_queue.pop();
-                }
-            }
-            if (!ctrl_frame.empty())
-            {
-                auto bits = encode_phy_frame(data, ctrl_frame, max_frame_bytes);
-                data.tx_queue.push({ UNASSIGNED_RNTI, std::move(bits) }, true);
+            auto bits = encode_phy_frame(data, ctrl_frame, max_frame_bytes);
+            data.tx_queue.push({ UNASSIGNED_RNTI, std::move(bits) }, true);
 
-                continue;
-            }
+            continue;
         }
 
         struct pollfd pfd = { tun->get_fd(), POLLIN, 0 };
@@ -216,11 +281,7 @@ void run_tun_tx(SharedData &data)
                 if (is_bs && nbytes >= 20)
                 {
                     uint32_t dest_ip = *reinterpret_cast<uint32_t *>(buffer + 16);
-                    std::scoped_lock lock(g_state_mtx);
-                    if (g_rnti_by_ip.contains(dest_ip))
-                        target_dest_rnti = g_rnti_by_ip[dest_ip];
-                    else
-                        target_dest_rnti = BROADCAST_RNTI;
+                    target_dest_rnti = g_state.resolve_dest_rnti(dest_ip);
                 }
 
                 auto crc = calculateCRC16(payload);
@@ -228,7 +289,7 @@ void run_tun_tx(SharedData &data)
 
                 size_t total_len = payload.size();
                 size_t offset = 0;
-                uint16_t my_rnti = is_bs ? BS_RNTI : g_ue_rnti.load();
+                uint16_t my_rnti = is_bs ? BS_RNTI : g_state.m_ue_rnti.load();
 
                 std::vector<ScheduledFrame> pkt_frames;
                 while (offset < total_len)
@@ -346,49 +407,11 @@ void run_tun_rx(SharedData &data)
             JoinPayload join_req;
             memcpy(&join_req, p_bytes.data(), sizeof(JoinPayload));
 
-            uint16_t assigned_rnti = UNASSIGNED_RNTI;
-            uint32_t assigned_ip = 0;
+            auto reg = g_state.register_or_refresh_client(join_req.user_token);
+            if (!reg)
+                continue;
 
-            {
-                std::scoped_lock lock(g_state_mtx);
-                for (auto &[cid, sess] : g_clients_by_rnti)
-                {
-                    if (sess.user_token == join_req.user_token)
-                    {
-                        assigned_rnti = sess.rnti;
-                        assigned_ip = sess.ip;
-                        sess.last_seen = std::chrono::steady_clock::now();
-                        break;
-                    }
-                }
-
-                if (assigned_rnti == UNASSIGNED_RNTI)
-                {
-                    assigned_rnti = allocate_rnti_locked();
-
-                    if (assigned_rnti == UNASSIGNED_RNTI)
-                    {
-                        logs::tun.warn("[BS] No free RNTI available");
-                        continue;
-                    }
-
-                    assigned_ip = allocate_ip_locked();
-                    if (assigned_ip == 0)
-                    {
-                        logs::tun.warn("[BS] No free IP addresses available");
-                        continue;
-                    }
-
-                    g_clients_by_rnti[assigned_rnti] = {
-                        assigned_rnti,
-                        join_req.user_token,
-                        assigned_ip,
-                        std::chrono::steady_clock::now()
-                    };
-
-                    g_rnti_by_ip[assigned_ip] = assigned_rnti;
-                }
-            }
+            auto [assigned_rnti, assigned_ip] = *reg;
 
             logs::tun.info(
                 "[BS] Valid JOIN! Token: 0x{:08X} -> RNTI={}, IP=10.0.0.{}",
@@ -422,7 +445,7 @@ void run_tun_rx(SharedData &data)
             memcpy(ack_frame.data(), &ack_hdr, sizeof(FrameHeader));
             memcpy(ack_frame.data() + sizeof(FrameHeader), ack_bytes.data(), ack_bytes.size());
 
-            enqueue_ctrl_frame(std::move(ack_frame));
+            g_state.enqueue_ctrl_frame(std::move(ack_frame));
             continue;
         }
 
@@ -444,9 +467,9 @@ void run_tun_rx(SharedData &data)
             JoinAckPayload ack;
             memcpy(&ack, ack_bytes.data(), sizeof(JoinAckPayload));
 
-            if (ack.user_token == g_ue_token && !g_ue_registered.load())
+            if (ack.user_token == g_state.m_ue_token && !g_state.m_ue_registered.load())
             {
-                g_ue_rnti = ntohs(ack.assigned_rnti);
+                g_state.m_ue_rnti = ntohs(ack.assigned_rnti);
 
                 in_addr ip_addr_struct{ ack.assigned_ip };
                 in_addr mask_addr_struct{ ack.netmask };
@@ -455,20 +478,20 @@ void run_tun_rx(SharedData &data)
 
                 logs::tun.info(
                     "[UE] Successfully registered! RNTI: {}, IP: {}/{}",
-                    g_ue_rnti.load(), ip_str, mask_str
+                    g_state.m_ue_rnti.load(), ip_str, mask_str
                 );
 
                 tun->set_ip_and_up(ip_str, mask_str);
                 enable_client(tun_name);
 
-                g_ue_registered.store(true);
+                g_state.m_ue_registered.store(true);
             }
             continue;
         }
 
         if (type == FrameType::DATA)
         {
-            uint16_t my_rnti = is_bs ? BS_RNTI : g_ue_rnti.load();
+            uint16_t my_rnti = is_bs ? BS_RNTI : g_state.m_ue_rnti.load();
 
             if (dest_rnti != my_rnti && dest_rnti != BROADCAST_RNTI)
                 continue;
