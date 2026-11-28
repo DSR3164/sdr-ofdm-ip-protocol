@@ -77,52 +77,36 @@ class IPC {
         hdr.size = static_cast<uint32_t>(data.size() * sizeof(T));
         hdr.timestamp_ns = now_ns();
 
-        try
-        {
-            _socket.send(zmq::buffer(&hdr, sizeof(hdr)), zmq::send_flags::sndmore);
-            auto send_state = _socket.send(zmq::buffer(data.data(), hdr.size), zmq::send_flags::none);
+        _socket.send(zmq::buffer(&hdr, sizeof(hdr)), zmq::send_flags::sndmore);
+        auto send_state = _socket.send(zmq::buffer(data.data(), hdr.size), zmq::send_flags::none);
 
-            return send_state.has_value();
-        }
-        catch (const zmq::error_t &e)
-        {
-            logs::socket.error("ZMQ Error: {} (Code: {})", e.what(), e.num());
-            return false;
-        }
+        return send_state.has_value();
     }
 
     template <typename T>
     bool recv_frame(ipc_header &header, std::vector<T> &data)
     {
-        try
-        {
-            zmq::message_t msg_h;
+        zmq::message_t msg_h;
 
-            auto res_h = _socket.recv(msg_h, zmq::recv_flags::none);
-            if (!res_h.has_value() || msg_h.size() != sizeof(ipc_header))
-                return false;
-
-            std::memcpy(&header, msg_h.data(), sizeof(ipc_header));
-
-            if (msg_h.more())
-            {
-                zmq::message_t msg_p;
-                auto res_p = _socket.recv(msg_p, zmq::recv_flags::none);
-
-                if (res_p)
-                {
-                    size_t n_elements = header.size / sizeof(T);
-                    data.resize(n_elements);
-                    std::memcpy(data.data(), msg_p.data(), header.size);
-                }
-            }
-            return true;
-        }
-        catch (const zmq::error_t &e)
-        {
-            logs::socket.error("ZMQ Error: {} (Code: {})", e.what(), e.num());
+        auto res_h = _socket.recv(msg_h, zmq::recv_flags::none);
+        if (!res_h.has_value() || msg_h.size() != sizeof(ipc_header))
             return false;
+
+        std::memcpy(&header, msg_h.data(), sizeof(ipc_header));
+
+        if (msg_h.more())
+        {
+            zmq::message_t msg_p;
+            auto res_p = _socket.recv(msg_p, zmq::recv_flags::none);
+
+            if (res_p)
+            {
+                size_t n_elements = header.size / sizeof(T);
+                data.resize(n_elements);
+                std::memcpy(data.data(), msg_p.data(), header.size);
+            }
         }
+        return true;
     }
 
     zmq::socket_t &socket() { return _socket; }

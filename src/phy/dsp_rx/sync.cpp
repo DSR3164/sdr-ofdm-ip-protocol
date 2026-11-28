@@ -12,7 +12,8 @@ size_t correlation_fft_length(size_t signal_length, size_t reference_length)
     while (result < required)
     {
         if (result > static_cast<size_t>(std::numeric_limits<int>::max()) / 2)
-            throw std::invalid_argument("Correlation FFT is too large");
+            logs::dsp.warn("Correlation FFT is too large");
+
         result *= 2;
     }
     return result;
@@ -33,7 +34,7 @@ ZCCorrFFT::ZCCorrFFT(size_t signal_length, const std::vector<std::complex<float>
         reference_energy_ += std::norm(std::complex<float>(reference[i]));
     }
     if (reference_energy_ <= 0.0)
-        throw std::invalid_argument("Zero-energy synchronization reference");
+        logs::dsp.warn("Zero-energy synchronization reference");
     fftwf_execute(forward_.plan);
     for (size_t i = 0; i < forward_.size; ++i)
         reference_spectrum_[i] = { forward_.out[i][0], -forward_.out[i][1] };
@@ -44,7 +45,7 @@ int ZCCorrFFT::find_peak(std::span<const std::complex<float>> signal, float thre
     if (signal.size() <= reference_length_)
         return -1;
     if (signal.size() > max_signal_length_)
-        throw std::invalid_argument("Correlation input exceeds the planned size");
+        logs::dsp.warn("Correlation input exceeds the planned size");
 
     forward_.clear();
     for (size_t i = 0; i < signal.size(); ++i)

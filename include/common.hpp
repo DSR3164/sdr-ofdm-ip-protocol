@@ -9,6 +9,9 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <fcntl.h>
+#include <pthread.h>
+#include <sched.h>
 #include <string>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -23,6 +26,8 @@ enum class Modulation
     QAM16,
     QAM64,
 };
+
+using M = Modulation;
 
 inline const std::string mod_to_string(Modulation mod)
 {
@@ -39,6 +44,81 @@ inline const std::string mod_to_string(Modulation mod)
     default:
         return "ERROR";
     }
+}
+
+inline int pin_to_core(int core_id = -1)
+{
+    static const long num_cores = []()
+    {
+        long n = sysconf(_SC_NPROCESSORS_ONLN);
+        return (n > 0) ? n : 1;
+    }();
+
+    static std::mutex mtx;
+    static std::vector<bool> local_used(num_cores, false);
+    static int lock_fd = open("/tmp/soip_cores.lock", O_RDWR | O_CREAT | O_CLOEXEC, 0666);
+
+    if (core_id >= num_cores || core_id >= CPU_SETSIZE)
+    {
+        logs::main.critical("Invalid core_id {} (max {})", core_id, num_cores - 1);
+        return -1;
+    }
+
+    if (core_id < 0)
+    {
+        std::lock_guard<std::mutex> lock(mtx);
+
+        auto try_acquire = [&](long idx) -> bool
+        {
+            if (local_used[idx])
+                return false;
+            if (lock_fd >= 0)
+            {
+                struct flock fl{};
+                fl.l_type = F_WRLCK;
+                fl.l_whence = SEEK_SET;
+                fl.l_start = idx;
+                fl.l_len = 1;
+                if (fcntl(lock_fd, F_SETLK, &fl) != 0)
+                {
+                    return false;
+                }
+            }
+            local_used[idx] = true;
+            return true;
+        };
+
+        // Сначала чётные, затем нечётные
+        for (int pass = 0; pass < 2 && core_id < 0; ++pass)
+        {
+            for (long i = pass; i < num_cores; i += 2)
+            {
+                if (try_acquire(i))
+                {
+                    core_id = static_cast<int>(i);
+                    break;
+                }
+            }
+        }
+
+        if (core_id < 0)
+        {
+            core_id = static_cast<int>(getpid() % num_cores);
+        }
+    }
+
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(core_id, &cpuset);
+
+    if (pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset) != 0)
+    {
+        logs::main.critical("Pin to core {} error", core_id);
+        return -1;
+    }
+
+    logs::main.info("Pin to core {}", core_id);
+    return core_id;
 }
 
 struct DSP {

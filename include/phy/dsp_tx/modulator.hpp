@@ -53,7 +53,7 @@ inline void modulate(Modulation mod, const std::vector<uint8_t> &bits, std::vect
 {
     const size_t bps = get_bits_per_symbol(mod);
     if (bps == 0 || bits.size() % bps != 0)
-        throw std::invalid_argument("Invalid modulation input");
+        logs::dsp.error("Invalid modulation input");
     symbols.resize(bits.size() / bps);
     switch (mod)
     {

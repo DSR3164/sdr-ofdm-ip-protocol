@@ -4,12 +4,55 @@
 #include <cstdint>
 #include <stdexcept>
 #include <uhd/types/device_addr.hpp>
+#include <uhd/utils/log.hpp>
+#include <uhd/utils/log_add.hpp>
 
 SDR::SDR(const SDRConfig &config, std::atomic<bool> &stop_condition)
     : cond(stop_condition),
       cfg(config)
 {
     scan();
+    uhd::log::set_console_level(uhd::log::off);
+
+    uhd::log::add_logger("spdlog_bridge", [](const auto &info)
+                         {
+        std::string msg = info.component.empty()
+            ? info.message
+            : fmt::format("[{}] {}", info.component, info.message);
+
+        const std::string prefix = "[B200] ";
+        if (msg.rfind(prefix, 0) == 0) {
+            msg.erase(0, prefix.length());
+        }
+            
+        if (!msg.empty() && msg.back() == '\n') {
+            msg.pop_back();
+        }
+
+        if (info.verbosity == uhd::log::info) {
+            if (msg.find("Asking for clock rate") != std::string::npos ||
+                msg.find("Detect") != std::string::npos ||
+                msg.find("Actually got clock rate") != std::string::npos ||
+                msg.find("Operating over") != std::string::npos ||
+                msg.find("Setting master clock rate") != std::string::npos) {
+            }
+            else
+                return;
+        }
+
+        if (!msg.empty() && msg.back() == '\n') {
+            msg.pop_back();
+        }
+
+        switch (info.verbosity) {
+            case uhd::log::trace:   logs::sdr.trace(msg); break;
+            case uhd::log::debug:   logs::sdr.debug(msg); break;
+            case uhd::log::info:    logs::sdr.info(msg); break;
+            case uhd::log::warning: logs::sdr.warn(msg); break;
+            case uhd::log::error:   logs::sdr.error(msg); break;
+            case uhd::log::fatal:   logs::sdr.critical(msg); break;
+            default: break;
+        } });
 }
 
 /*!
@@ -36,17 +79,22 @@ bool SDR::init()
         return false;
     }
 
+    double bandwidth = 2.0 * (std::abs(cfg.lo_offset) + (cfg.sample_rate / 2.0)) * 1.15;
+
+    uhd::tune_request_t rx_tune(cfg.rx_freq, cfg.lo_offset);
+    uhd::tune_request_t tx_tune(cfg.tx_freq, cfg.lo_offset);
+
     // RX
     usrp->set_rx_rate(cfg.sample_rate, 0);
-    usrp->set_rx_freq(cfg.rx_freq, 0);
+    usrp->set_rx_freq(rx_tune, 0);
     usrp->set_rx_gain(cfg.rx_gain, 0);
-    usrp->set_rx_bandwidth(cfg.rx_bandwidth, 0);
+    usrp->set_rx_bandwidth(bandwidth, 0);
 
     // TX
     usrp->set_tx_rate(cfg.sample_rate, 0);
-    usrp->set_tx_freq(cfg.tx_freq, 0);
+    usrp->set_tx_freq(tx_tune, 0);
     usrp->set_tx_gain(cfg.tx_gain, 0);
-    usrp->set_tx_bandwidth(cfg.tx_bandwidth, 0);
+    usrp->set_tx_bandwidth(bandwidth, 0);
 
     if (cfg.enable_rx)
     {
@@ -68,7 +116,7 @@ bool SDR::init()
         txStream = usrp->get_tx_stream(stream_args);
 
         logs::sdr.info(
-            "{} stream is active",
+            "[{}] stream is active",
             fmt::format(fg(fmt::color::cyan), "TX")
         );
     }
@@ -81,13 +129,13 @@ bool SDR::init()
 void SDR::start_rx()
 {
     if (!rxStream)
-        throw std::runtime_error("RX stream is not init");
+        logs::sdr.critical("RX Stream init error");
 
     uhd::stream_cmd_t stream_cmd(uhd::stream_cmd_t::STREAM_MODE_START_CONTINUOUS);
     stream_cmd.stream_now = true;
     rxStream->issue_stream_cmd(stream_cmd);
     logs::sdr.info(
-        "{} stream is active",
+        "[{}] stream is active",
         fmt::format(fg(fmt::color::cyan), "RX")
     );
 }
@@ -118,7 +166,7 @@ int SDR::readstream(std::vector<int16_t> &recv)
         return 0;
     }
     if (!rxStream || cfg.buffer_size <= 0)
-        throw std::runtime_error("Invalid RX stream or buffer size");
+        logs::sdr.error("Invalid RX stream or buffer size");
 
     const auto requested = static_cast<size_t>(cfg.buffer_size);
     recv.resize(requested * 2);
@@ -129,7 +177,7 @@ int SDR::readstream(std::vector<int16_t> &recv)
         uhd::rx_metadata_t md;
         const auto received = rxStream->recv(recv.data() + 2 * offset, requested - offset, md, 0.05, true);
         if (received > requested - offset)
-            throw std::runtime_error("UHD returned too many RX samples");
+            logs::sdr.error("UHD returned too many RX samples");
 
         if (md.error_code == uhd::rx_metadata_t::ERROR_CODE_NONE || md.error_code == uhd::rx_metadata_t::ERROR_CODE_TIMEOUT)
         {
@@ -142,7 +190,7 @@ int SDR::readstream(std::vector<int16_t> &recv)
         recv.clear();
         if (md.error_code == uhd::rx_metadata_t::ERROR_CODE_OVERFLOW)
             return -2;
-        throw std::runtime_error(md.strerror());
+        logs::sdr.error(md.strerror());
     }
 
     recv.resize(offset * 2);
@@ -161,14 +209,14 @@ int SDR::readstream(std::vector<int16_t> &recv)
 int SDR::writestream(std::vector<int16_t> &send)
 {
     if (!txStream)
-        throw std::runtime_error("TX stream is not initialized");
+        logs::sdr.critical("TX Stream init error");
     if (send.size() % 2 != 0 || send.size() / 2 > static_cast<size_t>(std::numeric_limits<int>::max()))
-        throw std::invalid_argument("Invalid TX I/Q buffer length");
+        logs::sdr.error("Invalid TX I/Q buffer length");
 
     const size_t total = send.size() / 2;
     const size_t packet_size = txStream->get_max_num_samps();
     if (packet_size == 0)
-        throw std::runtime_error("Invalid UHD TX packet size");
+        logs::sdr.error("Invalid UHD TX packet size");
 
     size_t offset = 0;
     auto last_progress = std::chrono::steady_clock::now();
@@ -181,11 +229,11 @@ int SDR::writestream(std::vector<int16_t> &send)
         const size_t requested = std::min(packet_size, total - offset);
         const size_t sent = txStream->send(send.data() + 2 * offset, requested, md, 0.05);
         if (sent > requested)
-            throw std::runtime_error("UHD returned too many TX samples");
+            logs::sdr.error("UHD returned too many TX samples");
         if (sent == 0)
         {
             if (std::chrono::steady_clock::now() - last_progress >= std::chrono::milliseconds(500))
-                throw std::runtime_error("TX has made no progress for 500 ms");
+                logs::sdr.warn("TX has made no progress for 500 ms");
             continue;
         }
         tx_burst_started_ = true;
