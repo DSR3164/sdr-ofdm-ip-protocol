@@ -24,8 +24,8 @@ enum class Modulation
     QPSK,
     QAM16,
     QAM64,
+    QAM256,
 };
-
 using M = Modulation;
 
 inline const std::string mod_to_string(Modulation mod)
@@ -40,6 +40,8 @@ inline const std::string mod_to_string(Modulation mod)
         return "QAM16";
     case Modulation::QAM64:
         return "QAM64";
+    case Modulation::QAM256:
+        return "QAM256";
     default:
         return "ERROR";
     }

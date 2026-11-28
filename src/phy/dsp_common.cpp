@@ -153,7 +153,7 @@ void descramble_llr(std::vector<float> &llr_values, uint8_t seed)
 std::vector<uint8_t> packFrameHeader(const DSPFrameHeader &header)
 {
     std::vector<uint8_t> bits(header_raw_bits, 0);
-    uint8_t mod_val = static_cast<uint8_t>(header.modulation);
+    uint8_t mod_val = static_cast<uint8_t>(header.modulation) - 1;
     bits[0] = (mod_val >> 1) & 1;
     bits[1] = mod_val & 1;
     for (int i = 0; i < 4; ++i)
@@ -166,7 +166,7 @@ std::vector<uint8_t> packFrameHeader(const DSPFrameHeader &header)
 bool unpackFrameHeader(const std::vector<uint8_t> &bits, const CarrierGrid &grid, DSPFrameHeader &header)
 {
     DSPFrameHeader candidate;
-    candidate.modulation = static_cast<Modulation>((bits[0] << 1) | bits[1]);
+    candidate.modulation = static_cast<Modulation>(((bits[0] << 1) | bits[1]) + 1);
     for (size_t i = 0; i < 4; ++i)
         candidate.ofdm_symbols_count |= static_cast<uint8_t>(bits[2 + i] << (3 - i));
     for (size_t i = 0; i < 16; ++i)

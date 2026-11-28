@@ -26,8 +26,8 @@ struct PunctConfig {
 // Returns the puncturing config for the given rate.
 PunctConfig make_punct_config(CodeRate rate);
 
-std::vector<uint8_t> interleaving_(const std::vector<uint8_t> &input);
-std::vector<float> deinterleaving_float(const std::vector<float> &input);
+std::vector<uint8_t> interleaving_(const std::vector<uint8_t> &input, size_t c = 8);
+std::vector<float> deinterleaving_float(const std::vector<float> &input, size_t c = 8);
 std::vector<uint8_t> conv_encoder(const std::vector<uint8_t> &bytes);
 std::vector<uint8_t> viterbi_decoder_llr(const std::vector<float> &llr);
 

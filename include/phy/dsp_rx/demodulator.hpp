@@ -82,6 +82,33 @@ inline void demodulate(Modulation mod, const std::vector<std::complex<float>> &s
         }
         break;
     }
+    case Modulation::QAM256: {
+        llr.resize(symbols.size() * 8);
+
+        const float scale = std::sqrt(170.0f);
+
+        for (size_t i = 0; i < symbols.size(); ++i)
+        {
+            const auto sr = symbols[i].real() * scale;
+            const auto si = symbols[i].imag() * scale;
+            const auto l1r = std::abs(sr);
+            const auto l1i = std::abs(si);
+            const size_t shift = i * 8;
+
+            llr[shift + 0] = sr;
+            llr[shift + 1] = si;
+
+            llr[shift + 2] = 8.0f - l1r;
+            llr[shift + 3] = 8.0f - l1i;
+
+            llr[shift + 4] = 4.0f - std::abs(llr[shift + 2]);
+            llr[shift + 5] = 4.0f - std::abs(llr[shift + 3]);
+
+            llr[shift + 6] = 2.0f - std::abs(llr[shift + 4]);
+            llr[shift + 7] = 2.0f - std::abs(llr[shift + 5]);
+        }
+        break;
+    }
     default:
         logs::dsp.warn("Неподдерживаемый тип демодуляции");
     }

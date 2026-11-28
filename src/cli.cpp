@@ -15,6 +15,8 @@ static Modulation stringToModulation(const std::string &str)
         return Modulation::QAM16;
     if (str == "QAM64")
         return Modulation::QAM64;
+    if (str == "QAM256")
+        return Modulation::QAM256;
     logs::dsp.error("Unknown modulation: " + str);
     return Modulation::BPSK;
 }

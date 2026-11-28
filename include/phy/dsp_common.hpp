@@ -36,6 +36,8 @@ constexpr size_t max_payload_bits = std::numeric_limits<uint16_t>::max();
         return 4;
     case Modulation::QAM64:
         return 6;
+    case Modulation::QAM256:
+        return 8;
     }
     return 0;
 }
@@ -52,6 +54,8 @@ constexpr size_t max_payload_bits = std::numeric_limits<uint16_t>::max();
         return std::complex(0.948683260f, 0.948683260f) / std::sqrt(2.0f);
     case Modulation::QAM64:
         return std::complex(1.080123500f, 1.080123500f) / std::sqrt(2.0f);
+    case Modulation::QAM256:
+        return std::complex(1.150447483f, 1.150447483f) / std::sqrt(2.0f);
     }
     return 1.0f;
 }

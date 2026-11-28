@@ -1,5 +1,6 @@
 #include "common.hpp"
 #include "sockets.hpp"
+#include "phy/dsp_common.hpp"
 #include "ip/crc.hpp"
 #include "ip/fec_codec.hpp"
 #include "ip/ip_layer.hpp"
@@ -83,6 +84,8 @@ void run_tun_tx(SharedData &data)
     auto tun = data.tun;
     while (!data.stop.load())
     {
+        const size_t current_bps = get_bits_per_symbol(data.dsp.ofdm_cfg.mod);
+
         if (!is_bs && !g_ue_registered.load())
         {
             auto now = std::chrono::steady_clock::now();
@@ -112,7 +115,7 @@ void run_tun_tx(SharedData &data)
                 memcpy(frame.data(), &join_hdr, sizeof(FrameHeader));
                 memcpy(frame.data() + sizeof(FrameHeader), p_bytes.data(), p_bytes.size());
 
-                send_phy_frame(data, frame, max_frame_bytes);
+                send_phy_frame(data, frame, max_frame_bytes, current_bps);
             }
 
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -131,7 +134,7 @@ void run_tun_tx(SharedData &data)
             }
             if (!ctrl_frame.empty())
             {
-                send_phy_frame(data, ctrl_frame, max_frame_bytes);
+                send_phy_frame(data, ctrl_frame, max_frame_bytes, current_bps);
                 continue;
             }
         }
@@ -205,7 +208,7 @@ void run_tun_tx(SharedData &data)
                     frame.insert(frame.end(), hdr_ptr, hdr_ptr + sizeof(FrameHeader));
                     frame.insert(frame.end(), payload.begin() + offset, payload.begin() + offset + chunk_size);
 
-                    send_phy_frame(data, frame, max_frame_bytes);
+                    send_phy_frame(data, frame, max_frame_bytes, current_bps);
                     offset += chunk_size;
                 }
             }
@@ -244,8 +247,9 @@ void run_tun_rx(SharedData &data)
         llr.resize(EXPECTED_LLR_SIZE);
 
         auto t_start = std::chrono::steady_clock::now();
+        const size_t current_bps = get_bits_per_symbol(data.dsp.ofdm_cfg.mod);
+        llr = deinterleaving_float(llr, current_bps);
         llr = depuncture(llr, data.punct_cfg);
-        llr = deinterleaving_float(llr);
         frame = viterbi_decoder_llr(llr);
         auto t_end = std::chrono::steady_clock::now();
 
@@ -268,7 +272,7 @@ void run_tun_rx(SharedData &data)
         uint16_t dest_id = ntohs(hdr.dest_id);
         uint16_t payload_len = ntohs(hdr.length);
 
-        logs::tun.debug("[TUN] Type: {}", hdr.type);
+        logs::tun.trace("[TUN] Type: {}", hdr.type);
 
         if (frame.size() < sizeof(FrameHeader) + payload_len)
             continue;

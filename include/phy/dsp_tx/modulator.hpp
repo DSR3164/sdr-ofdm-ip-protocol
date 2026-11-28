@@ -49,6 +49,16 @@ inline void qam64_mapper_3gpp(const std::vector<uint8_t> &bits, std::vector<std:
                      / std::sqrt(42.0f);
 }
 
+inline void qam256_mapper_3gpp(const std::vector<uint8_t> &bits, std::vector<std::complex<float>> &symbols)
+{
+    for (size_t i = 0; i < symbols.size(); ++i)
+        symbols[i] = std::complex<float>(
+                         (1 - 2 * bits[8 * i + 0]) * (8 - (1 - 2 * bits[8 * i + 2]) * (4 - (1 - 2 * bits[8 * i + 4]) * (2 - (1 - 2 * bits[8 * i + 6])))),
+                         (1 - 2 * bits[8 * i + 1]) * (8 - (1 - 2 * bits[8 * i + 3]) * (4 - (1 - 2 * bits[8 * i + 5]) * (2 - (1 - 2 * bits[8 * i + 7]))))
+                     )
+                     / sqrt(170.0f);
+}
+
 inline void modulate(Modulation mod, const std::vector<uint8_t> &bits, std::vector<std::complex<float>> &symbols)
 {
     const size_t bps = get_bits_per_symbol(mod);
@@ -68,6 +78,9 @@ inline void modulate(Modulation mod, const std::vector<uint8_t> &bits, std::vect
         break;
     case Modulation::QAM64:
         qam64_mapper_3gpp(bits, symbols);
+        break;
+    case Modulation::QAM256:
+        qam256_mapper_3gpp(bits, symbols);
         break;
     }
 }

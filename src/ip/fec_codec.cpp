@@ -149,26 +149,26 @@ std::vector<uint8_t> viterbi_decoder_llr(const std::vector<float> &llr)
     return decoded_bytes;
 }
 
-std::vector<uint8_t>
-interleaving_(const std::vector<uint8_t> &input)
+std::vector<uint8_t> interleaving_(const std::vector<uint8_t> &input, size_t c)
 {
-    size_t c = 8;
     size_t n = input.size();
     size_t r = n / c;
 
-    std::vector<uint8_t> deint_llr;
-    deint_llr.reserve(n);
+    std::vector<uint8_t> int_bits;
+    int_bits.reserve(n);
 
     for (size_t i = 0; i < c; ++i)
         for (size_t j = 0; j < r; ++j)
-            deint_llr.push_back(input[j * c + i]);
+            int_bits.push_back(input[j * c + i]);
 
-    return deint_llr;
+    for (size_t k = r * c; k < n; ++k)
+        int_bits.push_back(input[k]);
+
+    return int_bits;
 }
 
-std::vector<float> deinterleaving_float(const std::vector<float> &input)
+std::vector<float> deinterleaving_float(const std::vector<float> &input, size_t c)
 {
-    size_t c = 8;
     size_t n = input.size();
     size_t r = n / c;
 
@@ -178,6 +178,9 @@ std::vector<float> deinterleaving_float(const std::vector<float> &input)
     for (size_t i = 0; i < c; ++i)
         for (size_t j = 0; j < r; ++j)
             deint[j * c + i] = input[idx++];
+
+    for (size_t k = r * c; k < n; ++k)
+        deint[k] = input[idx++];
 
     return deint;
 }
