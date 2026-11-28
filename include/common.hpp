@@ -361,6 +361,8 @@ struct SharedData {
 
     DoubleBuffer<std::complex<float>> dsp_sockets_raw;
     DoubleBuffer<std::complex<float>> dsp_sockets_symbols;
+    DoubleBuffer<double> corr;
+    DoubleBuffer<double> zc;
     DoubleBuffer<uint8_t> ip_sockets_bytes;
 
     StatsHistory<60000> history;

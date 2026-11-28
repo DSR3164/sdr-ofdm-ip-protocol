@@ -106,7 +106,9 @@ int run_dsp_gui_bridge(SharedData &data, socketData &socket)
     IPC server(zmq::socket_type::pub);
     bool init = false;
     std::vector<std::complex<float>> raw;
+    std::vector<double> corr;
     std::vector<std::complex<float>> symbols;
+    size_t last_sent = 0;
 
     while (!init && !data.stop.load() && data.is_gui_run.load())
     {
@@ -129,11 +131,17 @@ int run_dsp_gui_bridge(SharedData &data, socketData &socket)
 
     while (!data.stop.load() && data.is_gui_run.load())
     {
-        std::this_thread::sleep_for(std::chrono::milliseconds(6));
-        if (data.dsp_sockets_raw.read(raw) == 0)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        if ((last_sent == 0) && data.dsp_sockets_raw.read(raw) == 0)
             server.send_frame(MsgType::Spectrum, raw);
-        if (data.dsp_sockets_symbols.read(symbols) == 0)
+        else if ((last_sent == 1) && data.dsp_sockets_symbols.read(symbols) == 0)
             server.send_frame(MsgType::Vector, symbols);
+        else if ((last_sent == 2) && data.corr.read(corr) == 0)
+            server.send_frame(MsgType::CPCorr, corr);
+        else if ((last_sent == 3) && data.zc.read(corr) == 0)
+            server.send_frame(MsgType::ZCCorr, corr);
+
+        last_sent = (last_sent + 1) % 4;
     }
 
     return 0;
@@ -367,6 +375,20 @@ int run_dsp_bridge(Buffers &bufs, socketData &socket)
                 bufs.sdr_raw.write(temp);
             else if (h.type == MsgType::Vector)
                 bufs.dsp.write(temp);
+            else if (h.type == MsgType::CPCorr)
+            {
+                std::vector<double> doub(temp.size());
+                if (!temp.empty())
+                    std::memcpy(doub.data(), temp.data(), temp.size() * sizeof(std::complex<float>));
+                bufs.corr.write(doub);
+            }
+            else if (h.type == MsgType::ZCCorr)
+            {
+                std::vector<double> doub(temp.size());
+                if (!temp.empty())
+                    std::memcpy(doub.data(), temp.data(), temp.size() * sizeof(std::complex<float>));
+                bufs.zc.write(doub);
+            }
         }
     }
     return 0;

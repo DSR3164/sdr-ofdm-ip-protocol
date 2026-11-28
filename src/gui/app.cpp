@@ -238,7 +238,11 @@ void App::begin_debug(Buffers &data)
     // Stats
     static StatsSnapshot snapshot{};
     static std::deque<StatsSnapshot> stats;
+    static std::vector<double> cp_corr(7680 * 2);
+    static std::vector<double> zc_corr(7680 * 2);
     std::vector<uint8_t> raw_stats;
+    data.corr.read(cp_corr);
+    data.zc.read(zc_corr);
 
     if (data.stats.read(raw_stats) == 0)
         if (raw_stats.size() == sizeof(StatsSnapshot))
@@ -251,6 +255,10 @@ void App::begin_debug(Buffers &data)
         }
 
     run_stats_plot(stats);
+
+    if (ImGui::Begin("Correlation"))
+        begin_plot_2d<double, double>("Correlation", "CP R", "ZC R", cp_corr, zc_corr);
+    ImGui::End();
 
     if (ImGui::Begin("Debug Panel"))
     {

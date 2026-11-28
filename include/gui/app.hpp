@@ -68,6 +68,7 @@ class App {
         PlotSpec<T> plot_1d;
         if (ImPlot::BeginPlot(label.c_str(), ImVec2(ImGui::GetContentRegionAvail())))
         {
+            ImPlot::SetupAxesLimits(0, data.size(), 0.0, 1.0, ImPlotCond_Once);
             ImPlot::PlotLine(label.c_str(), data.data(), (int)data.size(), 1.0, 0.0, plot_1d.spec);
             ImPlot::EndPlot();
         }
@@ -86,8 +87,26 @@ class App {
         const T *raw_ptr = reinterpret_cast<const T *>(data.data());
         if (ImPlot::BeginPlot(label.c_str(), ImGui::GetContentRegionAvail()))
         {
+            ImPlot::SetupAxesLimits(0, count, -1000.0, 1000.0, ImPlotCond_Once);
             ImPlot::PlotLine(label_i.c_str(), raw_ptr, count, 1.0, 0.0, plot_2d.spec);
             ImPlot::PlotLine(label_q.c_str(), raw_ptr + 1, count, 1.0, 0.0, plot_2d.spec);
+            ImPlot::EndPlot();
+        }
+    }
+
+    template <typename T, typename R>
+    void begin_plot_2d(const std::string &label, const std::string &label_i, const std::string &label_q, std::vector<R> data_1, std::vector<R> data_2)
+    {
+        PlotSpec<T> plot_2d;
+
+        size_t count = data_2.size();
+        data_1.resize(count);
+
+        if (ImPlot::BeginPlot(label.c_str(), ImGui::GetContentRegionAvail()))
+        {
+            ImPlot::SetupAxesLimits(count * -0.2, count * 1.2, -0.2, 1.6, ImPlotCond_Once);
+            ImPlot::PlotLine(label_i.c_str(), data_1.data(), count, 1.0, 0.0, plot_2d.spec);
+            ImPlot::PlotLine(label_q.c_str(), data_2.data(), count, 1.0, 0.0, plot_2d.spec);
             ImPlot::EndPlot();
         }
     }
@@ -105,6 +124,7 @@ class App {
 
         if (ImPlot::BeginPlot(label.c_str(), ImVec2(ImGui::GetContentRegionAvail()), ImPlotFlags_Equal))
         {
+            ImPlot::SetupAxesLimits(-1.5, 1.5, -1.5, 1.5, ImPlotCond_Once);
             ImPlot::PlotScatter(label.c_str(), raw_ptr, raw_ptr + 1, count, plot_scatter.spec);
             ImPlot::EndPlot();
         }
@@ -127,7 +147,7 @@ class App {
     SDL_GLContext gl_context;
     bool control_menu_was_open = false;
     bool running = true;
-    bool debug_run = false;
+    bool debug_run = true;
     bool vsync_state = true;
     bool gui_run = false;
     bool phy_run = true;

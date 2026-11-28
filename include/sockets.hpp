@@ -32,6 +32,8 @@ enum class MsgType : uint32_t
 {
     Flag,
     Spectrum,
+    CPCorr,
+    ZCCorr,
     BER,
     Status,
     Error,
