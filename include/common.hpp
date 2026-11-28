@@ -134,6 +134,28 @@ struct DSP {
     } ofdm_cfg;
 };
 
+enum class DLChannel : uint8_t
+{
+    EMPTY = 0,
+    GUARD,
+    PILOT,
+    SS,
+    CTRL,
+    DATA
+};
+
+struct Allocation {
+    uint16_t rnti = 0;
+    uint8_t rb_start = 0;
+    uint8_t rb_numbers = 0;
+    uint8_t sym_start = 0;
+    uint8_t sym_numbers = 0;
+    Modulation mod = M::BPSK;
+    DLChannel channel = DLChannel::DATA;
+
+    std::vector<uint8_t> data_bits;
+};
+
 template <typename T>
 class DoubleBuffer {
   public:
@@ -331,6 +353,7 @@ struct SharedData {
 
     DoubleBuffer<uint8_t> ip_phy;
     DoubleBuffer<float> phy_ip;
+    DoubleBuffer<Allocation> l2_l1;
 
     TxQueue tx_queue{ 16, std::chrono::microseconds(500), 512 };
 
