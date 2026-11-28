@@ -3,12 +3,15 @@
 #include <complex>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <span>
+#include <utility>
 #include <vector>
 
 using Complex = std::complex<float>;
 
 constexpr size_t RB_SIZE = 12;
+constexpr size_t num_ofdm_symbols = 10;
 
 class ResourceGrid {
   public:
@@ -47,10 +50,12 @@ class ResourceGrid {
     void release_rb(size_t rb);
     uint16_t owner_of(size_t rb) const;
     size_t get_remaining_rb_num() const;
+    std::map<uint16_t, std::vector<std::pair<uint8_t, uint8_t>>> get_rntis_rbs(std::vector<uint16_t> rntis);
   private:
     size_t n_symbols_;
     size_t n_rbs_;
     size_t n_fft_;
     std::vector<uint16_t> owners_;
     std::vector<Complex> data_;
+    std::map<uint16_t, std::vector<std::pair<uint8_t, uint8_t>>> rntis_to_rb_;
 };

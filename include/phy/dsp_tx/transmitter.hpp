@@ -1,8 +1,8 @@
 #pragma once
 
 #include "phy/dsp_common.hpp"
-#include "phy/dsp_tx/modulator.hpp"
 
+#include <cstddef>
 #include <span>
 #include <vector>
 
@@ -34,4 +34,7 @@ class OFDMTransmitter {
     bool matches(const DSP::OFDMConfig &config) const;
 
     void ofdm(const std::vector<uint8_t> &input, Modulation mod, std::vector<int16_t> &buffer);
+
+    size_t get_num_rb() const;
+    size_t get_num_fft() const;
 };

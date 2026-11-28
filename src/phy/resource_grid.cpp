@@ -3,7 +3,10 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <stdexcept>
+#include <utility>
+#include <vector>
 
 ResourceGrid::ResourceGrid(size_t n_symbols, size_t n_rbs, size_t n_fft)
     : n_symbols_(n_symbols),
@@ -184,6 +187,32 @@ uint16_t ResourceGrid::owner_of(size_t rb) const
         throw std::out_of_range("ResourceGrid RB index out of range");
 
     return owners_[rb];
+}
+
+std::map<uint16_t, std::vector<std::pair<uint8_t, uint8_t>>> ResourceGrid::get_rntis_rbs(std::vector<uint16_t> rntis)
+{
+    rntis_to_rb_.clear();
+    for (const auto &rnti : rntis)
+    {
+        size_t cursor = 0;
+        while (cursor < n_rbs_ && owner_of(cursor) != rnti)
+            ++cursor;
+
+        if (cursor >= n_rbs_)
+            continue;
+
+        size_t rb_start = cursor;
+        size_t rb_num = 0;
+
+        while (cursor < n_rbs_ && owner_of(cursor) == rnti)
+        {
+            ++rb_num;
+            ++cursor;
+        }
+
+        rntis_to_rb_[rnti].emplace_back(rb_start, rb_num);
+    }
+    return rntis_to_rb_;
 }
 
 size_t ResourceGrid::get_remaining_rb_num() const

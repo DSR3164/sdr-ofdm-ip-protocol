@@ -1,7 +1,9 @@
+#include "phy/dsp_tx/modulator.hpp"
 #include "phy/dsp_tx/transmitter.hpp"
 #include "phy/resource_grid.hpp"
 
 #include <algorithm>
+#include <cstddef>
 #include <stdexcept>
 
 void OFDMTransmitter::append_ofdm_symbol(
@@ -96,4 +98,14 @@ void OFDMTransmitter::ofdm(const std::vector<uint8_t> &input, Modulation mod, st
         const size_t start = s * grid_.data.size();
         append_ofdm_symbol(std::span<const std::complex<float>>(symbols).subspan(start, std::min(grid_.data.size(), symbols.size() - start)), mod, buffer);
     }
+}
+
+size_t OFDMTransmitter::get_num_rb() const
+{
+    return grid_.num_rbs;
+}
+
+size_t OFDMTransmitter::get_num_fft() const
+{
+    return grid_.n;
 }
